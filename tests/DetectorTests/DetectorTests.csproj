@@ -13,5 +13,6 @@
     <Compile Include="..\..\src\P02\OrbDetector.cs" />
     <Compile Include="..\..\src\P02\ScreenCapture.cs" />
     <Compile Include="..\..\src\P02\AppConfig.cs" />
+    <Compile Include="..\..\src\P02\Native.cs" />
   </ItemGroup>
 </Project>

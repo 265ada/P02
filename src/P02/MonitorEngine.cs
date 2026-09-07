@@ -7,11 +7,18 @@ public sealed record GlobeReading(string Name, double Fraction, bool Ok);
 public sealed class MonitorEngine : IDisposable
 {
     private readonly AppConfig _cfg;
+    private readonly KeyPresser _keys = new();
     private CancellationTokenSource? _cts;
     private Task? _task;
 
     /// <summary>Master switch. Nothing is ever sent while this is false.</summary>
     public bool Armed { get; private set; }
+
+    /// <summary>Polls actually completed in the last second.</summary>
+    public int ActualHz { get; private set; }
+
+    /// <summary>Title of whatever window currently has focus, for the UI.</summary>
+    public string ForegroundTitle { get; private set; } = "";
 
     public event Action<GlobeReading, GlobeReading, bool>? Sampled;
     public event Action<string, double>? Fired;
@@ -28,6 +35,10 @@ public sealed class MonitorEngine : IDisposable
     }
 
     public void Toggle() => SetArmed(!Armed);
+
+    /// <summary>Fires a key straight away, ignoring arm state, so a keybind can
+    /// be proven to reach the game.</summary>
+    public void TestKey(string key, int holdMs) => _keys.Send(key, holdMs);
 
     public void Start()
     {
@@ -56,7 +67,7 @@ public sealed class MonitorEngine : IDisposable
         public void Push(long ms, double frac)
         {
             _hist.Enqueue((ms, frac));
-            while (_hist.Count > 0 && ms - _hist.Peek().Ms > 400) _hist.Dequeue();
+            while (_hist.Count > 0 && ms - _hist.Peek().Ms > 350) _hist.Dequeue();
         }
 
         /// <summary>How fast the globe is emptying, in percent per second.
@@ -66,7 +77,7 @@ public sealed class MonitorEngine : IDisposable
             if (_hist.Count == 0) return 0;
             var (oldMs, oldFrac) = _hist.Peek();
             long dt = ms - oldMs;
-            if (dt < 60) return 0;
+            if (dt < 40) return 0;
             return (oldFrac - frac) * 100.0 * 1000.0 / dt;
         }
 
@@ -79,6 +90,12 @@ public sealed class MonitorEngine : IDisposable
         var mana = new State();
         var clock = Stopwatch.StartNew();
 
+        long lastUiMs = 0, hzWindowMs = 0;
+        int polls = 0;
+
+        // Without this the scheduler rounds every sleep up to ~15 ms, which
+        // caps the loop near 60 Hz no matter what poll rate is asked for.
+        Native.timeBeginPeriod(1);
         try
         {
             while (!ct.IsCancellationRequested)
@@ -88,9 +105,24 @@ public sealed class MonitorEngine : IDisposable
 
                 var lr = Sample(life, _cfg.Life, "Life", focused, clock);
                 var mr = Sample(mana, _cfg.Mana, "Mana", focused, clock);
-                Sampled?.Invoke(lr, mr, focused);
 
-                int period = 1000 / Math.Clamp(_cfg.PollHz, 1, 60);
+                polls++;
+                if (t0 - hzWindowMs >= 1000)
+                {
+                    ActualHz = polls;
+                    polls = 0;
+                    hzWindowMs = t0;
+                }
+
+                // The UI cannot use 100 samples a second and repainting that
+                // often would slow the loop it is reporting on.
+                if (t0 - lastUiMs >= 60)
+                {
+                    lastUiMs = t0;
+                    Sampled?.Invoke(lr, mr, focused);
+                }
+
+                int period = 1000 / Math.Clamp(_cfg.PollHz, 5, 250);
                 int sleep = period - (int)(clock.ElapsedMilliseconds - t0);
                 if (sleep > 0) Thread.Sleep(sleep);
             }
@@ -101,6 +133,7 @@ public sealed class MonitorEngine : IDisposable
         }
         finally
         {
+            Native.timeEndPeriod(1);
             life.Cap.Dispose();
             mana.Cap.Dispose();
         }
@@ -144,38 +177,34 @@ public sealed class MonitorEngine : IDisposable
         if (st.Below < confirm || now - st.LastFireMs < gap)
             return new GlobeReading(name, frac, true);
 
-        try
-        {
-            int shots = Math.Clamp(c.BurstCount, 1, 5);
-            for (int i = 0; i < shots; i++)
-            {
-                KeySender.Tap(c.Key, c.HoldMs);
-                if (i < shots - 1) Thread.Sleep(Math.Clamp(c.BurstGapMs, 10, 500));
-            }
-            st.LastFireMs = clock.ElapsedMilliseconds;
-            st.Below = 0;
-            // The globe has not refilled yet, so old samples would read as a
-            // continuing crash and inflate the drop rate.
-            st.Reset();
-            Log.Write($"{name}: '{c.Key}' x{shots} at {frac:P1}" +
-                      (panic ? $" PANIC (drop {dropRate:0}%/s)" : ""));
-            Fired?.Invoke(name, frac);
-        }
-        catch (Exception ex)
-        {
-            Log.Write($"{name}: send failed: {ex.Message}");
-        }
+        int shots = Math.Clamp(c.BurstCount, 1, 5);
+        _keys.Send(c.Key, c.HoldMs, shots, Math.Clamp(c.BurstGapMs, 5, 500));
+
+        st.LastFireMs = now;
+        st.Below = 0;
+        // The globe has not refilled yet, so old samples would read as a
+        // continuing crash and inflate the drop rate.
+        st.Reset();
+        Log.Write($"{name}: '{c.Key}' x{shots} at {frac:P1}" +
+                  (panic ? $" PANIC (drop {dropRate:0}%/s)" : ""));
+        Fired?.Invoke(name, frac);
 
         return new GlobeReading(name, frac, true);
     }
 
     private bool WindowFocused()
     {
+        string title = Native.ForegroundTitle();
+        ForegroundTitle = title;
+
         string match = _cfg.WindowMatch?.Trim() ?? string.Empty;
         if (match.Length == 0) return true;
-        return Native.ForegroundTitle()
-                     .Contains(match, StringComparison.OrdinalIgnoreCase);
+        return title.Contains(match, StringComparison.OrdinalIgnoreCase);
     }
 
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        Stop();
+        _keys.Dispose();
+    }
 }

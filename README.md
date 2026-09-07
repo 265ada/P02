@@ -31,6 +31,12 @@ pool is 1,440 or 3,000.
    sent — the flask slot, not a modifier.
 4. Tick **Watch this globe** on the ones you want, then click **ARM**.
 
+Auto-find looks in the corners of the **game window**, found by the same title
+match, and falls back to the screen your other globe is on. It used to search the
+corners of the whole virtual desktop, which on a two-monitor setup meant the
+bottom-right search landed on the *other monitor* — so Life worked and Mana
+never did. If it fails it now tells you exactly which rectangle it searched.
+
 Auto-find uses the same colour settings as the Check window, so if the globe
 does not light up green there, auto-find cannot see it either — fix it there
 first. It looks for a large round region of red (or blue) in the bottom corner,
@@ -84,17 +90,58 @@ panic line, so a spike is caught on the way down rather than after it lands.
 Presses keep coming for as long as you are below the trigger. Whether they do
 anything is down to your charges — the app cannot see those.
 
+## Speed, and what is actually achievable
+
+Windows screen capture costs about **9 ms per call regardless of size** — a
+32x32 grab costs the same as a 190x270 one, because the cost is per-call
+synchronisation with the desktop compositor, not pixel work. Two globes is two
+calls, so the loop tops out near **60 polls per second** on a typical machine.
+Capturing both in one call, or on two threads, measured no better.
+
+So the Polls/sec box goes up to 250, but the status line reports what the loop
+**actually** achieved. If you ask for 200 and it reports 60, that is the ceiling
+and asking for more only burns a core spinning.
+
+Key presses are sent on their own thread. A press has to be held a few
+milliseconds to register, and bursts have gaps; doing that on the poll loop used
+to stop monitoring for the duration of the press, which is the worst possible
+moment to stop looking.
+
+Cooldowns go down to 20 ms and the panic gap to 10 ms. The real floor is the
+hold time — at 20 ms hold, presses cannot leave faster than about 50 a second no
+matter what the cooldown says.
+
 ## Safety rails
 
 | Rail | What it does |
 |---|---|
 | Starts disarmed | Nothing is sent until you arm it, every launch. |
-| Window match | Only fires while the focused window title contains your string. |
+| Window match | Only fires while the focused window title contains your string. "Path of Exile" matches "Path of Exile 2" — it is a substring test, not an exact one. The status line shows the focused window's real title, so you can see what it is comparing against. |
 | Cooldown | Minimum gap between presses, per globe. |
 | Confirm frames | Two consecutive low reads required, so one flash frame can't fire it. |
 
 The app runs unelevated on purpose. If the game is running as administrator,
 Windows blocks our input — run the game normally, or nothing will happen.
+
+## If it never fires
+
+Work through it in this order.
+
+1. **Test keys (3s)** sends the enabled globes' keys once, ignoring arm state and
+   the window match. Click it, click into the game, and watch. Nothing happening
+   means the problem is the keybind or permissions, not detection.
+2. Check the status line's focused-window title against your match string.
+3. If the game runs **as administrator** and P02 does not, Windows silently
+   blocks our input. Run the game unelevated.
+4. Check the reading moves in the UI as the globe drains. If it sits at 0% or
+   100%, it is a detection problem — go back to Check.
+
+## Settings
+
+Everything is saved to `%APPDATA%\P02\config.json` as you change it, and again
+on exit, so the app comes back exactly as you left it — including where the
+window was. Writes are debounced and atomic, so dragging a slider does not
+hammer the disk or risk a half-written file.
 
 ## Updates
 

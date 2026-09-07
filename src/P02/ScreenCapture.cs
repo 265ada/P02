@@ -1,35 +1,77 @@
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 
 namespace P02;
 
 /// <summary>
-/// Grabs a fixed screen rectangle repeatedly, reusing one bitmap so the poll
-/// loop does not allocate. Not thread-safe: one instance per watcher thread.
+/// Grabs a fixed screen rectangle repeatedly.
+///
+/// Graphics.CopyFromScreen builds and tears down device contexts on every call,
+/// which measured about 12 ms per grab — two globes alone capped the loop near
+/// 45 Hz. This keeps the screen DC, the memory DC and a DIB section alive
+/// between grabs, so a grab is one BitBlt plus a block copy.
+///
+/// Not thread-safe: one instance per watcher.
 /// </summary>
 internal sealed class ScreenCapture : IDisposable
 {
-    private Bitmap? _bmp;
-    private Graphics? _gfx;
+    /// <summary>Bytes per pixel in <see cref="Buffer"/>; format is BGRA.</summary>
+    public const int Bpp = 4;
+
+    private nint _screenDc;
+    private nint _memDc;
+    private nint _dib;
+    private nint _oldObj;
+    private nint _bits;
     private Rectangle _rect;
     private byte[] _buffer = [];
 
     public int Width => _rect.Width;
     public int Height => _rect.Height;
-
-    /// <summary>Bytes per pixel in <see cref="Buffer"/>; format is BGRA.</summary>
-    public const int Bpp = 4;
-
     public byte[] Buffer => _buffer;
 
-    private void Ensure(Rectangle r)
+    private void Release()
     {
-        if (_bmp is not null && r == _rect) return;
-        _gfx?.Dispose();
-        _bmp?.Dispose();
+        if (_memDc != 0 && _oldObj != 0) Native.SelectObject(_memDc, _oldObj);
+        if (_dib != 0) Native.DeleteObject(_dib);
+        if (_memDc != 0) Native.DeleteDC(_memDc);
+        if (_screenDc != 0) Native.ReleaseDC(0, _screenDc);
+        _memDc = _dib = _screenDc = _oldObj = _bits = 0;
+    }
+
+    private bool Ensure(Rectangle r)
+    {
+        if (_dib != 0 && r.Size == _rect.Size)
+        {
+            _rect = r;
+            return true;
+        }
+        Release();
         _rect = r;
-        _bmp = new Bitmap(r.Width, r.Height, PixelFormat.Format32bppArgb);
-        _gfx = Graphics.FromImage(_bmp);
+
+        _screenDc = Native.GetDC(0);
+        if (_screenDc == 0) return false;
+
+        _memDc = Native.CreateCompatibleDC(_screenDc);
+        if (_memDc == 0) { Release(); return false; }
+
+        var bmi = new Native.BITMAPINFO();
+        bmi.bmiHeader.biSize = (uint)Marshal.SizeOf<Native.BITMAPINFOHEADER>();
+        bmi.bmiHeader.biWidth = r.Width;
+        // Negative height gives a top-down bitmap, so row 0 is the top row and
+        // the buffer needs no flipping.
+        bmi.bmiHeader.biHeight = -r.Height;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = 0;   // BI_RGB
+
+        _dib = Native.CreateDIBSection(_screenDc, ref bmi, Native.DIB_RGB_COLORS,
+                                       out _bits, 0, 0);
+        if (_dib == 0 || _bits == 0) { Release(); return false; }
+
+        _oldObj = Native.SelectObject(_memDc, _dib);
         _buffer = new byte[r.Width * r.Height * Bpp];
+        return true;
     }
 
     /// <summary>Captures <paramref name="r"/> into <see cref="Buffer"/>.</summary>
@@ -38,30 +80,21 @@ internal sealed class ScreenCapture : IDisposable
         if (r.Width < 1 || r.Height < 1) return false;
         try
         {
-            Ensure(r);
-            _gfx!.CopyFromScreen(r.Left, r.Top, 0, 0, r.Size, CopyPixelOperation.SourceCopy);
+            if (!Ensure(r)) return false;
 
-            var data = _bmp!.LockBits(new Rectangle(0, 0, r.Width, r.Height),
-                                      ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
-            try
+            if (!Native.BitBlt(_memDc, 0, 0, r.Width, r.Height,
+                               _screenDc, r.Left, r.Top, Native.SRCCOPY))
             {
-                int rowBytes = r.Width * Bpp;
-                for (int y = 0; y < r.Height; y++)
-                {
-                    nint src = data.Scan0 + y * data.Stride;
-                    System.Runtime.InteropServices.Marshal.Copy(
-                        src, _buffer, y * rowBytes, rowBytes);
-                }
+                // Happens while the desktop is locked or switching.
+                return false;
             }
-            finally
-            {
-                _bmp.UnlockBits(data);
-            }
+
+            Native.GdiFlush();
+            Marshal.Copy(_bits, _buffer, 0, _buffer.Length);
             return true;
         }
         catch (Exception ex)
         {
-            // CopyFromScreen throws while the desktop is locked or switching.
             Log.Write($"capture failed: {ex.Message}");
             return false;
         }
@@ -87,16 +120,11 @@ internal sealed class ScreenCapture : IDisposable
         {
             int rowBytes = bmp.Width * Bpp;
             for (int y = 0; y < bmp.Height; y++)
-                System.Runtime.InteropServices.Marshal.Copy(
-                    data.Scan0 + y * data.Stride, buf, y * rowBytes, rowBytes);
+                Marshal.Copy(data.Scan0 + y * data.Stride, buf, y * rowBytes, rowBytes);
         }
         finally { bmp.UnlockBits(data); }
         return buf;
     }
 
-    public void Dispose()
-    {
-        _gfx?.Dispose();
-        _bmp?.Dispose();
-    }
+    public void Dispose() => Release();
 }

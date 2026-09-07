@@ -17,6 +17,8 @@ public sealed class MainForm : Form
     private readonly TextBox _window = new();
     private readonly ComboBox _hotkey = new();
     private readonly NotifyIcon _tray = new();
+    private readonly Label _live = new();
+    private readonly NumericUpDown _pollHz = new();
     private bool _hotkeyRegistered;
 
     public MainForm(AppConfig cfg)
@@ -30,8 +32,10 @@ public sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(772, 510);
 
-        _life = new GlobePanel("Life", cfg.Life, blue: false, Save) { Location = new Point(12, 12) };
-        _mana = new GlobePanel("Mana", cfg.Mana, blue: true, Save) { Location = new Point(392, 12) };
+        _life = new GlobePanel("Life", cfg.Life, blue: false, Save,
+            () => _cfg.WindowMatch, () => _cfg.Mana.Region) { Location = new Point(12, 12) };
+        _mana = new GlobePanel("Mana", cfg.Mana, blue: true, Save,
+            () => _cfg.WindowMatch, () => _cfg.Life.Region) { Location = new Point(392, 12) };
         Controls.Add(_life);
         Controls.Add(_mana);
 
@@ -56,6 +60,23 @@ public sealed class MainForm : Form
         _window.Text = cfg.WindowMatch;
         _window.TextChanged += (_, _) => { _cfg.WindowMatch = _window.Text; Save(); };
         Controls.Add(_window);
+
+        var clearBtn = new Button { Text = "Any window", Bounds = new Rectangle(430, y, 86, 24) };
+        clearBtn.Click += (_, _) => _window.Text = "";
+        Controls.Add(clearBtn);
+
+        Controls.Add(new Label
+        {
+            Text = "Polls/sec",
+            Bounds = new Rectangle(524, y + 4, 60, 20),
+        });
+        _pollHz.SetBounds(586, y, 64, 24);
+        _pollHz.Minimum = 5;
+        _pollHz.Maximum = 250;
+        _pollHz.Increment = 5;
+        _pollHz.Value = Math.Clamp(cfg.PollHz, 5, 250);
+        _pollHz.ValueChanged += (_, _) => { _cfg.PollHz = (int)_pollHz.Value; Save(); };
+        Controls.Add(_pollHz);
 
         Controls.Add(new Label { Text = "Arm hotkey", Bounds = new Rectangle(444, y + 4, 70, 20) });
         _hotkey.SetBounds(518, y, 80, 24);
@@ -84,17 +105,37 @@ public sealed class MainForm : Form
         updBtn.Click += async (_, _) => await Updater.CheckAsync(this, silent: false);
         Controls.Add(updBtn);
 
+        var testBtn = new Button { Text = "Test keys (3s)", Bounds = new Rectangle(298, y, 120, 26) };
+        testBtn.Click += (_, _) => TestKeys();
+        Controls.Add(testBtn);
+
         var hint = new Label
         {
-            Bounds = new Rectangle(300, y + 4, 390, 20),
+            Bounds = new Rectangle(428, y + 5, 340, 20),
             ForeColor = SystemColors.GrayText,
-            Text = "Closing to tray keeps it running. Right-click the tray icon to quit.",
+            Text = "Closing hides to tray. Right-click the tray icon to quit.",
         };
         Controls.Add(hint);
+
+        y += 32;
+        _live.SetBounds(12, y, 748, 20);
+        _live.ForeColor = SystemColors.GrayText;
+        Controls.Add(_live);
 
         _engine.Sampled += OnSampled;
         _engine.ArmedChanged += _ => BeginInvoke(RefreshArmUi);
         _engine.Fired += (name, f) => Log.Write($"UI: {name} fired at {f:P1}");
+
+        // Come back where it was left, unless that screen has since gone away.
+        if (cfg.WindowX >= 0 && cfg.WindowY >= 0)
+        {
+            var spot = new Rectangle(cfg.WindowX, cfg.WindowY, Width, Height);
+            if (Screen.AllScreens.Any(sc => sc.WorkingArea.IntersectsWith(spot)))
+            {
+                StartPosition = FormStartPosition.Manual;
+                Location = new Point(cfg.WindowX, cfg.WindowY);
+            }
+        }
 
         SetupTray();
         RefreshArmUi();
@@ -125,8 +166,13 @@ public sealed class MainForm : Form
                 _life.Update(life);
                 _mana.Update(mana);
                 _focus.Text = focused
-                    ? "game window focused"
-                    : $"waiting for a window titled like \"{_cfg.WindowMatch}\"";
+                    ? "game window focused — firing allowed"
+                    : "not firing: focused window does not match";
+                _focus.ForeColor = focused
+                    ? Color.FromArgb(0, 120, 0)
+                    : SystemColors.GrayText;
+                _live.Text = $"focused window: \"{_engine.ForegroundTitle}\"     " +
+                             $"actual polls/sec: {_engine.ActualHz}";
             });
         }
         catch (ObjectDisposedException) { /* closing */ }
@@ -212,6 +258,37 @@ public sealed class MainForm : Form
         if (_cfg.StartMinimised) Hide();
     }
 
+    /// <summary>
+    /// Sends each switched-on globe's key once, ignoring arm state and the
+    /// window match, so a keybind that never reaches the game shows up as a
+    /// setup problem rather than a detection one.
+    /// </summary>
+    private void TestKeys()
+    {
+        var keys = new List<string>();
+        if (_cfg.Life.Enabled) keys.Add(_cfg.Life.Key);
+        if (_cfg.Mana.Enabled) keys.Add(_cfg.Mana.Key);
+        if (keys.Count == 0)
+        {
+            MessageBox.Show(this, "Switch on a globe first.", "Test keys",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        _status.Text = $"clicking into the game… sending {string.Join(" and ", keys)} in 3s";
+        var t = new System.Windows.Forms.Timer { Interval = 3000 };
+        t.Tick += (_, _) =>
+        {
+            t.Stop();
+            t.Dispose();
+            if (_cfg.Life.Enabled) _engine.TestKey(_cfg.Life.Key, _cfg.Life.HoldMs);
+            if (_cfg.Mana.Enabled) _engine.TestKey(_cfg.Mana.Key, _cfg.Mana.HoldMs);
+            Log.Write($"test keys sent: {string.Join(", ", keys)}");
+            BeginInvoke(RefreshArmUi);
+        };
+        t.Start();
+    }
+
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         // The X button hides to tray; Application.Exit really quits.
@@ -222,6 +299,12 @@ public sealed class MainForm : Form
             return;
         }
         _engine.Dispose();
+        if (WindowState == FormWindowState.Normal)
+        {
+            _cfg.WindowX = Location.X;
+            _cfg.WindowY = Location.Y;
+        }
+        _cfg.SaveNow();
         if (_hotkeyRegistered) Native.UnregisterHotKey(Handle, HotkeyId);
         _tray.Visible = false;
         base.OnFormClosing(e);

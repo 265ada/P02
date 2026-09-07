@@ -6,6 +6,8 @@ public sealed class GlobePanel : GroupBox
     private readonly WatcherConfig _cfg;
     private readonly bool _blue;
     private readonly Action _onChange;
+    private readonly Func<string> _windowMatch;
+    private readonly Func<Box?> _other;
 
     private readonly CheckBox _enabled = new();
     private readonly Label _region = new();
@@ -18,11 +20,14 @@ public sealed class GlobePanel : GroupBox
     private readonly ProgressBar _bar = new();
     private readonly Label _pct = new();
 
-    public GlobePanel(string title, WatcherConfig cfg, bool blue, Action onChange)
+    public GlobePanel(string title, WatcherConfig cfg, bool blue, Action onChange,
+                      Func<string> windowMatch, Func<Box?> otherRegion)
     {
         _cfg = cfg;
         _blue = blue;
         _onChange = onChange;
+        _windowMatch = windowMatch;
+        _other = otherRegion;
 
         Text = title;
         Width = 366;
@@ -89,10 +94,10 @@ public sealed class GlobePanel : GroupBox
 
         Controls.Add(Lab("Cooldown", 14, y + 4));
         _cooldown.SetBounds(90, y, 76, 24);
-        _cooldown.Minimum = 100;
+        _cooldown.Minimum = 20;
         _cooldown.Maximum = 60000;
-        _cooldown.Increment = 100;
-        _cooldown.Value = Math.Clamp(cfg.CooldownMs, 100, 60000);
+        _cooldown.Increment = 20;
+        _cooldown.Value = Math.Clamp(cfg.CooldownMs, 20, 60000);
         _cooldown.ValueChanged += (_, _) =>
             { _cfg.CooldownMs = (int)_cooldown.Value; _onChange(); };
         Controls.Add(_cooldown);
@@ -111,10 +116,10 @@ public sealed class GlobePanel : GroupBox
 
         Controls.Add(Lab("gap", 190, y + 4));
         _panicGap.SetBounds(222, y, 84, 24);
-        _panicGap.Minimum = 50;
+        _panicGap.Minimum = 10;
         _panicGap.Maximum = 5000;
         _panicGap.Increment = 10;
-        _panicGap.Value = Math.Clamp(cfg.PanicCooldownMs, 50, 5000);
+        _panicGap.Value = Math.Clamp(cfg.PanicCooldownMs, 10, 5000);
         _panicGap.ValueChanged += (_, _) =>
             { _cfg.PanicCooldownMs = (int)_panicGap.Value; _onChange(); };
         Controls.Add(_panicGap);
@@ -166,14 +171,16 @@ public sealed class GlobePanel : GroupBox
         owner?.Hide();
         Thread.Sleep(400);
 
-        // The globes live in the bottom corners; searching only there keeps
-        // spell effects and the minimap out of the result.
-        var vs = SystemInformation.VirtualScreen;
-        int w = (int)(vs.Width * 0.22);
-        int h = (int)(vs.Height * 0.32);
+        // The globes are in the corners of the GAME, which on a multi-monitor
+        // desktop is not the corner of the virtual screen. Searching the whole
+        // virtual desktop is why the bottom-right search used to land on a
+        // second monitor and never find the mana globe at all.
+        var area = GameArea();
+        int w = (int)(area.Width * 0.25);
+        int h = (int)(area.Height * 0.36);
         var search = _blue
-            ? new Rectangle(vs.Right - w, vs.Bottom - h, w, h)
-            : new Rectangle(vs.Left, vs.Bottom - h, w, h);
+            ? new Rectangle(area.Right - w, area.Bottom - h, w, h)
+            : new Rectangle(area.Left, area.Bottom - h, w, h);
 
         var found = OrbDetector.AutoLocate(search, _blue, _cfg.ColourMargin, _cfg.MinValue);
         owner?.Show();
@@ -182,6 +189,10 @@ public sealed class GlobePanel : GroupBox
         {
             string why = OrbDetector.LastLocateNote;
             string msg = "Couldn't find it.";
+            msg += Environment.NewLine + Environment.NewLine +
+                   $"Looked in {search.Width}x{search.Height} at {search.X},{search.Y} " +
+                   $"(the {(_blue ? "bottom-right" : "bottom-left")} of {area.Width}x{area.Height} " +
+                   $"at {area.X},{area.Y}).";
             if (why.Length > 0) msg += Environment.NewLine + Environment.NewLine + why;
             msg += Environment.NewLine + Environment.NewLine +
                    "Use Set... and drag the box by hand - that always works, and the "
@@ -191,6 +202,24 @@ public sealed class GlobePanel : GroupBox
         }
         Apply(found.Value);
         Preview();
+    }
+
+    /// <summary>
+    /// Where to look for globes: the game window if we can find it, else the
+    /// screen the other globe was set on, else the primary screen. Never the
+    /// whole virtual desktop, which spans monitors the game is not on.
+    /// </summary>
+    private Rectangle GameArea()
+    {
+        var byTitle = Native.FindWindowRect(_windowMatch());
+        if (byTitle is { } g && g.Width > 400 && g.Height > 300)
+            return g;
+
+        var other = _other();
+        if (other is { IsValid: true })
+            return Screen.FromRectangle(other.ToRect()).Bounds;
+
+        return (Screen.PrimaryScreen ?? Screen.AllScreens[0]).Bounds;
     }
 
     private void Apply(Rectangle r)

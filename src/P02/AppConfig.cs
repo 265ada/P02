@@ -33,10 +33,10 @@ public sealed class WatcherConfig
     public double Threshold { get; set; } = 0.50;
 
     public string Key { get; set; } = "1";
-    public int HoldMs { get; set; } = 30;
+    public int HoldMs { get; set; } = 20;
 
     /// <summary>Normal gap between presses while sitting below the trigger.</summary>
-    public int CooldownMs { get; set; } = 900;
+    public int CooldownMs { get; set; } = 350;
 
     /// <summary>Consecutive low reads required, so one odd frame can't fire.</summary>
     public int ConfirmFrames { get; set; } = 2;
@@ -47,7 +47,7 @@ public sealed class WatcherConfig
     public double PanicBelow { get; set; } = 0.30;
 
     /// <summary>Gap between presses while panicking. Charges allow this.</summary>
-    public int PanicCooldownMs { get; set; } = 260;
+    public int PanicCooldownMs { get; set; } = 60;
 
     /// <summary>Losing more than this many percent per second also counts as
     /// panic, even if you are still above PanicBelow. A big hit is caught on
@@ -57,7 +57,7 @@ public sealed class WatcherConfig
     /// <summary>Presses sent per trigger. Raise if one charge is not enough.</summary>
     public int BurstCount { get; set; } = 1;
 
-    public int BurstGapMs { get; set; } = 70;
+    public int BurstGapMs { get; set; } = 40;
 
     // --- pixel classification -------------------------------------------
     /// <summary>"red" for life, "blue" for mana.</summary>
@@ -94,12 +94,19 @@ public sealed class AppConfig
     public WatcherConfig Mana { get; set; } = new()
         { Hue = "blue", Key = "2", Threshold = 0.30, PanicBelow = 0.15 };
 
-    public int PollHz { get; set; } = 30;
+    /// <summary>Screen samples per second. 5-250; the loop reports what it
+    /// actually achieved next to this in the UI.</summary>
+    public int PollHz { get; set; } = 60;
 
     /// <summary>Only act while the focused window title contains this. Blank = any.</summary>
     public string WindowMatch { get; set; } = "Path of Exile";
 
     public string ArmHotkey { get; set; } = "F8";
+
+    /// <summary>Where the window was last time, so it comes back as you left it.</summary>
+    public int WindowX { get; set; } = -1;
+
+    public int WindowY { get; set; } = -1;
     public bool StartMinimised { get; set; }
     public bool CheckUpdatesOnStart { get; set; } = true;
 
@@ -132,10 +139,42 @@ public sealed class AppConfig
         return new AppConfig();
     }
 
+    private readonly object _saveGate = new();
+    private System.Threading.Timer? _debounce;
+
+    /// <summary>
+    /// Queues a save. Dragging a slider raises a change per tick, and writing
+    /// the file on each one is both pointless and a chance to be interrupted
+    /// mid-write.
+    /// </summary>
     public void Save()
     {
-        Directory.CreateDirectory(Dir);
-        File.WriteAllText(Path_, JsonSerializer.Serialize(this, Opts));
+        lock (_saveGate)
+        {
+            _debounce ??= new System.Threading.Timer(_ => SaveNow());
+            _debounce.Change(400, Timeout.Infinite);
+        }
+    }
+
+    /// <summary>Writes immediately. Called on exit so nothing pending is lost.</summary>
+    public void SaveNow()
+    {
+        try
+        {
+            lock (_saveGate)
+            {
+                Directory.CreateDirectory(Dir);
+                // Write beside the real file and swap, so a crash mid-write
+                // cannot leave a half-written config behind.
+                string tmp = Path_ + ".tmp";
+                File.WriteAllText(tmp, JsonSerializer.Serialize(this, Opts));
+                File.Move(tmp, Path_, overwrite: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"config save failed: {ex.Message}");
+        }
     }
 }
 
