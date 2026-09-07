@@ -15,6 +15,7 @@ pool is 1,440 or 3,000.
 - **Click to arm**, or a global hotkey (F8 by default) so you can toggle it
   without alt-tabbing.
 - **Auto-find** for both globes, with a manual drag-a-box fallback.
+- **Panic response** — the harder you are dropping, the faster it pots.
 - **Check** window that draws what the detector sees, with two live sliders for
   the only setting that ever needs tuning.
 - **Self-updating** from GitHub Releases.
@@ -30,9 +31,11 @@ pool is 1,440 or 3,000.
    sent — the flask slot, not a modifier.
 4. Tick **Watch this globe** on the ones you want, then click **ARM**.
 
-Auto-find works by looking for the mass of red (or blue) pixels in the bottom
-corner, so the globe has to be full when you press it. If it can't find one, use
-**Set…** and drag the box yourself; that always works.
+Auto-find looks for a large round region of red (or blue) in the bottom corner,
+so the globe has to be full when you press it. It works on connected regions,
+which is what keeps the blue skill gems and flasks next to the mana globe out of
+the result. If it still can't find one it tells you what it saw instead — use
+**Set…** and drag the box yourself, which always works.
 
 ### If the Check window looks wrong
 
@@ -40,6 +43,25 @@ The green line should track the liquid surface at any fill level. If it sits at
 the top when the globe is half empty, the detector is counting the frame or the
 background as liquid — drag **Colour strictness** up. If it sits at the bottom
 when the globe is full, drag **Min brightness** down.
+
+## How fast it pots
+
+One press every cooldown is right for a slow bleed and far too slow for a big
+hit, so each globe has two speeds:
+
+| Setting | What it does |
+|---|---|
+| Cooldown | Normal gap between presses while below the trigger. Default 900 ms. |
+| Panic below | Under this fraction, switch to the short gap and fire on the first low frame instead of waiting for a second. |
+| gap | The short gap. Default 260 ms. |
+| Presses per trigger | Send the key more than once, for when one charge does not cover the hit. |
+
+It also panics on **rate**, not just level: if the globe is falling faster than
+30% per second it switches to the short gap even while you are still above the
+panic line, so a spike is caught on the way down rather than after it lands.
+
+Presses keep coming for as long as you are below the trigger. Whether they do
+anything is down to your charges — the app cannot see those.
 
 ## Safety rails
 
@@ -108,3 +130,6 @@ puts the account at risk. Your call.
 | `MonitorEngine.cs` | the poll loop and firing rules |
 | `MainForm.cs` / `GlobePanel.cs` | the UI |
 | `Updater.cs` | GitHub Releases check and self-replace |
+| `tests/DetectorTests` | synthetic HUD corners the detector must get right |
+
+Run the detector tests with `dotnet run --project tests/DetectorTests`.

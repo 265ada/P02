@@ -11,6 +11,9 @@ public sealed class GlobePanel : GroupBox
     private readonly Label _region = new();
     private readonly NumericUpDown _threshold = new();
     private readonly NumericUpDown _cooldown = new();
+    private readonly NumericUpDown _panicBelow = new();
+    private readonly NumericUpDown _panicGap = new();
+    private readonly NumericUpDown _burst = new();
     private readonly KeyBindBox _key = new();
     private readonly ProgressBar _bar = new();
     private readonly Label _pct = new();
@@ -23,7 +26,7 @@ public sealed class GlobePanel : GroupBox
 
         Text = title;
         Width = 330;
-        Height = 250;
+        Height = 330;
         Padding = new Padding(10);
 
         int y = 24;
@@ -90,6 +93,44 @@ public sealed class GlobePanel : GroupBox
             { _cfg.CooldownMs = (int)_cooldown.Value; _onChange(); };
         Controls.Add(_cooldown);
         Controls.Add(Lab("ms", 170, y + 4));
+        y += 32;
+
+        Controls.Add(Lab("Panic below", 14, y + 4));
+        _panicBelow.SetBounds(90, y, 62, 24);
+        _panicBelow.Minimum = 0;
+        _panicBelow.Maximum = 99;
+        _panicBelow.Value = (decimal)Math.Clamp(cfg.PanicBelow * 100, 0, 99);
+        _panicBelow.ValueChanged += (_, _) =>
+            { _cfg.PanicBelow = (double)_panicBelow.Value / 100.0; _onChange(); };
+        Controls.Add(_panicBelow);
+        Controls.Add(Lab("%", 156, y + 4));
+
+        Controls.Add(Lab("gap", 190, y + 4));
+        _panicGap.SetBounds(222, y, 84, 24);
+        _panicGap.Minimum = 50;
+        _panicGap.Maximum = 5000;
+        _panicGap.Increment = 10;
+        _panicGap.Value = Math.Clamp(cfg.PanicCooldownMs, 50, 5000);
+        _panicGap.ValueChanged += (_, _) =>
+            { _cfg.PanicCooldownMs = (int)_panicGap.Value; _onChange(); };
+        Controls.Add(_panicGap);
+        y += 32;
+
+        Controls.Add(Lab("Presses per trigger", 14, y + 4));
+        _burst.SetBounds(140, y, 50, 24);
+        _burst.Minimum = 1;
+        _burst.Maximum = 5;
+        _burst.Value = Math.Clamp(cfg.BurstCount, 1, 5);
+        _burst.ValueChanged += (_, _) =>
+            { _cfg.BurstCount = (int)_burst.Value; _onChange(); };
+        Controls.Add(_burst);
+
+        Controls.Add(new Label
+        {
+            Bounds = new Rectangle(196, y + 4, 120, 18),
+            ForeColor = SystemColors.GrayText,
+            Text = "charges allowing",
+        });
     }
 
     private static Label Lab(string text, int x, int y) =>
@@ -135,9 +176,13 @@ public sealed class GlobePanel : GroupBox
 
         if (found is null)
         {
-            MessageBox.Show(
-                "Couldn't find it. Use Set… and drag the box by hand — that always works.",
-                "Auto-find", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            string why = OrbDetector.LastLocateNote;
+            string msg = "Couldn't find it.";
+            if (why.Length > 0) msg += Environment.NewLine + Environment.NewLine + why;
+            msg += Environment.NewLine + Environment.NewLine +
+                   "Use Set... and drag the box by hand - that always works, and the "
+                   + "Check window will confirm it reads correctly.";
+            MessageBox.Show(msg, "Auto-find", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         Apply(found.Value);

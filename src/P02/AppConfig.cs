@@ -33,11 +33,31 @@ public sealed class WatcherConfig
     public double Threshold { get; set; } = 0.50;
 
     public string Key { get; set; } = "1";
-    public int HoldMs { get; set; } = 35;
-    public int CooldownMs { get; set; } = 1500;
+    public int HoldMs { get; set; } = 30;
+
+    /// <summary>Normal gap between presses while sitting below the trigger.</summary>
+    public int CooldownMs { get; set; } = 900;
 
     /// <summary>Consecutive low reads required, so one odd frame can't fire.</summary>
     public int ConfirmFrames { get; set; } = 2;
+
+    // --- emergency response ---------------------------------------------
+
+    /// <summary>Below this fraction, switch to the short gap and fire on sight.</summary>
+    public double PanicBelow { get; set; } = 0.30;
+
+    /// <summary>Gap between presses while panicking. Charges allow this.</summary>
+    public int PanicCooldownMs { get; set; } = 260;
+
+    /// <summary>Losing more than this many percent per second also counts as
+    /// panic, even if you are still above PanicBelow. A big hit is caught on
+    /// the way down instead of after it lands.</summary>
+    public double FastDropPctPerSec { get; set; } = 30;
+
+    /// <summary>Presses sent per trigger. Raise if one charge is not enough.</summary>
+    public int BurstCount { get; set; } = 1;
+
+    public int BurstGapMs { get; set; } = 70;
 
     // --- pixel classification -------------------------------------------
     /// <summary>"red" for life, "blue" for mana.</summary>
@@ -47,6 +67,11 @@ public sealed class WatcherConfig
     public double BandFraction { get; set; } = 0.30;
     public double RowThreshold { get; set; } = 0.55;
     public int MinRun { get; set; } = 4;
+
+    /// <summary>Count near-white pixels as liquid. The globes carry a specular
+    /// highlight that is not blue or red at all, and it would otherwise punch a
+    /// hole in the middle of the mask.</summary>
+    public bool GlareIsLiquid { get; set; } = true;
 }
 
 public sealed class AppConfig
@@ -55,9 +80,9 @@ public sealed class AppConfig
         { Hue = "red", Key = "1", Threshold = 0.50 };
 
     public WatcherConfig Mana { get; set; } = new()
-        { Hue = "blue", Key = "2", Threshold = 0.30 };
+        { Hue = "blue", Key = "2", Threshold = 0.30, PanicBelow = 0.15 };
 
-    public int PollHz { get; set; } = 20;
+    public int PollHz { get; set; } = 30;
 
     /// <summary>Only act while the focused window title contains this. Blank = any.</summary>
     public string WindowMatch { get; set; } = "Path of Exile";

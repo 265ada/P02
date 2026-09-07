@@ -3,3 +3,5 @@ obj/
 *.user
 publish/
 artifacts/
+tests/DetectorTests/bin/
+tests/DetectorTests/obj/

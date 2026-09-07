@@ -28,14 +28,14 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(700, 430);
+        ClientSize = new Size(700, 510);
 
         _life = new GlobePanel("Life", cfg.Life, blue: false, Save) { Location = new Point(12, 12) };
         _mana = new GlobePanel("Mana", cfg.Mana, blue: true, Save) { Location = new Point(356, 12) };
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 274;
+        int y = 354;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -106,7 +106,14 @@ public sealed class MainForm : Form
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
                 .InformationalVersion.Split('+')[0] ?? "0.0.0";
 
-    private void Save() => _cfg.Save();
+    /// <summary>Any settings edit: persist it and re-render the summary line.
+    /// Without the refresh, ticking a globe on while armed left the status text
+    /// stale and it looked like arming had been lost.</summary>
+    private void Save()
+    {
+        _cfg.Save();
+        RefreshArmUi();
+    }
 
     private void OnSampled(GlobeReading life, GlobeReading mana, bool focused)
     {
