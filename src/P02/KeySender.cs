@@ -50,6 +50,12 @@ internal static class KeySender
 
     public static bool IsKnown(string key) => Scan.ContainsKey(key.Trim());
 
+    /// <summary>Scancode a key resolves to, for the diagnostics report.</summary>
+    public static ushort ScanOf(string key) =>
+        Scan.TryGetValue(key.Trim(), out ushort s) ? s : (ushort)0;
+
+    public static bool IsExtended(string key) => Extended.Contains(key.Trim());
+
     private static Native.INPUT Make(ushort scan, bool up, bool extended)
     {
         uint flags = Native.KEYEVENTF_SCANCODE | (up ? Native.KEYEVENTF_KEYUP : 0);

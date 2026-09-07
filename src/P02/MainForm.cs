@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 
 namespace P02;
@@ -109,22 +110,30 @@ public sealed class MainForm : Form
         var upd = new CheckBox
         {
             Text = "Check at launch",
-            Bounds = new Rectangle(428, y + 3, 118, 22),
+            Bounds = new Rectangle(554, y + 3, 118, 22),
             Checked = cfg.CheckUpdatesOnStart,
         };
         upd.CheckedChanged += (_, _) =>
         { _cfg.CheckUpdatesOnStart = upd.Checked; Save(); };
         Controls.Add(upd);
 
-        var testBtn = new Button { Text = "Test keys (3s)", Bounds = new Rectangle(298, y, 120, 26) };
+        var diagBtn = new Button
+        {
+            Text = "Export diagnostics",
+            Bounds = new Rectangle(298, y, 130, 26),
+        };
+        diagBtn.Click += (_, _) => ExportDiagnostics();
+        Controls.Add(diagBtn);
+
+        var testBtn = new Button { Text = "Test keys (3s)", Bounds = new Rectangle(436, y, 110, 26) };
         testBtn.Click += (_, _) => TestKeys();
         Controls.Add(testBtn);
 
         Controls.Add(new Label
         {
-            Bounds = new Rectangle(552, y + 5, 216, 20),
+            Bounds = new Rectangle(678, y + 6, 90, 20),
             ForeColor = SystemColors.GrayText,
-            Text = "Closing hides to tray.",
+            Text = "Hides to tray.",
         });
 
         y += 32;
@@ -297,6 +306,38 @@ public sealed class MainForm : Form
             BeginInvoke(RefreshArmUi);
         };
         t.Start();
+    }
+
+    /// <summary>
+    /// Writes a shareable bundle: a readable report, the recent log, the
+    /// config, and what the detector currently sees in each globe.
+    /// </summary>
+    private void ExportDiagnostics()
+    {
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            string zip = Diagnostics.Export(_cfg, _engine, this);
+            Cursor = Cursors.Default;
+
+            string msg = "Diagnostics written to:" + Environment.NewLine + zip
+                + Environment.NewLine + Environment.NewLine
+                + "The .txt beside it is the same report in plain text, ready to paste. "
+                + "Your update token is not included."
+                + Environment.NewLine + Environment.NewLine
+                + "Open the folder now?";
+            if (MessageBox.Show(this, msg, "Export diagnostics",
+                                MessageBoxButtons.YesNo,
+                                MessageBoxIcon.Information) == DialogResult.Yes)
+                Process.Start("explorer.exe", $"/select,\"{zip}\"");
+        }
+        catch (Exception ex)
+        {
+            Cursor = Cursors.Default;
+            Log.Write($"diagnostics export failed: {ex}");
+            MessageBox.Show(this, ex.Message, "Export diagnostics",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)

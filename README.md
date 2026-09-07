@@ -166,6 +166,20 @@ rather than queued — the log line shows `skipped=`. A high skipped count means
 the cooldown is set far below what can actually be sent, not that anything is
 broken. Raise the cooldown or lower Presses per trigger.
 
+## Export diagnostics
+
+The button writes a zip and a matching plain-text report to `%APPDATA%\P02`:
+
+- what P02 sees in each globe right now, as numbers and as before/after images
+- every setting, including calibration and the learned full/empty values
+- which monitor each globe region is on, and where the game window is
+- the scancode each configured key resolves to, so a numpad mix-up is obvious
+- the recent log, and the update log
+- a short verdict listing anything that looks wrong
+
+Your update token is never included, and anything token-shaped in the log is
+redacted. The `.txt` is meant to be pasted straight into a chat.
+
 ## If it never fires
 
 Work through it in this order.

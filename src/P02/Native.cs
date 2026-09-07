@@ -199,4 +199,30 @@ internal static class Native
 
         return best;
     }
+
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(nint hWnd, out uint pid);
+
+    /// <summary>Handle of the first visible window whose title contains
+    /// <paramref name="match"/>, or 0.</summary>
+    public static nint FindWindowHandle(string match)
+    {
+        if (string.IsNullOrWhiteSpace(match)) return 0;
+        nint best = 0;
+        long bestArea = 0;
+
+        EnumWindows((h, _) =>
+        {
+            if (!IsWindowVisible(h)) return true;
+            if (!TitleOf(h).Contains(match, StringComparison.OrdinalIgnoreCase)) return true;
+            if (!GetWindowRect(h, out RECT r)) return true;
+            var rect = r.ToRectangle();
+            if (rect.Width < 400 || rect.Height < 300) return true;
+            long area = (long)rect.Width * rect.Height;
+            if (area > bestArea) { bestArea = area; best = h; }
+            return true;
+        }, 0);
+
+        return best;
+    }
 }
