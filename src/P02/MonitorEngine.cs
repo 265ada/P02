@@ -122,7 +122,8 @@ public sealed class MonitorEngine : IDisposable
                     lastLogMs = t0;
                     Log.Write($"watch  life {lr.Fraction:P1}{(_cfg.Life.Enabled ? "" : " (off)")}" +
                               $"  mana {mr.Fraction:P1}{(_cfg.Mana.Enabled ? "" : " (off)")}" +
-                              $"  focused={focused}  hz={ActualHz}");
+                              $"  focused={focused}  hz={ActualHz}  " +
+                              $"skipped={_keys.Skipped}");
                 }
 
                 // The UI cannot use 100 samples a second and repainting that
@@ -177,6 +178,15 @@ public sealed class MonitorEngine : IDisposable
             return new GlobeReading(name, frac, true);
         }
 
+        // A globe that reads flat zero is usually one we cannot see at all —
+        // dead, loading, or covered. The logs from a real session showed over a
+        // thousand presses fired into exactly this state.
+        if (frac <= c.IgnoreBelow)
+        {
+            st.Below = 0;
+            return new GlobeReading(name, frac, true);
+        }
+
         // Deep in the red, or dropping fast enough that waiting a full cooldown
         // means dying with charges unspent: press again as soon as the game
         // will accept it, and do not wait for a second confirming frame.
@@ -188,8 +198,14 @@ public sealed class MonitorEngine : IDisposable
         if (st.Below < confirm || now - st.LastFireMs < gap)
             return new GlobeReading(name, frac, true);
 
+        // A burst still going out means the previous request has not even
+        // finished leaving; asking for another only builds a backlog.
+        if (_keys.Busy)
+            return new GlobeReading(name, frac, true);
+
         int shots = Math.Clamp(c.BurstCount, 1, 5);
-        _keys.Send(c.Key, c.HoldMs, shots, Math.Clamp(c.BurstGapMs, 5, 500));
+        if (!_keys.Send(c.Key, c.HoldMs, shots, Math.Clamp(c.BurstGapMs, 5, 500)))
+            return new GlobeReading(name, frac, true);
 
         st.LastFireMs = now;
         st.Below = 0;

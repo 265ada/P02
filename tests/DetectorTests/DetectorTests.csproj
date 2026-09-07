@@ -14,5 +14,6 @@
     <Compile Include="..\..\src\P02\ScreenCapture.cs" />
     <Compile Include="..\..\src\P02\AppConfig.cs" />
     <Compile Include="..\..\src\P02\Native.cs" />
+    <Compile Include="..\..\src\P02\KeySender.cs" />
   </ItemGroup>
 </Project>

@@ -136,6 +136,33 @@ static class T
             if (!fixedUp) fails++;
         }
 
+        // Every key the bind box can capture must be sendable. Numpad keys
+        // share scancodes with the navigation cluster and differ only by the
+        // extended flag, so this guards a genuinely easy mistake.
+        {
+            int bad = 0, mapped = 0;
+            foreach (Keys k in Enum.GetValues<Keys>())
+            {
+                string? name = KeySender.FromKeys(k);
+                if (name is null) continue;
+                mapped++;
+                if (!KeySender.IsKnown(name))
+                {
+                    Console.WriteLine($"FAIL  {k} -> '{name}' has no scancode");
+                    bad++;
+                }
+            }
+            foreach (string want in new[] { "numpad0", "numpad5", "numpad+", "numpad/", "0", "=" })
+                if (!KeySender.IsKnown(want))
+                {
+                    Console.WriteLine($"FAIL  '{want}' missing from scancode map");
+                    bad++;
+                }
+            Console.WriteLine((bad == 0 ? "PASS" : "FAIL")
+                              + $"  keybind map: {mapped} keys capturable, all sendable");
+            fails += bad;
+        }
+
         Console.WriteLine(fails == 0 ? "\nALL PASS" : $"\n{fails} FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }

@@ -43,6 +43,13 @@ public sealed class WatcherConfig
 
     // --- emergency response ---------------------------------------------
 
+    /// <summary>
+    /// Readings at or below this are treated as "cannot see the globe" rather
+    /// than "empty": a death screen, a loading screen, or something covering
+    /// the corner. Pressing into those achieves nothing and burns charges.
+    /// </summary>
+    public double IgnoreBelow { get; set; } = 0.02;
+
     /// <summary>Below this fraction, switch to the short gap and fire on sight.</summary>
     public double PanicBelow { get; set; } = 0.30;
 
@@ -57,7 +64,7 @@ public sealed class WatcherConfig
     /// <summary>Presses sent per trigger. Raise if one charge is not enough.</summary>
     public int BurstCount { get; set; } = 1;
 
-    public int BurstGapMs { get; set; } = 40;
+    public int BurstGapMs { get; set; } = 30;
 
     // --- pixel classification -------------------------------------------
     /// <summary>"red" for life, "blue" for mana.</summary>

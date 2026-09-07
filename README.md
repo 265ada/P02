@@ -145,6 +145,27 @@ matter what the cooldown says.
 The app runs unelevated on purpose. If the game is running as administrator,
 Windows blocks our input — run the game normally, or nothing will happen.
 
+## Charges are not being spent even though it is firing
+
+This is a different failure from "not firing", and the log tells them apart:
+`Open log folder` and look for lines like `Life: '0' x3 at 12.0% PANIC`. If
+those are there, detection and firing are fine and the presses are the problem.
+
+**Check the key is the right key.** Flask binds on the numpad send different
+scancodes from the number row — numpad 0 is not the same key as 0. Click the key
+box and press the actual key you use; the numpad is supported.
+
+**Check the game is not elevated.** If the game runs as administrator and P02
+does not, Windows silently discards our input. Nothing logs an error; the
+presses simply never arrive.
+
+**Presses cannot outrun themselves.** A 3-press burst takes about a fifth of a
+second to physically send. Asking for one every 50 ms is four times faster than
+that, so requests made while a burst is still going out are refused and counted
+rather than queued — the log line shows `skipped=`. A high skipped count means
+the cooldown is set far below what can actually be sent, not that anything is
+broken. Raise the cooldown or lower Presses per trigger.
+
 ## If it never fires
 
 Work through it in this order.
