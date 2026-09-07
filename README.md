@@ -193,7 +193,18 @@ hammer the disk or risk a half-written file.
 ## Updates
 
 **Check for updates** hits the GitHub Releases feed, downloads the new `P02.exe`
-and restarts into it. It also checks once quietly at startup.
+and restarts into it. It also checks once quietly at startup, and only speaks
+up when there is something to install.
+
+The swap is done by a small batch file that waits for P02 to exit, copies the
+new exe over the old one and starts it again, logging to
+`%APPDATA%\P02\update.log`. Every command in it is called by full path:
+Git for Windows puts Unix tools on PATH, and a bare `find` in a batch file
+resolving to Unix `find` was enough to break the wait and let the copy race a
+process that still held the exe.
+
+If P02.exe sits somewhere unwritable, the update says so before downloading
+50 MB rather than after.
 
 If the check reports 404, the message names which of the three states it is in:
 no token file, an empty token file, or a token that is present but rejected. An
