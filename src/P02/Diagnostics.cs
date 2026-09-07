@@ -202,9 +202,7 @@ internal static partial class Diagnostics
     {
         if (!KeySender.IsKnown(key)) return "UNKNOWN KEY - cannot be sent";
         return $"scancode 0x{KeySender.ScanOf(key):X2}"
-             + (KeySender.IsExtended(key) ? " (extended)" : "")
-             + (key.StartsWith("numpad", StringComparison.OrdinalIgnoreCase)
-                 ? "  [numpad]" : "");
+             + (KeySender.IsExtended(key) ? " (extended)" : "");
     }
 
     private static string ProcessNote(int pid)

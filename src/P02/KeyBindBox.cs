@@ -46,7 +46,18 @@ public sealed class KeyBindBox : Button
     {
         if (!_capturing) return base.ProcessCmdKey(ref msg, keyData);
 
-        if ((keyData & Keys.KeyCode) == Keys.Escape) { EndCapture(); return true; }
+        Keys code = keyData & Keys.KeyCode;
+        if (code == Keys.Escape) { EndCapture(); return true; }
+
+        // Numpad is deliberately unsupported. Swallowing the press silently
+        // would just look broken, so say why.
+        if (code is (>= Keys.NumPad0 and <= Keys.NumPad9)
+                 or Keys.Decimal or Keys.Multiply or Keys.Subtract
+                 or Keys.Add or Keys.Divide)
+        {
+            Text = "use the number row";
+            return true;
+        }
 
         string? name = KeySender.FromKeys(keyData);
         if (name is not null)

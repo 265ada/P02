@@ -152,12 +152,26 @@ static class T
                     bad++;
                 }
             }
-            foreach (string want in new[] { "numpad0", "numpad5", "numpad+", "numpad/", "0", "=" })
+            foreach (string want in new[] { "1", "2", "3", "4", "5", "0", "-", "=" })
                 if (!KeySender.IsKnown(want))
                 {
                     Console.WriteLine($"FAIL  '{want}' missing from scancode map");
                     bad++;
                 }
+
+            // Numpad is deliberately unsupported: it must be capturable by
+            // nothing and sendable as nothing, or it can creep back in.
+            foreach (Keys k in new[] { Keys.NumPad0, Keys.NumPad1, Keys.Add, Keys.Divide })
+                if (KeySender.FromKeys(k) is not null)
+                {
+                    Console.WriteLine($"FAIL  {k} is still capturable");
+                    bad++;
+                }
+            if (KeySender.IsKnown("numpad0"))
+            {
+                Console.WriteLine("FAIL  numpad still in the scancode map");
+                bad++;
+            }
             Console.WriteLine((bad == 0 ? "PASS" : "FAIL")
                               + $"  keybind map: {mapped} keys capturable, all sendable");
             fails += bad;

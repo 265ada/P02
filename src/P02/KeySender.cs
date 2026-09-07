@@ -24,26 +24,16 @@ internal static class KeySender
         ["f1"] = 0x3B, ["f2"] = 0x3C, ["f3"] = 0x3D, ["f4"] = 0x3E,
         ["f5"] = 0x3F, ["f6"] = 0x40, ["f7"] = 0x41, ["f8"] = 0x42,
         ["f9"] = 0x43, ["f10"] = 0x44, ["f11"] = 0x57, ["f12"] = 0x58,
-        // numpad. Same scancodes as the navigation keys below but NOT flagged
-        // extended, which is exactly what separates numpad 0 from Insert. Flask
-        // binds live here often enough to matter.
-        ["numpad0"] = 0x52, ["numpad1"] = 0x4F, ["numpad2"] = 0x50,
-        ["numpad3"] = 0x51, ["numpad4"] = 0x4B, ["numpad5"] = 0x4C,
-        ["numpad6"] = 0x4D, ["numpad7"] = 0x47, ["numpad8"] = 0x48,
-        ["numpad9"] = 0x49, ["numpad."] = 0x53, ["numpad*"] = 0x37,
-        ["numpad-"] = 0x4A, ["numpad+"] = 0x4E,
-
         // extended (0xE0-prefixed) keys
         ["rctrl"] = 0x1D, ["ralt"] = 0x38, ["insert"] = 0x52, ["delete"] = 0x53,
         ["home"] = 0x47, ["end"] = 0x4F, ["pageup"] = 0x49, ["pagedown"] = 0x51,
         ["up"] = 0x48, ["down"] = 0x50, ["left"] = 0x4B, ["right"] = 0x4D,
-        ["numpad/"] = 0x35,
     };
 
     private static readonly HashSet<string> Extended = new(StringComparer.OrdinalIgnoreCase)
     {
         "rctrl", "ralt", "insert", "delete", "home", "end",
-        "pageup", "pagedown", "up", "down", "left", "right", "numpad/",
+        "pageup", "pagedown", "up", "down", "left", "right",
     };
 
     public static IEnumerable<string> KeyNames => Scan.Keys.OrderBy(k => k);
@@ -106,13 +96,6 @@ internal static class KeySender
             System.Windows.Forms.Keys.OemQuestion => "/",
             System.Windows.Forms.Keys.OemPipe => "\\",
             System.Windows.Forms.Keys.Oemtilde => "`",
-            >= System.Windows.Forms.Keys.NumPad0 and <= System.Windows.Forms.Keys.NumPad9
-                => "numpad" + (int)(k - System.Windows.Forms.Keys.NumPad0),
-            System.Windows.Forms.Keys.Decimal => "numpad.",
-            System.Windows.Forms.Keys.Multiply => "numpad*",
-            System.Windows.Forms.Keys.Subtract => "numpad-",
-            System.Windows.Forms.Keys.Add => "numpad+",
-            System.Windows.Forms.Keys.Divide => "numpad/",
             System.Windows.Forms.Keys.Insert => "insert",
             System.Windows.Forms.Keys.Delete => "delete",
             System.Windows.Forms.Keys.Home => "home",

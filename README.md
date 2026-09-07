@@ -151,9 +151,9 @@ This is a different failure from "not firing", and the log tells them apart:
 `Open log folder` and look for lines like `Life: '0' x3 at 12.0% PANIC`. If
 those are there, detection and firing are fine and the presses are the problem.
 
-**Check the key is the right key.** Flask binds on the numpad send different
-scancodes from the number row — numpad 0 is not the same key as 0. Click the key
-box and press the actual key you use; the numpad is supported.
+**Check the key is the right key.** Click the key box and press the actual key
+you use. Binds are the number row and letters; the numpad is not supported, and
+the box says so if you press one.
 
 **Check the game is not elevated.** If the game runs as administrator and P02
 does not, Windows silently discards our input. Nothing logs an error; the
