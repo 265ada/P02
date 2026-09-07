@@ -62,11 +62,23 @@ public sealed class WatcherConfig
     // --- pixel classification -------------------------------------------
     /// <summary>"red" for life, "blue" for mana.</summary>
     public string Hue { get; set; } = "red";
-    public double ChannelRatio { get; set; } = 1.35;
+    /// <summary>How far the hue's channel must lead the other two, 0-255.
+    /// An absolute margin survives the pale washed-out centre of the mana
+    /// globe, where a ratio test collapses.</summary>
+    public int ColourMargin { get; set; } = 30;
+
     public int MinValue { get; set; } = 50;
     public double BandFraction { get; set; } = 0.30;
     public double RowThreshold { get; set; } = 0.55;
     public int MinRun { get; set; } = 4;
+
+    /// <summary>Box row the liquid reaches when the globe is full, and the row
+    /// just past the bottom of the liquid. Set by "Full = 100%". Without these
+    /// the box edges stand in for the globe, and any frame caught in the box
+    /// makes a full globe read low.</summary>
+    public int FullRow { get; set; } = -1;
+
+    public int EmptyRow { get; set; } = -1;
 
     /// <summary>Count near-white pixels as liquid. The globes carry a specular
     /// highlight that is not blue or red at all, and it would otherwise punch a

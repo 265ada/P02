@@ -2,30 +2,57 @@ namespace P02;
 
 /// <summary>
 /// Reads how full a globe is by looking at pixels, not text. The globe drains
-/// top-down, so the answer is the height of the highest run of liquid-coloured
-/// rows in a band of central columns.
+/// top-down, so the answer is the height of the liquid surface — measured
+/// against calibrated full and empty rows rather than the box edges, because a
+/// hand-drawn box always carries some frame with it.
 /// </summary>
 internal static class OrbDetector
 {
     /// <summary>Last auto-find explanation, shown when the search comes up empty.</summary>
     public static string LastLocateNote { get; private set; } = "";
 
+    /// <summary>
+    /// Is this pixel the globe's liquid? Uses how far the hue's channel leads
+    /// the others in absolute terms, not a ratio: the middle of the mana globe
+    /// is a washed-out pale blue where blue barely outweighs green
+    /// proportionally, but still leads it by a wide margin.
+    /// </summary>
     private static bool IsLiquid(byte b, byte g, byte r,
-                                 bool blue, double ratio, int minV, bool glare)
+                                 bool blue, int margin, int minV, bool glare)
     {
-        // The specular highlight on the glass is near-white, so it fails the
+        // The specular highlight on the glass is near-white, so it fails every
         // hue test even though it is plainly inside the liquid.
         if (glare && b > 170 && g > 170 && r > 170) return true;
 
         return blue
-            ? b > minV && b > g * ratio && b > r * ratio
-            : r > minV && r > g * ratio && r > b * ratio;
+            ? b >= minV && b - Math.Max(g, r) >= margin
+            : r >= minV && r - Math.Max(g, b) >= margin;
     }
 
-    /// <summary>Fraction still filled, 0-1. Buffer is BGRA, top row first.</summary>
-    public static double Fraction(byte[] buf, int w, int h, WatcherConfig c)
+    private static bool RowIsLiquid(byte[] buf, int w, int y, int x0, int x1,
+                                    bool blue, WatcherConfig c, int need)
     {
-        if (w < 4 || h < 4) return 0;
+        int rowStart = y * w * ScreenCapture.Bpp;
+        int hits = 0;
+        for (int x = x0; x < x1; x++)
+        {
+            int i = rowStart + x * ScreenCapture.Bpp;
+            if (IsLiquid(buf[i], buf[i + 1], buf[i + 2],
+                         blue, c.ColourMargin, c.MinValue, c.GlareIsLiquid))
+            {
+                if (++hits >= need) return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Row where the liquid surface sits, in box coordinates. Returns
+    /// <paramref name="h"/> when the globe reads empty.
+    /// </summary>
+    public static int SurfaceRow(byte[] buf, int w, int h, WatcherConfig c)
+    {
+        if (w < 4 || h < 4) return h;
         bool blue = c.Hue.Equals("blue", StringComparison.OrdinalIgnoreCase);
 
         int band = Math.Max(1, (int)(w * c.BandFraction));
@@ -37,37 +64,82 @@ internal static class OrbDetector
         int streak = 0;
         for (int y = 0; y < h; y++)
         {
-            int rowStart = y * w * ScreenCapture.Bpp;
-            int hits = 0;
-            for (int x = x0; x < x1; x++)
+            if (RowIsLiquid(buf, w, y, x0, x1, blue, c, need))
             {
-                int i = rowStart + x * ScreenCapture.Bpp;
-                if (IsLiquid(buf[i], buf[i + 1], buf[i + 2],
-                             blue, c.ChannelRatio, c.MinValue, c.GlareIsLiquid))
-                    hits++;
-            }
-
-            if (hits >= need)
-            {
-                streak++;
-                // The run has to hold, so a spark or a floating number can't
-                // fake a full globe.
-                if (streak >= run)
-                {
-                    int top = y - run + 1;
-                    return (h - top) / (double)h;
-                }
+                // The run has to hold, so a spark or a floating damage number
+                // cannot fake a full globe.
+                if (++streak >= run) return y - run + 1;
             }
             else
             {
                 streak = 0;
             }
         }
-        return 0;
+        return h;
     }
 
-    /// <summary>Row index where the liquid surface sits, for the preview.</summary>
-    public static int FillLine(double fraction, int h) => (int)Math.Round((1 - fraction) * h);
+    /// <summary>Fraction still filled, 0-1. Buffer is BGRA, top row first.</summary>
+    public static double Fraction(byte[] buf, int w, int h, WatcherConfig c)
+        => FractionFromRow(SurfaceRow(buf, w, h, c), h, c);
+
+    /// <summary>
+    /// Turns a surface row into a fraction. Without calibration the box edges
+    /// are taken to be the globe, which reads low by however much frame the box
+    /// caught; with it, full and empty are where you said they were.
+    /// </summary>
+    public static double FractionFromRow(int surface, int h, WatcherConfig c)
+    {
+        Span_(h, c, out int top, out int bottom);
+        double f = (bottom - surface) / (double)(bottom - top);
+        return Math.Clamp(f, 0, 1);
+    }
+
+    /// <summary>Where to draw a given fraction, in box coordinates.</summary>
+    public static int RowForFraction(double fraction, int h, WatcherConfig c)
+    {
+        Span_(h, c, out int top, out int bottom);
+        return (int)Math.Round(bottom - fraction * (bottom - top));
+    }
+
+    private static void Span_(int h, WatcherConfig c, out int top, out int bottom)
+    {
+        top = c.FullRow;
+        bottom = c.EmptyRow;
+        if (top < 0 || bottom <= top || bottom > h) { top = 0; bottom = h; }
+    }
+
+    /// <summary>
+    /// With the globe full, finds the top and bottom of the liquid so later
+    /// readings are measured against the globe instead of the box. Returns
+    /// false if it cannot see a globe in there at all.
+    /// </summary>
+    public static bool CalibrateFull(byte[] buf, int w, int h, WatcherConfig c,
+                                     out int fullRow, out int emptyRow)
+    {
+        fullRow = emptyRow = -1;
+        if (w < 4 || h < 4) return false;
+        bool blue = c.Hue.Equals("blue", StringComparison.OrdinalIgnoreCase);
+
+        int band = Math.Max(1, (int)(w * c.BandFraction));
+        int x0 = (w - band) / 2;
+        int x1 = x0 + band;
+        int need = Math.Max(1, (int)Math.Ceiling(band * c.RowThreshold));
+
+        int first = -1, last = -1;
+        for (int y = 0; y < h; y++)
+        {
+            if (RowIsLiquid(buf, w, y, x0, x1, blue, c, need))
+            {
+                if (first < 0) first = y;
+                last = y;
+            }
+        }
+
+        if (first < 0 || last - first < 8) return false;
+        fullRow = first;
+        emptyRow = last + 1;
+        return true;
+    }
 
     // ------------------------------------------------------------------
     // auto-find
@@ -78,8 +150,10 @@ internal static class OrbDetector
         public int W => X1 - X0 + 1;
         public int H => Y1 - Y0 + 1;
         public double Aspect => W / (double)H;
+
         /// <summary>How much of the bounding box the blob actually fills. A disc
-        /// is about 0.79; an L-shaped smear of UI icons is far lower.</summary>
+        /// is about 0.79; an L-shaped smear of UI icons is far lower, and a
+        /// solid icon is 1.0.</summary>
         public double Density => Count / (double)Math.Max(1, W * H);
     }
 
@@ -88,11 +162,9 @@ internal static class OrbDetector
     /// regions rather than row/column projections, because the corners of the
     /// HUD also hold skill gems and flasks in the same colours — projecting
     /// merges those into the globe and the result is a box around all of it.
-    /// Only meaningful when the globe is full, which is why the UI says to top
-    /// up first.
+    /// Only meaningful when the globe is full.
     /// </summary>
-    public static Rectangle? AutoLocate(Rectangle search, bool blue,
-                                        double ratio = 1.35, int minV = 50)
+    public static Rectangle? AutoLocate(Rectangle search, bool blue, int margin, int minV)
     {
         LastLocateNote = "";
         using var cap = new ScreenCapture();
@@ -102,7 +174,7 @@ internal static class OrbDetector
             return null;
         }
 
-        var found = Locate(cap.Buffer, cap.Width, cap.Height, blue, ratio, minV);
+        var found = Locate(cap.Buffer, cap.Width, cap.Height, blue, margin, minV);
         return found is null
             ? null
             : new Rectangle(search.Left + found.Value.X, search.Top + found.Value.Y,
@@ -112,7 +184,7 @@ internal static class OrbDetector
     /// <summary>The search itself, over a raw BGRA buffer. Split out from the
     /// capture so it can be exercised without a screen.</summary>
     internal static Rectangle? Locate(byte[] buf, int w, int h, bool blue,
-                                      double ratio = 1.35, int minV = 50)
+                                      int margin = 30, int minV = 50)
     {
         var mask = new bool[w * h];
         int lit = 0;
@@ -125,7 +197,7 @@ internal static class OrbDetector
                 int i = rowStart + x * ScreenCapture.Bpp;
                 // Glare is excluded here: white pixels are everywhere on the
                 // desktop, and we are hunting for the globe's own colour.
-                if (IsLiquid(buf[i], buf[i + 1], buf[i + 2], blue, ratio, minV, glare: false))
+                if (IsLiquid(buf[i], buf[i + 1], buf[i + 2], blue, margin, minV, glare: false))
                 {
                     mask[y * w + x] = true;
                     lit++;
@@ -135,16 +207,14 @@ internal static class OrbDetector
 
         if (lit < 200)
         {
-            LastLocateNote = $"almost no {(blue ? "blue" : "red")} pixels found " +
-                             "— is the game on screen, in the corner it should be?";
+            LastLocateNote = $"almost no {(blue ? "blue" : "red")} pixels found — is the " +
+                             "game on screen, and is the globe in the corner it should be?";
             return null;
         }
 
         var blobs = FindBlobs(mask, w, h);
         if (blobs.Count == 0) { LastLocateNote = "no regions found"; return null; }
 
-        // A globe is a big round disc. Icons and flasks are small, oblong, or
-        // sparse; the fill test throws out anything that is not disc-shaped.
         var ranked = blobs.OrderByDescending(b => b.Count).ToList();
         foreach (var b in ranked)
         {
@@ -161,8 +231,8 @@ internal static class OrbDetector
 
         var best = ranked[0];
         LastLocateNote =
-            $"largest region was {best.W}x{best.H}, {best.Density:P0} filled — " +
-            "too small, too oblong or too square to be a globe";
+            $"largest region was {best.W}x{best.H}, {best.Density:P0} filled — too small, " +
+            "too oblong or too square to be a globe. Try lowering Colour margin.";
         return null;
     }
 
@@ -200,5 +270,27 @@ internal static class OrbDetector
             if (count >= 400) blobs.Add(new Blob(count, x0, y0, x1, y1));
         }
         return blobs;
+    }
+
+    /// <summary>Tints every pixel the detector counts as liquid, so a bad read
+    /// can be seen rather than guessed at.</summary>
+    public static Bitmap MaskOverlay(Bitmap shot, WatcherConfig c)
+    {
+        bool blue = c.Hue.Equals("blue", StringComparison.OrdinalIgnoreCase);
+        var buf = ScreenCapture.ToBuffer(shot);
+        var outp = new Bitmap(shot.Width, shot.Height);
+        for (int y = 0; y < shot.Height; y++)
+        {
+            for (int x = 0; x < shot.Width; x++)
+            {
+                int i = (y * shot.Width + x) * ScreenCapture.Bpp;
+                byte b = buf[i], g = buf[i + 1], r = buf[i + 2];
+                bool on = IsLiquid(b, g, r, blue, c.ColourMargin, c.MinValue, c.GlareIsLiquid);
+                outp.SetPixel(x, y, on
+                    ? Color.FromArgb(0, 255, 0)
+                    : Color.FromArgb(r / 3, g / 3, b / 3));
+            }
+        }
+        return outp;
     }
 }

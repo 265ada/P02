@@ -25,7 +25,7 @@ public sealed class GlobePanel : GroupBox
         _onChange = onChange;
 
         Text = title;
-        Width = 330;
+        Width = 366;
         Height = 330;
         Padding = new Padding(10);
 
@@ -53,15 +53,19 @@ public sealed class GlobePanel : GroupBox
         Controls.Add(_region);
         y += 26;
 
-        var setBtn = new Button { Text = "Set…", Bounds = new Rectangle(70, y, 70, 26) };
+        var setBtn = new Button { Text = "Set…", Bounds = new Rectangle(70, y, 56, 26) };
         setBtn.Click += (_, _) => PickRegion();
         Controls.Add(setBtn);
 
-        var autoBtn = new Button { Text = "Auto-find", Bounds = new Rectangle(146, y, 84, 26) };
+        var autoBtn = new Button { Text = "Auto-find", Bounds = new Rectangle(130, y, 72, 26) };
         autoBtn.Click += (_, _) => AutoFind();
         Controls.Add(autoBtn);
 
-        var prevBtn = new Button { Text = "Check", Bounds = new Rectangle(236, y, 70, 26) };
+        var calBtn = new Button { Text = "Full = 100%", Bounds = new Rectangle(206, y, 86, 26) };
+        calBtn.Click += (_, _) => CalibrateFull();
+        Controls.Add(calBtn);
+
+        var prevBtn = new Button { Text = "Check", Bounds = new Rectangle(296, y, 56, 26) };
         prevBtn.Click += (_, _) => Preview();
         Controls.Add(prevBtn);
         y += 34;
@@ -171,7 +175,7 @@ public sealed class GlobePanel : GroupBox
             ? new Rectangle(vs.Right - w, vs.Bottom - h, w, h)
             : new Rectangle(vs.Left, vs.Bottom - h, w, h);
 
-        var found = OrbDetector.AutoLocate(search, _blue);
+        var found = OrbDetector.AutoLocate(search, _blue, _cfg.ColourMargin, _cfg.MinValue);
         owner?.Show();
 
         if (found is null)
@@ -192,8 +196,64 @@ public sealed class GlobePanel : GroupBox
     private void Apply(Rectangle r)
     {
         _cfg.Region = Box.From(r);
+        // Rows are box-relative, so an old calibration means nothing now.
+        _cfg.FullRow = -1;
+        _cfg.EmptyRow = -1;
         _region.Text = _cfg.Region.ToString();
         _onChange();
+    }
+
+    /// <summary>
+    /// Pins "full" to where the liquid actually is, instead of assuming the box
+    /// top is the top of the globe. Any frame caught in the box otherwise makes
+    /// a full globe read a few percent short, and no colour setting can fix it.
+    /// </summary>
+    private void CalibrateFull()
+    {
+        if (!_cfg.Region.IsValid)
+        {
+            MessageBox.Show("Set a region first.", "Full = 100%",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        string ask = $"Make sure your {Text.ToLowerInvariant()} globe is completely full, "
+                     + "then press OK." + Environment.NewLine + Environment.NewLine + 
+                       "This records where the liquid sits when full, so the reading "
+                     + "hits a true 100%.";
+        if (MessageBox.Show(ask,
+                "Full = 100%", MessageBoxButtons.OKCancel,
+                MessageBoxIcon.Information) != DialogResult.OK)
+            return;
+
+        var owner = FindForm();
+        owner?.Hide();
+        Thread.Sleep(250);
+        using var shot = ScreenCapture.Snapshot(_cfg.Region.ToRect());
+        owner?.Show();
+
+        var buf = ScreenCapture.ToBuffer(shot);
+        if (!OrbDetector.CalibrateFull(buf, shot.Width, shot.Height, _cfg,
+                                       out int full, out int empty))
+        {
+            MessageBox.Show(
+                "Couldn't see any liquid in that box. Open Check and lower Colour margin " +
+                "until the globe lights up green, then try again.",
+                "Full = 100%", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        _cfg.FullRow = full;
+        _cfg.EmptyRow = empty;
+        _onChange();
+        string done = $"Calibrated: full at row {full}, bottom at row {empty} "
+                    + $"of {shot.Height}.";
+        if (full > 0)
+            done += Environment.NewLine + Environment.NewLine +
+                    $"The box has {full} rows of frame above the liquid; that is what "
+                    + "was costing you the missing percent.";
+        MessageBox.Show(done, "Full = 100%", MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+        Preview();
     }
 
     private void Preview()
@@ -209,7 +269,7 @@ public sealed class GlobePanel : GroupBox
         Thread.Sleep(180);
         using var shot = ScreenCapture.Snapshot(_cfg.Region.ToRect());
         owner?.Show();
-        using var dlg = new PreviewForm(shot, _cfg, Text);
+        using var dlg = new PreviewForm(shot, _cfg, Text, _onChange);
         dlg.ShowDialog(owner);
     }
 

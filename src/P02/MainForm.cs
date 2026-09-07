@@ -28,10 +28,10 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(700, 510);
+        ClientSize = new Size(772, 510);
 
         _life = new GlobePanel("Life", cfg.Life, blue: false, Save) { Location = new Point(12, 12) };
-        _mana = new GlobePanel("Mana", cfg.Mana, blue: true, Save) { Location = new Point(356, 12) };
+        _mana = new GlobePanel("Mana", cfg.Mana, blue: true, Save) { Location = new Point(392, 12) };
         Controls.Add(_life);
         Controls.Add(_mana);
 

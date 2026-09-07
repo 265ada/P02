@@ -25,24 +25,45 @@ pool is 1,440 or 3,000.
 
 1. Start the game **borderless fullscreen** and get to a safe spot with both
    globes full.
-2. Run `P02.exe`. Per globe: **Auto-find**, then **Check** to confirm the green
-   line sits on the liquid surface.
+2. Run `P02.exe`. Per globe: **Auto-find**, then **Full = 100%** while the globe
+   is topped up, then **Check** to confirm it reads 100%.
 3. Set the trigger percentage and click the key box, then press the key you want
    sent — the flask slot, not a modifier.
 4. Tick **Watch this globe** on the ones you want, then click **ARM**.
 
-Auto-find looks for a large round region of red (or blue) in the bottom corner,
+Auto-find uses the same colour settings as the Check window, so if the globe
+does not light up green there, auto-find cannot see it either — fix it there
+first. It looks for a large round region of red (or blue) in the bottom corner,
 so the globe has to be full when you press it. It works on connected regions,
 which is what keeps the blue skill gems and flasks next to the mana globe out of
 the result. If it still can't find one it tells you what it saw instead — use
 **Set…** and drag the box yourself, which always works.
 
-### If the Check window looks wrong
+### A full globe reads 91%, and no slider fixes it
 
-The green line should track the liquid surface at any fill level. If it sits at
-the top when the globe is half empty, the detector is counting the frame or the
-background as liquid — drag **Colour strictness** up. If it sits at the bottom
-when the globe is full, drag **Min brightness** down.
+That is the box, not the colours. A box you drew by hand carries some frame
+above the liquid, and every one of those rows counts against you — 24 rows of
+frame on a 270-row box is exactly 91%. No colour setting can move the top of
+your box, which is why the sliders feel useless here.
+
+Press **Full = 100%** with the globe topped up. It records where the liquid
+actually starts and ends inside the box, and from then on the reading is
+measured against the globe rather than the box edges. Re-drawing the region
+clears the calibration, so calibrate after you set a region, not before.
+
+### If the green line is in the wrong place
+
+Tick **Show exactly which pixels count as liquid** in the Check window. Every
+pixel the detector accepts turns bright green, so you can see what it is
+actually reading instead of guessing.
+
+The green line should track the surface at any fill level. If it sits at the top
+when the globe is half empty, something above the liquid is being counted —
+raise **Colour margin**. If it sits at the bottom when the globe is full, lower
+**Colour margin**, then **Min brightness**.
+
+**Save image** writes a before/after pair to `%APPDATA%\P02` if you need to show
+someone what it sees.
 
 ## How fast it pots
 

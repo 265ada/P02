@@ -68,8 +68,17 @@ static class T
         if (got is null) Console.WriteLine("PASS  icons only -> refused");
         else { Console.WriteLine($"FAIL  icons only -> returned {got}"); fails++; }
 
+        // The mana globe's centre is a pale washed-out blue: blue leads green
+        // by a wide absolute margin but barely at all proportionally, which is
+        // what defeated the old ratio test.
+        Reset();
+        Disc(520, 300, 110, 150, 70, 35);
+        Disc(520, 300, 60, 210, 165, 130);
+        got = OrbDetector.Locate(_buf, W, H, blue: true);
+        fails += Check("globe with pale washed centre", got, 520, 300, 110);
+
         // Fill fraction across levels, on a real disc.
-        var cfg = new WatcherConfig { Hue = "blue", ChannelRatio = 1.35, MinValue = 50 };
+        var cfg = new WatcherConfig { Hue = "blue", ColourMargin = 30, MinValue = 50 };
         foreach (double want in new[] { 1.0, 0.75, 0.5, 0.25 })
         {
             Reset();
@@ -93,6 +102,38 @@ static class T
             bool ok = Math.Abs(f - want) < 0.04;
             Console.WriteLine($"{(ok ? "PASS" : "FAIL")}  fill {want:P0} -> read {f:P1}");
             if (!ok) fails++;
+        }
+
+        // A box drawn by hand catches frame above the globe. Uncalibrated that
+        // reads low; calibration must pull a full globe back to a true 100%.
+        {
+            const int pad = 24, bw2 = 220, bh2 = 270;
+            var box = new byte[bw2 * bh2 * Bpp];
+            for (int i = 0; i < box.Length; i += Bpp)
+            { box[i] = 40; box[i + 1] = 38; box[i + 2] = 36; box[i + 3] = 255; }
+
+            int rad = 105, cx = bw2 / 2, cy = pad + rad;
+            for (int yy = 0; yy < bh2; yy++)
+                for (int xx = 0; xx < bw2; xx++)
+                    if ((xx - cx) * (xx - cx) + (yy - cy) * (yy - cy) <= rad * rad)
+                    {
+                        int i = (yy * bw2 + xx) * Bpp;
+                        box[i] = 190; box[i + 1] = 90; box[i + 2] = 40;
+                    }
+
+            var c2 = new WatcherConfig { Hue = "blue", ColourMargin = 30, MinValue = 50 };
+            double before = OrbDetector.Fraction(box, bw2, bh2, c2);
+            bool okCal = OrbDetector.CalibrateFull(box, bw2, bh2, c2, out int fr, out int er);
+            c2.FullRow = fr;
+            c2.EmptyRow = er;
+            double after = OrbDetector.Fraction(box, bw2, bh2, c2);
+
+            bool low = before < 0.95;
+            bool fixedUp = okCal && after > 0.99;
+            Console.WriteLine((low ? "PASS" : "FAIL") + $"  padded box reads low uncalibrated -> {before:P1}");
+            Console.WriteLine((fixedUp ? "PASS" : "FAIL") + $"  calibration restores full -> {after:P1} (rows {fr}..{er})");
+            if (!low) fails++;
+            if (!fixedUp) fails++;
         }
 
         Console.WriteLine(fails == 0 ? "\nALL PASS" : $"\n{fails} FAILED");
