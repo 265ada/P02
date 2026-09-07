@@ -142,6 +142,112 @@ internal static class OrbDetector
     }
 
     // ------------------------------------------------------------------
+    // learning what full and empty look like
+    // ------------------------------------------------------------------
+
+    /// <summary>What the globe's pixels look like over a stretch of rows.</summary>
+    public readonly record struct GlobeStats(int DomLow, int DomHigh,
+                                             int ValLow, int ValHigh, int Count);
+
+    /// <summary>
+    /// Measures colour lead and brightness across the sampled band. Low and
+    /// high are the 10th and 90th percentiles, so a few stray pixels — the
+    /// rune, a spark — cannot drag the answer around.
+    /// </summary>
+    public static GlobeStats Measure(byte[] buf, int w, int h, WatcherConfig c,
+                                     int rowFrom, int rowTo)
+    {
+        bool blue = c.Hue.Equals("blue", StringComparison.OrdinalIgnoreCase);
+        int band = Math.Max(1, (int)(w * c.BandFraction));
+        int x0 = (w - band) / 2;
+        int x1 = x0 + band;
+        rowFrom = Math.Clamp(rowFrom, 0, h);
+        rowTo = Math.Clamp(rowTo, rowFrom, h);
+
+        var domHist = new int[256];
+        var valHist = new int[256];
+        int n = 0;
+
+        for (int y = rowFrom; y < rowTo; y++)
+        {
+            int rowStart = y * w * ScreenCapture.Bpp;
+            for (int x = x0; x < x1; x++)
+            {
+                int i = rowStart + x * ScreenCapture.Bpp;
+                byte b = buf[i], g = buf[i + 1], r = buf[i + 2];
+
+                // Near-white pixels are the glass highlight and the rune, not
+                // the liquid; they say nothing about how full the globe is.
+                if (b > 170 && g > 170 && r > 170) continue;
+
+                int dom = blue ? b - Math.Max(g, r) : r - Math.Max(g, b);
+                int val = blue ? b : r;
+                domHist[Math.Clamp(dom, 0, 255)]++;
+                valHist[val]++;
+                n++;
+            }
+        }
+
+        if (n == 0) return new GlobeStats(0, 0, 0, 0, 0);
+        return new GlobeStats(Percentile(domHist, n, 0.10), Percentile(domHist, n, 0.90),
+                              Percentile(valHist, n, 0.10), Percentile(valHist, n, 0.90), n);
+    }
+
+    private static int Percentile(int[] hist, int total, double p)
+    {
+        int want = (int)(total * p);
+        int seen = 0;
+        for (int v = 0; v < hist.Length; v++)
+        {
+            seen += hist[v];
+            if (seen >= want) return v;
+        }
+        return 255;
+    }
+
+    /// <summary>
+    /// Puts the thresholds between what full looks like and what empty looks
+    /// like. Returns false when the two are too alike to tell apart, which is
+    /// worth saying out loud rather than silently picking a bad number.
+    /// </summary>
+    public static bool AutoTune(WatcherConfig c, out string note)
+    {
+        int domFull = c.FullDominance, valFull = c.FullValue;
+        int domEmpty = c.EmptyDominance, valEmpty = c.EmptyValue;
+
+        if (domFull < 0 || domEmpty < 0)
+        {
+            note = "needs both Full = 100% and Empty = 0%";
+            return false;
+        }
+
+        int sepDom = domFull - domEmpty;
+        int sepVal = valFull - valEmpty;
+
+        // Prefer whichever actually separates. On the life globe the drained
+        // part is the same red only darker, so brightness is usually the one
+        // that does the work; on mana the colour lead often does.
+        if (sepDom < 8 && sepVal < 12)
+        {
+            note = $"full and empty look too alike here (colour lead {domEmpty}->{domFull}, " +
+                   $"brightness {valEmpty}->{valFull}). Is the box mostly globe, and was " +
+                   "the globe really drained when you pressed Empty?";
+            return false;
+        }
+
+        if (sepDom >= 8)
+            c.ColourMargin = Math.Clamp(domEmpty + sepDom / 2, 4, 90);
+        else
+            c.ColourMargin = Math.Clamp(Math.Min(domFull - 2, 12), 4, 90);
+
+        if (sepVal >= 12)
+            c.MinValue = Math.Clamp(valEmpty + sepVal / 2, 0, 200);
+
+        note = $"colour lead ≥ {c.ColourMargin}, brightness ≥ {c.MinValue}";
+        return true;
+    }
+
+    // ------------------------------------------------------------------
     // auto-find
     // ------------------------------------------------------------------
 

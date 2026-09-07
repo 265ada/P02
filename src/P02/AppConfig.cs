@@ -80,6 +80,24 @@ public sealed class WatcherConfig
 
     public int EmptyRow { get; set; } = -1;
 
+    // --- learned from calibration ---------------------------------------
+    // A hue test alone cannot separate a full globe from an empty one: the
+    // empty part of the life globe is the same red, only darker. These record
+    // what full and empty actually look like in your box so the threshold can
+    // be put between them instead of guessed.
+
+    /// <summary>Colour lead over the other channels, low end of the liquid.</summary>
+    public int FullDominance { get; set; } = -1;
+
+    /// <summary>Brightness of the hue channel, low end of the liquid.</summary>
+    public int FullValue { get; set; } = -1;
+
+    /// <summary>Colour lead, high end of the drained globe.</summary>
+    public int EmptyDominance { get; set; } = -1;
+
+    /// <summary>Brightness of the hue channel, high end of the drained globe.</summary>
+    public int EmptyValue { get; set; } = -1;
+
     /// <summary>Count near-white pixels as liquid. The globes carry a specular
     /// highlight that is not blue or red at all, and it would otherwise punch a
     /// hole in the middle of the mask.</summary>

@@ -90,7 +90,7 @@ public sealed class MonitorEngine : IDisposable
         var mana = new State();
         var clock = Stopwatch.StartNew();
 
-        long lastUiMs = 0, hzWindowMs = 0;
+        long lastUiMs = 0, hzWindowMs = 0, lastLogMs = 0;
         int polls = 0;
 
         // Without this the scheduler rounds every sleep up to ~15 ms, which
@@ -112,6 +112,17 @@ public sealed class MonitorEngine : IDisposable
                     ActualHz = polls;
                     polls = 0;
                     hzWindowMs = t0;
+                }
+
+                // A readable trail of what was seen while armed, so a session
+                // that failed to fire can be explained afterwards rather than
+                // guessed at.
+                if (Armed && t0 - lastLogMs >= 2000)
+                {
+                    lastLogMs = t0;
+                    Log.Write($"watch  life {lr.Fraction:P1}{(_cfg.Life.Enabled ? "" : " (off)")}" +
+                              $"  mana {mr.Fraction:P1}{(_cfg.Mana.Enabled ? "" : " (off)")}" +
+                              $"  focused={focused}  hz={ActualHz}");
                 }
 
                 // The UI cannot use 100 samples a second and repainting that

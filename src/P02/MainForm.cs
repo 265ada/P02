@@ -30,7 +30,7 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(772, 510);
+        ClientSize = new Size(772, 548);
 
         _life = new GlobePanel("Life", cfg.Life, blue: false, Save,
             () => _cfg.WindowMatch, () => _cfg.Mana.Region) { Location = new Point(12, 12) };
@@ -39,7 +39,7 @@ public sealed class MainForm : Form
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 354;
+        int y = 392;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -105,17 +105,26 @@ public sealed class MainForm : Form
         updBtn.Click += async (_, _) => await Updater.CheckAsync(this, silent: false);
         Controls.Add(updBtn);
 
+        var upd = new CheckBox
+        {
+            Text = "Check at launch",
+            Bounds = new Rectangle(428, y + 3, 118, 22),
+            Checked = cfg.CheckUpdatesOnStart,
+        };
+        upd.CheckedChanged += (_, _) =>
+        { _cfg.CheckUpdatesOnStart = upd.Checked; Save(); };
+        Controls.Add(upd);
+
         var testBtn = new Button { Text = "Test keys (3s)", Bounds = new Rectangle(298, y, 120, 26) };
         testBtn.Click += (_, _) => TestKeys();
         Controls.Add(testBtn);
 
-        var hint = new Label
+        Controls.Add(new Label
         {
-            Bounds = new Rectangle(428, y + 5, 340, 20),
+            Bounds = new Rectangle(552, y + 5, 216, 20),
             ForeColor = SystemColors.GrayText,
-            Text = "Closing hides to tray. Right-click the tray icon to quit.",
-        };
-        Controls.Add(hint);
+            Text = "Closing hides to tray.",
+        });
 
         y += 32;
         _live.SetBounds(12, y, 748, 20);

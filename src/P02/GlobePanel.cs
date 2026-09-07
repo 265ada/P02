@@ -16,6 +16,7 @@ public sealed class GlobePanel : GroupBox
     private readonly NumericUpDown _panicBelow = new();
     private readonly NumericUpDown _panicGap = new();
     private readonly NumericUpDown _burst = new();
+    private readonly Label _tuned = new();
     private readonly KeyBindBox _key = new();
     private readonly ProgressBar _bar = new();
     private readonly Label _pct = new();
@@ -31,7 +32,7 @@ public sealed class GlobePanel : GroupBox
 
         Text = title;
         Width = 366;
-        Height = 330;
+        Height = 364;
         Padding = new Padding(10);
 
         int y = 24;
@@ -73,6 +74,15 @@ public sealed class GlobePanel : GroupBox
         var prevBtn = new Button { Text = "Check", Bounds = new Rectangle(296, y, 56, 26) };
         prevBtn.Click += (_, _) => Preview();
         Controls.Add(prevBtn);
+        y += 30;
+
+        var emptyBtn = new Button { Text = "Empty = 0%", Bounds = new Rectangle(206, y, 86, 26) };
+        emptyBtn.Click += (_, _) => CalibrateEmpty();
+        Controls.Add(emptyBtn);
+
+        _tuned.SetBounds(14, y + 5, 188, 18);
+        _tuned.ForeColor = SystemColors.GrayText;
+        Controls.Add(_tuned);
         y += 34;
 
         Controls.Add(Lab("Fire below", 14, y + 4));
@@ -273,6 +283,13 @@ public sealed class GlobePanel : GroupBox
 
         _cfg.FullRow = full;
         _cfg.EmptyRow = empty;
+
+        // Remember what liquid looks like, so Empty = 0% has something to
+        // compare against.
+        var st = OrbDetector.Measure(buf, shot.Width, shot.Height, _cfg, full, empty);
+        _cfg.FullDominance = st.DomLow;
+        _cfg.FullValue = st.ValLow;
+        TryTune();
         _onChange();
         string done = $"Calibrated: full at row {full}, bottom at row {empty} "
                     + $"of {shot.Height}.";
@@ -294,12 +311,87 @@ public sealed class GlobePanel : GroupBox
             return;
         }
         var owner = FindForm();
+        // The preview is live and sits on top, so the main window gets out of
+        // the way rather than covering the globe being watched.
         owner?.Hide();
-        Thread.Sleep(180);
+        using (var dlg = new PreviewForm(_cfg.Region.ToRect(), _cfg, Text, _onChange))
+            dlg.ShowDialog();
+        owner?.Show();
+    }
+
+    /// <summary>
+    /// Records what the globe looks like when drained. A hue test alone cannot
+    /// separate full from empty on the life globe — the drained part is the
+    /// same red, only darker — so the threshold has to be learned from both.
+    /// </summary>
+    private void CalibrateEmpty()
+    {
+        if (!_cfg.Region.IsValid || _cfg.FullRow < 0)
+        {
+            MessageBox.Show("Set a region and press Full = 100% first.", "Empty = 0%",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        string ask = $"Spend your {Text.ToLowerInvariant()} down as low as you can — "
+                   + "the lower the better, empty is ideal."
+                   + Environment.NewLine + Environment.NewLine
+                   + "Then press OK. This records what a drained globe looks like, so the "
+                   + "threshold can go between full and empty instead of being guessed.";
+        if (MessageBox.Show(ask, "Empty = 0%", MessageBoxButtons.OKCancel,
+                            MessageBoxIcon.Information) != DialogResult.OK)
+            return;
+
+        var owner = FindForm();
+        owner?.Hide();
+        Thread.Sleep(250);
         using var shot = ScreenCapture.Snapshot(_cfg.Region.ToRect());
         owner?.Show();
-        using var dlg = new PreviewForm(shot, _cfg, Text, _onChange);
-        dlg.ShowDialog(owner);
+
+        var buf = ScreenCapture.ToBuffer(shot);
+        // Measure the same rows the liquid occupied when full; those are the
+        // ones that are now drained.
+        var st = OrbDetector.Measure(buf, shot.Width, shot.Height, _cfg,
+                                     _cfg.FullRow, _cfg.EmptyRow);
+        if (st.Count == 0)
+        {
+            MessageBox.Show("Couldn't read anything in that box.", "Empty = 0%",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        _cfg.EmptyDominance = st.DomHigh;
+        _cfg.EmptyValue = st.ValHigh;
+
+        if (!OrbDetector.AutoTune(_cfg, out string note))
+        {
+            MessageBox.Show(note, "Empty = 0%", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            _tuned.Text = "tuning failed";
+            _onChange();
+            return;
+        }
+
+        // Prove it on the very frame just captured.
+        double nowReads = OrbDetector.Fraction(buf, shot.Width, shot.Height, _cfg);
+        _tuned.Text = note;
+        _onChange();
+
+        MessageBox.Show(
+            $"Tuned: {note}." + Environment.NewLine + Environment.NewLine
+            + $"That drained globe now reads {nowReads * 100:0.0}%."
+            + Environment.NewLine + Environment.NewLine
+            + (nowReads < 0.35
+                ? "Open Check and watch it track as you spend."
+                : "That is still high. Press Check, and if it stays near 100% while the "
+                + "globe drains, redo Empty = 0% with the globe emptier."),
+            "Empty = 0%", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+        Preview();
+    }
+
+    private void TryTune()
+    {
+        if (OrbDetector.AutoTune(_cfg, out string note)) _tuned.Text = note;
     }
 
     /// <summary>Called from the UI thread with the latest reading.</summary>

@@ -26,7 +26,8 @@ pool is 1,440 or 3,000.
 1. Start the game **borderless fullscreen** and get to a safe spot with both
    globes full.
 2. Run `P02.exe`. Per globe: **Auto-find**, then **Full = 100%** while the globe
-   is topped up, then **Check** to confirm it reads 100%.
+   is topped up, then spend it down and press **Empty = 0%**.
+   Both calibrations matter — see below.
 3. Set the trigger percentage and click the key box, then press the key you want
    sent — the flask slot, not a modifier.
 4. Tick **Watch this globe** on the ones you want, then click **ARM**.
@@ -44,6 +45,27 @@ so the globe has to be full when you press it. It works on connected regions,
 which is what keeps the blue skill gems and flasks next to the mana globe out of
 the result. If it still can't find one it tells you what it saw instead — use
 **Set…** and drag the box yourself, which always works.
+
+### A globe reads 100% while it is visibly draining
+
+This is the failure that stops it firing at all, and it looks like nothing is
+wrong: armed, focused, dying, charges untouched.
+
+The drained part of the life globe is **the same red as the liquid, only
+darker**. A colour test alone cannot tell them apart, so with the Colour margin
+low the empty globe counts as full, the reading never falls below the trigger,
+and nothing ever fires. No amount of slider fiddling fixes this reliably,
+because there is no single colour rule that separates them.
+
+**Empty = 0%** fixes it. Spend the globe down, press it, and the app measures
+what drained actually looks like in your box, compares it against what full
+looked like, and puts the thresholds between the two. It then tells you what
+the drained globe reads with the new settings — if that is not low, it says so
+rather than pretending it worked.
+
+Then open **Check**. It is live now: spend the globe and watch the number follow
+it down. If it sits at 100% while the globe empties, that is the bug, and it is
+visible in one second instead of at the wrong moment in a boss fight.
 
 ### A full globe reads 91%, and no slider fixes it
 
@@ -127,14 +149,18 @@ Windows blocks our input — run the game normally, or nothing will happen.
 
 Work through it in this order.
 
-1. **Test keys (3s)** sends the enabled globes' keys once, ignoring arm state and
+1. Open **Check** and drain the globe. If the reading does not move, it is
+   detection, not keys — do **Empty = 0%**.
+2. **Test keys (3s)** sends the enabled globes' keys once, ignoring arm state and
    the window match. Click it, click into the game, and watch. Nothing happening
    means the problem is the keybind or permissions, not detection.
-2. Check the status line's focused-window title against your match string.
-3. If the game runs **as administrator** and P02 does not, Windows silently
+3. Check the status line's focused-window title against your match string.
+4. If the game runs **as administrator** and P02 does not, Windows silently
    blocks our input. Run the game unelevated.
-4. Check the reading moves in the UI as the globe drains. If it sits at 0% or
-   100%, it is a detection problem — go back to Check.
+
+While armed, the log records both readings every two seconds along with whether
+the window matched, so a session that failed to fire can be explained after the
+fact instead of guessed at. **Open log folder** gets you there.
 
 ## Settings
 
