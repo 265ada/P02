@@ -195,6 +195,11 @@ hammer the disk or risk a half-written file.
 **Check for updates** hits the GitHub Releases feed, downloads the new `P02.exe`
 and restarts into it. It also checks once quietly at startup.
 
+If the check reports 404, the message names which of the three states it is in:
+no token file, an empty token file, or a token that is present but rejected. An
+empty file is the easy mistake — creating `token.txt` and not pasting into it
+looks exactly like having no token at all.
+
 While the repo is **private**, that check needs a token — put a GitHub PAT with
 `repo` scope in `%APPDATA%\P02\token.txt`, or set `P02_GITHUB_TOKEN`. Without
 one the check just says no release was found and carries on.

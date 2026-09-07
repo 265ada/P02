@@ -16,12 +16,35 @@ internal static class Updater
     public const string Repo = "P02";
     private const string AssetName = "P02.exe";
 
-    private static string? Token =>
-        Environment.GetEnvironmentVariable("P02_GITHUB_TOKEN") is { Length: > 0 } env
-            ? env
-            : File.Exists(Path.Combine(AppConfig.Dir, "token.txt"))
-                ? File.ReadAllText(Path.Combine(AppConfig.Dir, "token.txt")).Trim()
-                : null;
+    private static string TokenPath => Path.Combine(AppConfig.Dir, "token.txt");
+
+    private static string? Token
+    {
+        get
+        {
+            if (Environment.GetEnvironmentVariable("P02_GITHUB_TOKEN") is { Length: > 0 } env)
+                return env;
+            if (!File.Exists(TokenPath)) return null;
+            string t = File.ReadAllText(TokenPath).Trim();
+            return t.Length > 0 ? t : null;
+        }
+    }
+
+    /// <summary>
+    /// Why a check might have failed before it even reached GitHub. An empty
+    /// token file looks identical to a missing one from the outside, and both
+    /// look identical to "no releases yet" once GitHub answers 404.
+    /// </summary>
+    private static string TokenState()
+    {
+        if (Environment.GetEnvironmentVariable("P02_GITHUB_TOKEN") is { Length: > 0 })
+            return "using the P02_GITHUB_TOKEN environment variable";
+        if (!File.Exists(TokenPath))
+            return $"no token file at {TokenPath}";
+        return File.ReadAllText(TokenPath).Trim().Length == 0
+            ? $"the token file at {TokenPath} is empty"
+            : $"using the token in {TokenPath}";
+    }
 
     private static Version Current
     {
@@ -54,9 +77,21 @@ internal static class Updater
 
             if (!resp.IsSuccessStatusCode)
             {
-                string why = (int)resp.StatusCode == 404
-                    ? "No release published yet, or this is a private repo and no token is set."
-                    : $"GitHub said {(int)resp.StatusCode} {resp.ReasonPhrase}.";
+                string why = (int)resp.StatusCode switch
+                {
+                    404 => $"GitHub returned 404 for {Owner}/{Repo}." + Environment.NewLine
+                           + Environment.NewLine
+                           + $"Right now: {TokenState()}." + Environment.NewLine
+                           + Environment.NewLine
+                           + "A private repo returns 404 rather than 403 when the request is "
+                           + "not authenticated, so this usually means the token is missing or "
+                           + "empty rather than that there is no release.",
+                    401 => $"GitHub rejected the token ({TokenState()}). It may be expired, or "
+                           + "lack access to this repository.",
+                    403 => "GitHub refused the request - rate limited, or the token lacks "
+                           + $"access to {Owner}/{Repo}.",
+                    _ => $"GitHub said {(int)resp.StatusCode} {resp.ReasonPhrase}.",
+                };
                 Log.Write($"update check failed: {why}");
                 if (!silent) MessageBox.Show(owner, why, "Check for updates",
                                              MessageBoxButtons.OK, MessageBoxIcon.Information);
