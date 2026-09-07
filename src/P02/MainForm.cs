@@ -102,7 +102,8 @@ public sealed class MainForm : Form
         Controls.Add(logBtn);
 
         var updBtn = new Button { Text = "Check for updates", Bounds = new Rectangle(150, y, 140, 26) };
-        updBtn.Click += async (_, _) => await Updater.CheckAsync(this, silent: false);
+        updBtn.Click += async (_, _) =>
+            await Updater.CheckAsync(this, silent: false, beforeExit: _cfg.SaveNow);
         Controls.Add(updBtn);
 
         var upd = new CheckBox
@@ -263,7 +264,7 @@ public sealed class MainForm : Form
     {
         base.OnShown(e);
         if (_cfg.CheckUpdatesOnStart)
-            _ = Updater.CheckAsync(this, silent: true);
+            _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow);
         if (_cfg.StartMinimised) Hide();
     }
 

@@ -67,7 +67,8 @@ internal static class Updater
         return http;
     }
 
-    public static async Task CheckAsync(IWin32Window owner, bool silent)
+    public static async Task CheckAsync(IWin32Window owner, bool silent,
+                                        Action? beforeExit = null)
     {
         try
         {
@@ -117,14 +118,19 @@ internal static class Updater
             }
 
             string notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
-            if (notes.Length > 600) notes = notes[..600] + "…";
 
-            if (MessageBox.Show(owner,
-                    $"Version {latest} is available (you have {Current}).\n\n{notes}\n\n" +
-                    "Download and restart now?",
-                    "Update available", MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question) != DialogResult.Yes)
+            using (var dlg = new UpdateDialog(latest, Current, notes))
+            {
+                if (dlg.ShowDialog(owner) != DialogResult.Yes) return;
+            }
+
+            if (!TargetWritable(out string blocked))
+            {
+                Log.Write($"update blocked: {blocked}");
+                MessageBox.Show(owner, blocked, "Update",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
+            }
 
             string? assetUrl = null;
             foreach (var a in root.GetProperty("assets").EnumerateArray())
@@ -144,7 +150,14 @@ internal static class Updater
                 return;
             }
 
+            long expected = 0;
+            foreach (var a in root.GetProperty("assets").EnumerateArray())
+                if (string.Equals(a.GetProperty("name").GetString(), AssetName,
+                                  StringComparison.OrdinalIgnoreCase))
+                    expected = a.GetProperty("size").GetInt64();
+
             string tmp = Path.Combine(Path.GetTempPath(), $"P02-{latest}.exe");
+            Log.Write($"update: downloading {expected} bytes to {tmp}");
             using (var req = new HttpRequestMessage(HttpMethod.Get, assetUrl))
             {
                 req.Headers.Accept.Clear();
@@ -155,48 +168,130 @@ internal static class Updater
                 await dl.Content.CopyToAsync(fs);
             }
 
-            SwapAndRestart(tmp);
+            long got = new FileInfo(tmp).Length;
+            if (expected > 0 && got != expected)
+            {
+                string msg = $"Download was {got} bytes but should be {expected}. "
+                           + "Not swapping a half-downloaded file - try again.";
+                Log.Write($"update: {msg}");
+                try { File.Delete(tmp); } catch { /* best effort */ }
+                MessageBox.Show(owner, msg, "Update",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            Log.Write($"update: downloaded {got} bytes ok");
+
+            SwapAndRestart(tmp, beforeExit);
         }
         catch (Exception ex)
         {
-            Log.Write($"update failed: {ex.Message}");
+            // Some exceptions carry no message at all, which produced an empty
+            // dialog and an empty log line - the least useful possible outcome.
+            string what = string.IsNullOrWhiteSpace(ex.Message)
+                ? $"{ex.GetType().Name} (no message)"
+                : $"{ex.GetType().Name}: {ex.Message}";
+            Log.Write($"update failed: {what}{Environment.NewLine}{ex}");
             if (!silent)
-                MessageBox.Show(owner, ex.Message, "Update failed",
-                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(owner,
+                    what + Environment.NewLine + Environment.NewLine
+                    + $"Full details in {Log.Path_}",
+                    "Update failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
-    private static void SwapAndRestart(string newExe)
+    /// <summary>
+    /// Hands the swap to a detached batch file and quits.
+    ///
+    /// Two things were wrong before. Application.Exit() runs every form-closing
+    /// handler, so tearing down the monitor and key threads happened inside the
+    /// try block that reports "update failed" - when it threw, the message was
+    /// blank, the app stayed alive, and the exe stayed locked, so the swapper
+    /// could never replace it. Environment.Exit cannot be blocked that way.
+    ///
+    /// And the batch waited by retrying the copy blindly, then called `pause`.
+    /// With no console attached pause reads end-of-file and returns at once, so
+    /// a failed swap deleted its own script and left no trace. It now waits for
+    /// this process to actually disappear and writes what happened to a log.
+    /// </summary>
+    private static void SwapAndRestart(string newExe, Action? beforeExit)
     {
         string current = Environment.ProcessPath
                          ?? Path.Combine(AppContext.BaseDirectory, "P02.exe");
         string bat = Path.Combine(Path.GetTempPath(), "p02-update.cmd");
+        string swapLog = Path.Combine(AppConfig.Dir, "update.log");
+        int pid = Environment.ProcessId;
 
-        // Wait for this process to release the file, swap, relaunch, self-delete.
-        File.WriteAllText(bat, $"""
-            @echo off
-            setlocal
-            set "target={current}"
-            set "source={newExe}"
-            for /l %%i in (1,1,40) do (
-              copy /y "%source%" "%target%" >nul 2>&1 && goto done
-              ping -n 2 127.0.0.1 >nul
-            )
-            echo Could not replace "%target%".
-            pause
-            goto cleanup
-            :done
-            del /q "%source%" >nul 2>&1
-            start "" "%target%"
-            :cleanup
-            del /q "%~f0" >nul 2>&1
-            """);
+        // Every external command is called by full path. Git for Windows puts
+        // Unix tools on PATH, so a bare `find` in a batch file can resolve to
+        // Unix find, which errored out and made the wait loop fall straight
+        // through - the copy then raced a process that still held the exe.
+        string sys = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        string ps = Path.Combine(sys, "WindowsPowerShell", "v1.0", "powershell.exe");
+        string ping = Path.Combine(sys, "PING.EXE");
+
+        var script = string.Join(Environment.NewLine,
+            "@echo off",
+            "setlocal",
+            $"set \"target={current}\"",
+            $"set \"source={newExe}\"",
+            $"set \"log={swapLog}\"",
+            $"echo [%date% %time%] waiting for pid {pid} >> \"%log%\"",
+            // One call, no polling and no text parsing to get wrong.
+            $"\"{ps}\" -NoProfile -NonInteractive -Command " +
+                $"\"Wait-Process -Id {pid} -Timeout 120 -ErrorAction SilentlyContinue\"",
+            $"echo [%date% %time%] proceeding to copy >> \"%log%\"",
+            "for /l %%i in (1,1,30) do (",
+            "  copy /y \"%source%\" \"%target%\" >nul 2>&1 && goto done",
+            $"  \"{ping}\" -n 2 127.0.0.1 >nul",
+            ")",
+            "echo [%date% %time%] FAILED to replace \"%target%\" >> \"%log%\"",
+            "goto cleanup",
+            ":done",
+            "echo [%date% %time%] replaced ok, restarting >> \"%log%\"",
+            "del \"%source%\" >nul 2>&1",
+            "start \"\" \"%target%\"",
+            ":cleanup",
+            "del \"%~f0\" >nul 2>&1");
+
+        Directory.CreateDirectory(AppConfig.Dir);
+        File.WriteAllText(bat, script);
+        Log.Write($"update: wrote swap script, launching; target={current}");
 
         Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{bat}\"")
         {
             CreateNoWindow = true,
             UseShellExecute = false,
         });
-        Application.Exit();
+
+        // Outside every try block, and not Application.Exit: nothing a closing
+        // handler does can keep this process holding the file.
+        try { beforeExit?.Invoke(); } catch { /* nothing may block the exit */ }
+        Log.Write("update: exiting for swap");
+        Environment.Exit(0);
+    }
+
+    /// <summary>Fails early if the exe cannot be replaced where it sits, rather
+    /// than after a 50 MB download.</summary>
+    private static bool TargetWritable(out string why)
+    {
+        why = "";
+        string current = Environment.ProcessPath
+                         ?? Path.Combine(AppContext.BaseDirectory, "P02.exe");
+        string? dir = Path.GetDirectoryName(current);
+        if (string.IsNullOrEmpty(dir)) { why = "cannot tell where P02.exe is"; return false; }
+
+        try
+        {
+            string probe = Path.Combine(dir, $".p02-write-test-{Guid.NewGuid():N}");
+            File.WriteAllText(probe, "x");
+            File.Delete(probe);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            why = $"P02.exe lives in {dir}, which cannot be written to ({ex.GetType().Name}). "
+                + "Move P02.exe somewhere like your Downloads folder and try again.";
+            return false;
+        }
     }
 }
