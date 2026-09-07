@@ -220,23 +220,27 @@ process that still held the exe.
 If P02.exe sits somewhere unwritable, the update says so before downloading
 50 MB rather than after.
 
-If the check reports 404, the message names which of the three states it is in:
-no token file, an empty token file, or a token that is present but rejected. An
-empty file is the easy mistake — creating `token.txt` and not pasting into it
-looks exactly like having no token at all.
+If the check reports a failure, the message names what it found rather than
+guessing: which HTTP status came back, and what state the optional token file is
+in.
 
-While the repo is **private**, that check needs a token — put a GitHub PAT with
-`repo` scope in `%APPDATA%\P02\token.txt`, or set `P02_GITHUB_TOKEN`. Without
-one the check just says no release was found and carries on.
+No token is needed. The repository is public, so the releases feed and its
+assets are readable by anyone. A `token.txt` in `%APPDATA%\P02` is still honoured
+if present, which keeps a private fork working, but you can delete it.
 
-## Sharing it later
+## Sharing it
 
-The clean way is a second, **public** repo that holds only the releases. Then
-anyone can download `P02.exe` and auto-update with no token, while the source
-stays private. Point `Updater.Owner` / `Updater.Repo` at that repo when you're
-ready. Handing out a PAT so other people can reach a private repo is the wrong
-move — it's your account credential, and it can't be scoped to one repo's
-downloads.
+Send someone the [releases page](https://github.com/265ada/P02/releases). They
+download `P02.exe`, run it, and get updates automatically from then on - no
+account, no token, no installer. The exe is self-contained, so there is no
+runtime to install either.
+
+Windows SmartScreen will warn on first run, because the exe is unsigned. That is
+expected for any unsigned binary; "More info" then "Run anyway" gets past it.
+
+## Licence
+
+MIT - see [LICENSE](LICENSE). Do what you like with it, no warranty.
 
 ## Releasing
 

@@ -18,6 +18,10 @@ internal static class Updater
 
     private static string TokenPath => Path.Combine(AppConfig.Dir, "token.txt");
 
+    /// <summary>
+    /// Optional. The repository is public, so updates work with no token; this
+    /// stays only so a private fork keeps working.
+    /// </summary>
     private static string? Token
     {
         get
@@ -80,19 +84,19 @@ internal static class Updater
             {
                 string why = (int)resp.StatusCode switch
                 {
-                    404 => $"GitHub returned 404 for {Owner}/{Repo}." + Environment.NewLine
-                           + Environment.NewLine
-                           + $"Right now: {TokenState()}." + Environment.NewLine
-                           + Environment.NewLine
-                           + "A private repo returns 404 rather than 403 when the request is "
-                           + "not authenticated, so this usually means the token is missing or "
-                           + "empty rather than that there is no release.",
-                    401 => $"GitHub rejected the token ({TokenState()}). It may be expired, or "
-                           + "lack access to this repository.",
-                    403 => "GitHub refused the request - rate limited, or the token lacks "
-                           + $"access to {Owner}/{Repo}.",
+                    404 => $"No release found for {Owner}/{Repo}."
+                           + Environment.NewLine + Environment.NewLine
+                           + "The repository is public, so no token is needed. If this "
+                           + "persists, the release may have been removed."
+                           + Environment.NewLine + $"(token: {TokenState()})",
+                    401 => $"GitHub rejected the token ({TokenState()}). The repository is "
+                           + "public and needs no token at all - deleting token.txt will fix "
+                           + "this.",
+                    403 => "GitHub refused the request. Usually rate limiting; try again in a "
+                           + "few minutes.",
                     _ => $"GitHub said {(int)resp.StatusCode} {resp.ReasonPhrase}.",
                 };
+
                 Log.Write($"update check failed: {why}");
                 if (!silent) MessageBox.Show(owner, why, "Check for updates",
                                              MessageBoxButtons.OK, MessageBoxIcon.Information);
