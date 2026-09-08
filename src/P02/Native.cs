@@ -225,4 +225,22 @@ internal static class Native
 
         return best;
     }
+
+    // ---- keeping our own windows out of the capture -----------------------
+
+    /// <summary>Window is skipped by screen-capture APIs entirely.</summary>
+    public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetWindowDisplayAffinity(nint hWnd, uint dwAffinity);
+
+    /// <summary>
+    /// Makes a window invisible to BitBlt. Our capture reads the screen, so any
+    /// P02 window sitting over a globe would be read as the globe.
+    /// </summary>
+    public static void ExcludeFromCapture(nint hWnd)
+    {
+        try { SetWindowDisplayAffinity(hWnd, WDA_EXCLUDEFROMCAPTURE); }
+        catch { /* older Windows: nothing to do */ }
+    }
 }

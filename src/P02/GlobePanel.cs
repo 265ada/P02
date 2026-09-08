@@ -242,12 +242,29 @@ public sealed class GlobePanel : GroupBox
         // edges of the colour blob, which sit a few percent inside the real
         // liquid. Calibrating straight away off the same full globe is what
         // makes a full globe read exactly 100% instead of 88-96%.
-        if (CalibrateFullSilently(out string note))
+        bool calibrated = CalibrateFullSilently(out string note, out double reads);
+
+        // A box on the globe reads full right after calibrating against it. One
+        // that does not is on something else, or on a fraction of the globe.
+        if (calibrated && reads >= 0.95)
+        {
             MessageBox.Show(this,
                 "Found it and calibrated against the full globe." + Environment.NewLine
                 + note + Environment.NewLine + Environment.NewLine
                 + "Now spend this globe down and press Empty = 0% to finish.",
                 "Auto-find", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        else
+        {
+            MessageBox.Show(this,
+                $"Found a {found.Value.Width}x{found.Value.Height} region, but it does not "
+                + "look right: after calibrating against it, a full globe reads "
+                + $"{reads:P0} rather than 100%." + Environment.NewLine + Environment.NewLine
+                + "That usually means the box is on part of the globe rather than all of it, "
+                + "or on something else entirely. Press Check to see what it is looking at, "
+                + "and use Set... to drag the box yourself if it is wrong.",
+                "Auto-find", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
 
         Preview();
     }
@@ -256,9 +273,10 @@ public sealed class GlobePanel : GroupBox
     /// The measuring half of Full = 100%, with no prompts. Returns false if no
     /// liquid could be seen in the region.
     /// </summary>
-    private bool CalibrateFullSilently(out string note)
+    private bool CalibrateFullSilently(out string note, out double reads)
     {
         note = "";
+        reads = 0;
         if (!_cfg.Region.IsValid) return false;
 
         using var shot = ScreenCapture.Snapshot(_cfg.Region.ToRect());
@@ -274,7 +292,7 @@ public sealed class GlobePanel : GroupBox
         _cfg.FullDominance = st.DomLow;
         _cfg.FullValue = st.ValLow;
 
-        double reads = OrbDetector.Fraction(buf, shot.Width, shot.Height, _cfg);
+        reads = OrbDetector.Fraction(buf, shot.Width, shot.Height, _cfg);
         note = $"Full is rows {full}-{empty} of {shot.Height}; it now reads {reads:P0}.";
         RefreshWarning();
         _onChange();

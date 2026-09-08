@@ -117,6 +117,14 @@ public sealed class PreviewForm : Form
         Refresh_();
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        // So the preview can be dragged over the globe it is watching without
+        // showing itself back.
+        Native.ExcludeFromCapture(Handle);
+    }
+
     private void Refresh_()
     {
         if (!_cap.Grab(_region)) return;

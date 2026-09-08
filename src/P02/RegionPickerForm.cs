@@ -31,6 +31,12 @@ public sealed class RegionPickerForm : Form
         KeyPreview = true;
     }
 
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Native.ExcludeFromCapture(Handle);
+    }
+
     protected override void OnMouseDown(MouseEventArgs e)
     {
         _start = e.Location;

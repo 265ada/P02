@@ -136,6 +136,41 @@ static class T
             if (!fixedUp) fails++;
         }
 
+        // A globe is not one flat colour: it is saturated in the middle and
+        // falls off towards the rim. With a single strict threshold only the
+        // core passes, and that core is itself a disc that passes every shape
+        // check - so auto-find returned a box a fraction of the real size.
+        Reset();
+        {
+            int cx = 520, cy = 300, rad = 120;
+            for (int y = cy - rad; y <= cy + rad; y++)
+                for (int x = cx - rad; x <= cx + rad; x++)
+                {
+                    double d = Math.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+                    if (d > rad) continue;
+                    // Full blue in the middle, fading towards the rim.
+                    double k = 1.0 - 0.65 * (d / rad);
+                    Px(x, y, (int)(200 * k), (int)(95 * k), (int)(45 * k));
+                }
+
+            var strict = OrbDetector.Locate(_buf, W, H, blue: true, margin: 48);
+            var swept = OrbDetector.LocateBest(_buf, W, H, blue: true);
+
+            int strictW = strict?.Width ?? 0;
+            int sweptW = swept?.Width ?? 0;
+            bool strictTooSmall = strictW < sweptW;
+            bool sweptRight = swept is not null && Math.Abs(sweptW - rad * 2) <= 12;
+
+            Console.WriteLine((strictTooSmall ? "PASS" : "FAIL")
+                + $"  one strict threshold under-reads the globe -> {strictW}px "
+                + $"vs {sweptW}px swept, of {rad * 2}px actual");
+            Console.WriteLine((sweptRight ? "PASS" : "FAIL")
+                + $"  sweeping thresholds finds the whole globe -> "
+                + $"{swept?.Width ?? 0}px of {rad * 2}px");
+            if (!strictTooSmall) fails++;
+            if (!sweptRight) fails++;
+        }
+
         // Every key the bind box can capture must be sendable. Numpad keys
         // share scancodes with the navigation cluster and differ only by the
         // extended flag, so this guards a genuinely easy mistake.

@@ -280,11 +280,46 @@ internal static class OrbDetector
             return null;
         }
 
-        var found = Locate(cap.Buffer, cap.Width, cap.Height, blue, margin, minV);
+        var found = LocateBest(cap.Buffer, cap.Width, cap.Height, blue, minV);
         return found is null
             ? null
             : new Rectangle(search.Left + found.Value.X, search.Top + found.Value.Y,
                             found.Value.Width, found.Value.Height);
+    }
+
+    /// <summary>
+    /// Tries a range of colour thresholds and keeps the largest disc any of
+    /// them finds.
+    ///
+    /// A single threshold cannot work for this. Strict, and only the bright
+    /// saturated core of the liquid passes - that core is still disc-shaped and
+    /// still passes every check, so the box comes out a fraction of the globe.
+    /// Loose, and the globe merges into the frame around it. The globe is the
+    /// largest disc in the corner, so sweep and take the biggest.
+    /// </summary>
+    internal static Rectangle? LocateBest(byte[] buf, int w, int h, bool blue, int minV = 45)
+    {
+        Rectangle? best = null;
+        string lastNote = "";
+
+        foreach (int margin in new[] { 48, 38, 30, 24, 18, 14, 10 })
+        {
+            var found = Locate(buf, w, h, blue, margin, minV);
+            if (found is null) { lastNote = LastLocateNote; continue; }
+
+            // Anything covering most of the search area is background, not a
+            // globe - that is the loose end of the sweep running away.
+            if (found.Value.Width * (long)found.Value.Height > w * (long)h / 2) continue;
+
+            if (best is null ||
+                found.Value.Width * (long)found.Value.Height >
+                best.Value.Width * (long)best.Value.Height)
+                best = found;
+        }
+
+        if (best is null && lastNote.Length > 0) LastLocateNote = lastNote;
+        else if (best is not null) LastLocateNote = "";
+        return best;
     }
 
     /// <summary>The search itself, over a raw BGRA buffer. Split out from the

@@ -32,6 +32,16 @@ pool is 1,440 or 3,000.
    sent — the flask slot, not a modifier.
 4. Tick **Watch this globe** on the ones you want, then click **ARM**.
 
+Auto-find sweeps a range of colour thresholds and keeps the largest disc any of
+them finds. One fixed threshold cannot work: strict, and only the bright core of
+the liquid passes - and that core is itself disc-shaped, so the box comes out a
+fraction of the globe; loose, and the globe merges into its frame. It then
+calibrates against the full globe and checks the result actually reads 100%,
+saying so plainly when it does not rather than accepting a bad box silently.
+
+P02's own windows are excluded from screen capture, so the Check window can sit
+over the globe it is watching without being read as the globe.
+
 Auto-find looks in the corners of the **game window**, found by the same title
 match, and falls back to the screen your other globe is on. It used to search the
 corners of the whole virtual desktop, which on a two-monitor setup meant the

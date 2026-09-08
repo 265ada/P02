@@ -284,6 +284,7 @@ public sealed class MainForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
+        Native.ExcludeFromCapture(Handle);
         RegisterArmHotkey();
     }
 
