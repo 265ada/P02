@@ -438,15 +438,6 @@ public sealed class MainForm : Form
         SetupTray();
         if (cfg.OverlayOn) ToggleOverlay(true);
 
-        // Changing someone's settings behind their back is only acceptable if
-        // they are told which ones and why.
-        if (cfg.Repairs.Count > 0)
-            BeginInvoke(() => MessageBox.Show(this,
-                "Some settings were changed by this update:"
-                + Environment.NewLine + Environment.NewLine
-                + " - " + string.Join(Environment.NewLine + Environment.NewLine + " - ",
-                                      cfg.Repairs),
-                "Settings updated", MessageBoxButtons.OK, MessageBoxIcon.Information));
         RefreshArmUi();
         _engine.Start();
     }
@@ -709,6 +700,25 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
+    /// Says which settings this update changed, and why.
+    ///
+    /// Changing settings someone chose deliberately is only acceptable if they
+    /// are told. It runs from OnShown rather than the constructor: there is no
+    /// window handle to show a dialog over until the form is up.
+    /// </summary>
+    private void ReportRepairs()
+    {
+        if (_cfg.Repairs.Count == 0) return;
+        MessageBox.Show(this,
+            "Some settings were changed by this update:"
+            + Environment.NewLine + Environment.NewLine
+            + " - " + string.Join(Environment.NewLine + Environment.NewLine + " - ",
+                                  _cfg.Repairs),
+            "Settings updated", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        _cfg.Repairs.Clear();
+    }
+
+    /// <summary>
     /// Sets the numbers up on its own the first time, if they are not set and
     /// the game is there to look at. It is one button, but it is also the one
     /// step everything else depends on, and leaving it to be discovered means
@@ -739,6 +749,7 @@ public sealed class MainForm : Form
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        ReportRepairs();
         FirstRunSetup();
         if (_cfg.CheckUpdatesOnStart)
             _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow);
