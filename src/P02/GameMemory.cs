@@ -131,10 +131,11 @@ internal sealed class GameMemory : IDisposable
                 if (_address == 0)
                 {
                     Status = "searching memory for the player stats";
+                    // Search explains itself; do not paper over it with a
+                    // vaguer message.
                     long found = Search();
                     if (found == 0)
                     {
-                        Status = "could not find the stats - the layout may have changed";
                         _stop.Token.WaitHandle.WaitOne(5000);
                         continue;
                     }

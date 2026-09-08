@@ -34,6 +34,8 @@ internal sealed partial class TextOcr : IDisposable
     private sealed class Slot
     {
         public Rectangle Region;
+        public string Label = "";
+        public int ExpectedMax;
         public readonly ScreenCapture Cap = new();
         public Reading Last;
         public bool HasLast;
@@ -81,7 +83,7 @@ internal sealed partial class TextOcr : IDisposable
     }
 
     /// <summary>Sets, or with null clears, the text region for a globe.</summary>
-    public void Configure(string name, Rectangle? region)
+    public void Configure(string name, Rectangle? region, string label = "", int expectedMax = 0)
     {
         lock (_gate)
         {
@@ -96,6 +98,8 @@ internal sealed partial class TextOcr : IDisposable
                 _slots[name] = slot;
             }
             slot.Region = region.Value;
+            slot.Label = label;
+            slot.ExpectedMax = expectedMax;
         }
     }
 
@@ -156,7 +160,11 @@ internal sealed partial class TextOcr : IDisposable
 
         if (text.Length == 0) return;
 
-        if (!TryParse(text, out int cur, out int max)) return;
+        string label;
+        int expected;
+        lock (_gate) { label = slot.Label; expected = slot.ExpectedMax; }
+
+        if (!TryParse(text, out int cur, out int max, label, expected)) return;
 
         // A maximum changes rarely, and a misread one is the difference between
         // 40% and 4%. Accept a new maximum only once it has repeated.
@@ -187,27 +195,50 @@ internal sealed partial class TextOcr : IDisposable
     /// That is not hypothetical - it produced a maximum of 14,652,005 from a
     /// life of 1,465 and a shield of 2,005, which reads as 0% life.
     /// </summary>
-    internal static bool TryParse(string text, out int cur, out int max)
+    internal static bool TryParse(string text, out int cur, out int max,
+                                  string label = "", int expectedMax = 0)
     {
         cur = max = 0;
         var breaks = new[] { '\n', '\r' };
-        foreach (string line in text.Split(breaks, StringSplitOptions.RemoveEmptyEntries))
+        var lines = text.Split(breaks, StringSplitOptions.RemoveEmptyEntries);
+
+        // A box around the life numbers usually catches shield and ward too,
+        // and those are pairs as well - ward at 90/90 read as life is a misfire
+        // waiting to happen. So the line is picked deliberately rather than
+        // taken as whichever came first.
+        //
+        // The word beside the numbers is the surest anchor there is, and your
+        // own maximum is the next surest. Only failing both does position
+        // decide anything.
+        var strategies = new Func<string, bool>[]
         {
-            var m = PairPattern().Match(line);
-            if (!m.Success) continue;
+            l => label.Length > 0 && l.Contains(label, StringComparison.OrdinalIgnoreCase),
+            l => expectedMax > 0 && LineMax(l) == expectedMax,
+            _ => label.Length == 0 && expectedMax == 0,
+        };
 
-            // The first line carrying a pair is the one the box was aimed at.
-            // If it does not make sense, give up rather than walking on to the
-            // next line - that would quietly report shield or ward as life.
-            if (TryNumber(m.Groups[1].Value, out cur)
-                && TryNumber(m.Groups[2].Value, out max)
-                && Sane(cur, max))
-                return true;
-
-            break;
+        foreach (var pick in strategies)
+        {
+            foreach (string line in lines)
+            {
+                if (!pick(line)) continue;
+                var m = PairPattern().Match(line);
+                if (!m.Success) continue;
+                if (TryNumber(m.Groups[1].Value, out cur)
+                    && TryNumber(m.Groups[2].Value, out max)
+                    && Sane(cur, max))
+                    return true;
+            }
         }
+
         cur = max = 0;
         return false;
+    }
+
+    private static int LineMax(string line)
+    {
+        var m = PairPattern().Match(line);
+        return m.Success && TryNumber(m.Groups[2].Value, out int v) ? v : 0;
     }
 
     /// <summary>

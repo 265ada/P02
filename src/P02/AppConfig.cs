@@ -40,6 +40,14 @@ public sealed class WatcherConfig
     public bool UseText { get; set; } = true;
 
     /// <summary>
+    /// The word beside the numbers, used to pick the right line. A box drawn
+    /// around the life numbers almost always catches shield and ward as well,
+    /// and those are number pairs too - ward at 90/90 read as life is a misfire
+    /// waiting to happen. Include the label in the box and this settles it.
+    /// </summary>
+    public string TextLabel { get; set; } = "";
+
+    /// <summary>
     /// Your maximum for this pool, or 0 to work it out automatically.
     ///
     /// Memory holds thousands of number pairs that look exactly like a health
@@ -186,10 +194,10 @@ public sealed class WatcherConfig
 public sealed class AppConfig
 {
     public WatcherConfig Life { get; set; } = new()
-        { Hue = "red", Key = "1", Threshold = 0.50 };
+        { Hue = "red", Key = "1", Threshold = 0.50, TextLabel = "Life" };
 
     public WatcherConfig Mana { get; set; } = new()
-        { Hue = "blue", Key = "2", Threshold = 0.30, PanicBelow = 0.15 };
+        { Hue = "blue", Key = "2", Threshold = 0.30, PanicBelow = 0.15, TextLabel = "Mana" };
 
     /// <summary>Screen samples per second. 5-250; the loop reports what it
     /// actually achieved next to this in the UI.</summary>
@@ -293,6 +301,9 @@ public sealed class AppConfig
                             + "empty globe read as full. Reset to 30.");
                 w.ColourMargin = 30;
             }
+
+            if (w.TextLabel.Length == 0)
+                w.TextLabel = name;
 
             if (w.HoldMs < 40)
             {

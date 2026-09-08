@@ -83,10 +83,12 @@ public sealed class MonitorEngine : IDisposable
     {
         _ocr.Configure("Life", _cfg.Life.UseText && _cfg.Life.Enabled
                                && _cfg.Life.TextRegion.IsValid
-            ? _cfg.Life.TextRegion.ToRect() : null);
+            ? _cfg.Life.TextRegion.ToRect() : null,
+            _cfg.Life.TextLabel, _cfg.Life.KnownMax);
         _ocr.Configure("Mana", _cfg.Mana.UseText && _cfg.Mana.Enabled
                                && _cfg.Mana.TextRegion.IsValid
-            ? _cfg.Mana.TextRegion.ToRect() : null);
+            ? _cfg.Mana.TextRegion.ToRect() : null,
+            _cfg.Mana.TextLabel, _cfg.Mana.KnownMax);
     }
 
     /// <summary>Reads a region once, for the setup button.</summary>

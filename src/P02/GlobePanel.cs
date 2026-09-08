@@ -284,7 +284,8 @@ public sealed class GlobePanel : GroupBox
         owner?.Hide();
         Thread.Sleep(180);
         var r = RegionPickerForm.Pick(
-            $"Drag a box around the {Text} numbers, like 1,465/1,465");
+            $"Drag a box around the {Text} numbers - include the word "
+            + $"\"{Text}\" so shield and ward cannot be mistaken for it");
         owner?.Show();
         if (r is null) return;
 

@@ -236,6 +236,38 @@ static class T
             fails += bad;
         }
 
+        // The real HUD block, all three lines in one box. Ward is a pair too,
+        // and reading 90/90 as life is a misfire waiting to happen.
+        {
+            string hud = "Life 1,465/1,465\nShield 2,005/2,005\nWard 90/90";
+            string jumbled = "Ward 90/90\nLife 1,465/1,465\nShield 2,005/2,005";
+            int bad = 0;
+
+            void Pick(string what, string text, string label, int expected,
+                      int wantCur, int wantMax)
+            {
+                bool ok = TextOcr.TryParse(text, out int cur, out int max, label, expected);
+                bool right = ok && cur == wantCur && max == wantMax;
+                Console.WriteLine((right ? "PASS" : "FAIL") + $"  {what} -> "
+                    + (ok ? $"{cur}/{max}" : "rejected") + $"  (wanted {wantCur}/{wantMax})");
+                if (!right) bad++;
+            }
+
+            Pick("label picks life out of three lines", hud, "Life", 0, 1465, 1465);
+            Pick("label works whatever the order", jumbled, "Life", 0, 1465, 1465);
+            Pick("label picks shield when asked", hud, "Shield", 0, 2005, 2005);
+            Pick("known maximum picks life with no label", jumbled, "", 1465, 1465, 1465);
+
+            // Without either anchor it takes the first line, which is exactly
+            // the ward misread that prompted all this.
+            bool anyOk = TextOcr.TryParse(jumbled, out int c0, out int m0);
+            Console.WriteLine((anyOk && c0 == 90 && m0 == 90 ? "PASS" : "FAIL")
+                + $"  no anchor takes the first line -> {c0}/{m0} (this is why anchors exist)");
+            if (!(anyOk && c0 == 90 && m0 == 90)) bad++;
+
+            fails += bad;
+        }
+
         // Every key the bind box can capture must be sendable. Numpad keys
         // share scancodes with the navigation cluster and differ only by the
         // extended flag, so this guards a genuinely easy mistake.

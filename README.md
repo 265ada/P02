@@ -43,7 +43,15 @@ roughly two seconds on first use. If more than one candidate matches, the
 numbers read off the screen pick between them, and failing that it watches which
 one moves.
 
-**Numbers on screen** - point it at the `1,465/1,465` beside the globe.
+**Numbers on screen** - point it at the `1,465/1,465` beside the globe, and
+**include the word "Life"** in the box.
+
+That word matters. A box around the life numbers almost always catches shield
+and ward as well, and those are number pairs too - ward at 90/90 read as life
+is a misfire waiting to happen, and it happened. The line is picked by its
+label first, by matching your **My max** second, and only by position if
+neither is available. Ward, incidentally, cannot be helped by a flask at all,
+so firing at it is pure waste.
 
 **Numbers** - point it at the `1,465/1,465` beside the globe and that becomes
 what decides. It is an exact ratio, needs no calibration and no colour tuning,
