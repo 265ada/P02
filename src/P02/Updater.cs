@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 
 namespace P02;
@@ -77,7 +78,10 @@ internal static class Updater
         try
         {
             using var http = MakeClient();
-            var url = $"https://api.github.com/repos/{Owner}/{Repo}/releases/latest";
+            // Every release, not just the newest: someone several versions
+            // behind should see everything they missed, not only the last of
+            // it.
+            var url = $"https://api.github.com/repos/{Owner}/{Repo}/releases?per_page=50";
             using var resp = await http.GetAsync(url);
 
             if (!resp.IsSuccessStatusCode)
@@ -104,15 +108,22 @@ internal static class Updater
             }
 
             using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-            var root = doc.RootElement;
-            string tag = root.GetProperty("tag_name").GetString() ?? "";
-            if (!Version.TryParse(tag.TrimStart('v', 'V'), out var latest))
+
+            var newer = new List<(Version V, string Tag, string Body, JsonElement Rel)>();
+            foreach (var rel in doc.RootElement.EnumerateArray())
             {
-                Log.Write($"unparseable tag '{tag}'");
-                return;
+                if (rel.TryGetProperty("draft", out var d) && d.GetBoolean()) continue;
+                if (rel.TryGetProperty("prerelease", out var p) && p.GetBoolean()) continue;
+
+                string t = rel.GetProperty("tag_name").GetString() ?? "";
+                if (!Version.TryParse(t.TrimStart('v', 'V'), out var v)) continue;
+                if (v <= Current) continue;
+
+                newer.Add((v, t, rel.TryGetProperty("body", out var b)
+                                 ? b.GetString() ?? "" : "", rel));
             }
 
-            if (latest <= Current)
+            if (newer.Count == 0)
             {
                 if (!silent)
                     MessageBox.Show(owner, $"You're on the latest version ({Current}).",
@@ -121,9 +132,41 @@ internal static class Updater
                 return;
             }
 
-            string notes = root.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
+            newer.Sort((x, y) => y.V.CompareTo(x.V));
+            var latest = newer[0].V;
+            var root = newer[0].Rel;
 
-            using (var dlg = new UpdateDialog(latest, Current, notes))
+            // Newest first, each under its own version, so a jump of several
+            // releases reads as a list of what changed rather than one entry.
+            var story = new StringBuilder();
+            foreach (var (v, t, body, _) in newer)
+            {
+                story.AppendLine($"### {t}");
+
+                // Each release body ends with a compare link for its own hop.
+                // Leaving them in would give the dialog several links to choose
+                // from and it would pick the wrong one - the last hop rather
+                // than the whole span.
+                var lines = body.Split(new[] { '\n', '\r' },
+                                      StringSplitOptions.None);
+                var kept = lines
+                    .Where(l => !l.TrimStart().StartsWith("**Full Changelog**",
+                                                          StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                string trimmed = string.Join(Environment.NewLine, kept).Trim();
+                if (trimmed.Length > 0) story.AppendLine(trimmed);
+                story.AppendLine();
+            }
+
+            // One link covering everything between the installed version and
+            // the newest, rather than only the last hop.
+            story.AppendLine($"**Full Changelog**: https://github.com/{Owner}/{Repo}/compare/"
+                             + $"v{Current}...{newer[0].Tag}");
+
+            string notes = story.ToString();
+            Log.Write($"update: {newer.Count} newer release(s), {Current} -> {latest}");
+
+            using (var dlg = new UpdateDialog(latest, Current, notes, newer.Count))
             {
                 if (dlg.ShowDialog(owner) != DialogResult.Yes) return;
             }

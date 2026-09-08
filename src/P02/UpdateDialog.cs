@@ -29,19 +29,23 @@ public sealed partial class UpdateDialog : Form
         return t.Trim();
     }
 
-    public UpdateDialog(Version latest, Version current, string notes)
+    public UpdateDialog(Version latest, Version current, string notes, int releases)
     {
         Text = "Update available";
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(460, 300);
+        ClientSize = new Size(580, 470);
 
         var head = new Label
         {
-            Text = $"Version {latest} is available.  You have {current}.",
+            // How far behind matters as much as what the newest one is: three
+            // releases of changes is a different prospect from one.
+            Text = releases > 1
+                ? $"{releases} releases since yours: {current} to {latest}."
+                : $"Version {latest} is available.  You have {current}.",
             Font = new Font(Font.FontFamily, 10, FontStyle.Bold),
-            Bounds = new Rectangle(16, 16, 428, 24),
+            Bounds = new Rectangle(16, 16, 548, 24),
         };
         Controls.Add(head);
 
@@ -50,9 +54,10 @@ public sealed partial class UpdateDialog : Form
             Multiline = true,
             ReadOnly = true,
             ScrollBars = ScrollBars.Vertical,
+            WordWrap = true,
             BorderStyle = BorderStyle.FixedSingle,
             BackColor = SystemColors.Window,
-            Bounds = new Rectangle(16, 46, 428, 170),
+            Bounds = new Rectangle(16, 46, 548, 336),
             Text = Tidy(notes),
         };
 
@@ -76,7 +81,7 @@ public sealed partial class UpdateDialog : Form
             var link = new LinkLabel
             {
                 Text = "View the full changelog on GitHub",
-                Bounds = new Rectangle(16, 224, 300, 20),
+                Bounds = new Rectangle(16, 392, 340, 20),
                 AutoSize = false,
             };
             link.LinkClicked += (_, _) =>
@@ -95,14 +100,14 @@ public sealed partial class UpdateDialog : Form
 
         var yes = new Button
         {
-            Text = "Update and restart",
-            Bounds = new Rectangle(228, 254, 140, 30),
+            Text = releases > 1 ? "Update to newest" : "Update and restart",
+            Bounds = new Rectangle(346, 422, 140, 30),
             DialogResult = DialogResult.Yes,
         };
         var no = new Button
         {
             Text = "Not now",
-            Bounds = new Rectangle(374, 254, 70, 30),
+            Bounds = new Rectangle(494, 422, 70, 30),
             DialogResult = DialogResult.No,
         };
         Controls.Add(yes);
