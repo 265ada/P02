@@ -251,6 +251,13 @@ public sealed class AppConfig
     /// <summary>Boost over the original ding level, in dB. 0 is unchanged.</summary>
     public int SoundGainDb { get; set; }
 
+    /// <summary>
+    /// Also ding while disarmed, when it would have fired. Off: it sounds
+    /// exactly like a real press, which makes "did it fire?" harder to answer
+    /// rather than easier - and disarmed is the state people leave it in.
+    /// </summary>
+    public bool SoundWhenDisarmed { get; set; }
+
     /// <summary>Where the window was last time, so it comes back as you left it.</summary>
     public int WindowX { get; set; } = -1;
 

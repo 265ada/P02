@@ -99,9 +99,11 @@ whenever it is the pixels. The pixel path produces a
 - **Check** window that draws what the detector sees, with two live sliders for
   the only setting that ever needs tuning.
 - **Self-updating** from GitHub Releases.
-- **Pin** in the top right corner puts a small always-on-top readout over the
-  game: both globes, whether it is armed, and a light that blinks when a key
-  actually goes out. Drag it anywhere; it remembers where you left it.
+- **Pin** in the top right corner puts a small readout over the game: the globes
+  you are actually watching, the numbers being read, whether it is armed, and a
+  light that blinks when a key goes out. It has no background or border - only
+  the readouts show - so drag it by the text. A globe that is switched off is
+  left out entirely rather than sitting there saying "off".
 - **Energy shield**, off by default. Nothing recovers shield from a flask
   unless you have taken something that says so, so firing at it is waste for
   most characters and the whole point for a few. It shares the life flask's key
@@ -267,8 +269,11 @@ the fight. Firing can repeat several times a second, so the gap setting
 next to it is the minimum time between dings - 6 seconds by default. Set it to 0
 for one per press, or untick it entirely.
 
-While **disarmed**, the ding still sounds when a globe crosses its trigger, and
-the panel says what would have happened. Nothing is sent - disarmed means no key
+The ding sounds when a key is actually sent. It can also sound while
+**disarmed**, when a globe crosses its trigger, but that is off by default and
+lives behind the *when disarmed* box: it is identical to the sound of a real
+press, which makes "did it fire?" harder to answer rather than easier. With it
+on, the panel still says what would have happened. Nothing is sent - disarmed means no key
 ever leaves P02 - so this is the safe way to confirm a trigger point by ear
 before arming. It only does this while disarmed, not merely while another window
 has focus, so alt-tabbing at low health stays quiet.

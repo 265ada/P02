@@ -143,8 +143,8 @@ public sealed class MainForm : Form
 
         var hide = new CheckBox
         {
-            Text = "Hide from screen capture",
-            Bounds = new Rectangle(560, y + 3, 200, 22),
+            Text = "Hide from capture",
+            Bounds = new Rectangle(560, y + 3, 136, 22),
             Checked = cfg.HideFromCapture,
         };
         hide.CheckedChanged += (_, _) =>
@@ -203,6 +203,16 @@ public sealed class MainForm : Form
             Bounds = new Rectangle(402, y + 38, 60, 20),
         });
 
+        var disarmedDing = new CheckBox
+        {
+            Text = "when disarmed",
+            Bounds = new Rectangle(686, y + 36, 104, 22),
+            Checked = cfg.SoundWhenDisarmed,
+        };
+        disarmedDing.CheckedChanged += (_, _) =>
+        { _cfg.SoundWhenDisarmed = disarmedDing.Checked; Save(); };
+        Controls.Add(disarmedDing);
+
         Controls.Add(new Label
         {
             Text = "volume",
@@ -229,8 +239,8 @@ public sealed class MainForm : Form
         y += 32;
         var rescan = new Button
         {
-            Text = "Re-scan memory",
-            Bounds = new Rectangle(692, y, 96, 26),
+            Text = "Re-scan",
+            Bounds = new Rectangle(702, y - 32, 86, 26),
         };
         rescan.Click += (_, _) => { _engine.RescanMemory(); Log.Write("memory: manual rescan"); };
         Controls.Add(rescan);

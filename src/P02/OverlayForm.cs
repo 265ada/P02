@@ -15,32 +15,48 @@ public sealed class OverlayForm : Form
     private readonly Label _manaPct = new();
     private readonly Label _armed = new();
     private readonly Label _fire = new();
+    private readonly Label _detail = new();
     private readonly System.Windows.Forms.Timer _fade = new();
 
+    private readonly Label _manaCaption;
     private Point _dragFrom;
     private bool _dragging;
+    private bool _manaShown = true;
 
     public OverlayForm()
     {
         Text = "P02";
-        FormBorderStyle = FormBorderStyle.FixedToolWindow;
+        FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        ClientSize = new Size(210, 92);
-        BackColor = Color.FromArgb(28, 28, 30);
+        ClientSize = new Size(292, 84);
 
-        AddRow("Life", _life, _lifePct, 10);
-        AddRow("Mana", _mana, _manaPct, 32);
+        // Only the readouts should be visible over the game. Everything painted
+        // in this exact colour is punched through, so the window has no
+        // background and no border at all - drag it by the text.
+        BackColor = Color.Magenta;
+        TransparencyKey = Color.Magenta;
 
-        _armed.SetBounds(10, 60, 110, 22);
+        AddRow("Life", _life, _lifePct, 4);
+        _manaCaption = AddRow("Mana", _mana, _manaPct, 26);
+
+        _armed.SetBounds(10, 52, 78, 22);
         _armed.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+        _armed.BackColor = Color.Transparent;
         Controls.Add(_armed);
 
-        _fire.SetBounds(126, 60, 74, 22);
+        _detail.SetBounds(92, 52, 128, 22);
+        _detail.Font = new Font("Segoe UI", 9);
+        _detail.ForeColor = Color.FromArgb(190, 190, 195);
+        _detail.BackColor = Color.Transparent;
+        Controls.Add(_detail);
+
+        _fire.SetBounds(224, 52, 60, 22);
         _fire.TextAlign = ContentAlignment.MiddleRight;
         _fire.Font = new Font("Segoe UI", 9, FontStyle.Bold);
         _fire.ForeColor = Color.FromArgb(90, 90, 95);
+        _fire.BackColor = Color.Transparent;
         _fire.Text = "";
         Controls.Add(_fire);
 
@@ -52,7 +68,7 @@ public sealed class OverlayForm : Form
         };
 
         // Draggable by any part of it: there is no title bar worth grabbing.
-        foreach (Control c in new Control[] { this, _armed, _fire, _lifePct, _manaPct })
+        foreach (Control c in new Control[] { this, _armed, _fire, _detail, _lifePct, _manaPct })
         {
             c.MouseDown += (_, e) => { _dragging = true; _dragFrom = e.Location; };
             c.MouseMove += (s, e) =>
@@ -68,25 +84,62 @@ public sealed class OverlayForm : Form
         SetArmed(false);
     }
 
-    private void AddRow(string name, LevelBar bar, Label pct, int y)
+    private Label AddRow(string name, LevelBar bar, Label pct, int y)
     {
-        Controls.Add(new Label
+        var caption = new Label
         {
             Text = name,
             Bounds = new Rectangle(10, y, 34, 18),
-            ForeColor = Color.FromArgb(190, 190, 195),
-        });
-        bar.SetBounds(48, y + 1, 108, 15);
+            ForeColor = Color.FromArgb(210, 210, 215),
+            BackColor = Color.Transparent,
+        };
+        Controls.Add(caption);
+        bar.SetBounds(48, y + 1, 186, 15);
         Controls.Add(bar);
-        pct.SetBounds(160, y, 44, 18);
+        bar.BackColor = Color.Transparent;
+        pct.SetBounds(238, y, 46, 18);
         pct.ForeColor = Color.FromArgb(220, 220, 225);
+        pct.BackColor = Color.Transparent;
         Controls.Add(pct);
+        return caption;
+    }
+
+    /// <summary>
+    /// A globe that is not watched has nothing to say, so it takes no room.
+    /// </summary>
+    private void ShowMana(bool on)
+    {
+        if (on == _manaShown) return;
+        _manaShown = on;
+
+        _manaCaption.Visible = on;
+        _mana.Visible = on;
+        _manaPct.Visible = on;
+
+        int top = on ? 52 : 30;
+        _armed.Top = top;
+        _detail.Top = top;
+        _fire.Top = top;
+        ClientSize = new Size(ClientSize.Width, top + 32);
     }
 
     public void Show(GlobeReading life, GlobeReading mana, double lifeTrigger, double manaTrigger)
     {
+        ShowMana(!(mana.Note == "off" && !mana.Ok));
+
         Apply(_life, _lifePct, life, lifeTrigger);
-        Apply(_mana, _manaPct, mana, manaTrigger);
+        if (_manaShown) Apply(_mana, _manaPct, mana, manaTrigger);
+
+        // The actual numbers, not just a percentage: seeing 1,465/1,465 next to
+        // the armed state is what tells you it is reading the right thing.
+        string detail = life.TextRaw.Length > 0
+            ? life.TextRaw.Replace("memory, life ", "").Replace("numbers, ", "")
+            : life.Ok ? "globe pixels" : life.Note;
+        if (detail.Length > 22) detail = detail[..22];
+        _detail.Text = detail;
+        _detail.ForeColor = life.FromText
+            ? Color.FromArgb(190, 190, 195)
+            : Color.FromArgb(230, 180, 90);
     }
 
     private static void Apply(LevelBar bar, Label pct, GlobeReading r, double trigger)

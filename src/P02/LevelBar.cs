@@ -20,7 +20,8 @@ internal sealed class LevelBar : Control
         SetStyle(ControlStyles.AllPaintingInWmPaint
                  | ControlStyles.OptimizedDoubleBuffer
                  | ControlStyles.UserPaint
-                 | ControlStyles.ResizeRedraw, true);
+                 | ControlStyles.ResizeRedraw
+                 | ControlStyles.SupportsTransparentBackColor, true);
     }
 
     /// <summary>Fill fraction, 0-1.</summary>
@@ -53,8 +54,12 @@ internal sealed class LevelBar : Control
         var g = e.Graphics;
         var r = ClientRectangle;
 
-        using (var back = new SolidBrush(SystemColors.ControlLight))
-            g.FillRectangle(back, r);
+        // On a transparent overlay the empty part of the bar must stay empty:
+        // filling it would paint a solid block over the game.
+        bool seeThrough = BackColor == Color.Transparent;
+        if (!seeThrough)
+            using (var back = new SolidBrush(SystemColors.ControlLight))
+                g.FillRectangle(back, r);
 
         int w = (int)Math.Round((r.Width - 2) * _value);
         if (w > 0)
@@ -66,7 +71,9 @@ internal sealed class LevelBar : Control
             g.FillRectangle(brush, r.X + 1, r.Y + 1, w, r.Height - 2);
         }
 
-        using var pen = new Pen(SystemColors.ControlDark);
+        using var pen = new Pen(seeThrough
+            ? Color.FromArgb(150, 150, 155)
+            : SystemColors.ControlDark);
         g.DrawRectangle(pen, r.X, r.Y, r.Width - 1, r.Height - 1);
     }
 }

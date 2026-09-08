@@ -455,7 +455,7 @@ public sealed class MonitorEngine : IDisposable
             if (!Armed && c.Enabled && frac < c.Threshold && !textLost
                 && !Unreadable(frac, now, st.LastGoodMs, c))
             {
-                if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
+                if (_cfg.SoundOnFire && _cfg.SoundWhenDisarmed) _chime.Play(_cfg.SoundGapMs);
                 if (now - st.LastWouldFireMs > _cfg.SoundGapMs)
                 {
                     st.LastWouldFireMs = now;
