@@ -17,6 +17,7 @@ public sealed class GlobePanel : GroupBox
     private readonly NumericUpDown _panicGap = new();
     private readonly NumericUpDown _burst = new();
     private readonly NumericUpDown _hold = new();
+    private readonly Label _burstTime = new();
     private readonly Label _tuned = new();
     private readonly Label _warn = new();
     private readonly KeyBindBox _key = new();
@@ -34,7 +35,7 @@ public sealed class GlobePanel : GroupBox
 
         Text = title;
         Width = 366;
-        Height = 430;
+        Height = 458;
         Padding = new Padding(10);
 
         int y = 24;
@@ -147,7 +148,7 @@ public sealed class GlobePanel : GroupBox
         _burst.Maximum = 5;
         _burst.Value = Math.Clamp(cfg.BurstCount, 1, 5);
         _burst.ValueChanged += (_, _) =>
-            { _cfg.BurstCount = (int)_burst.Value; _onChange(); };
+            { _cfg.BurstCount = (int)_burst.Value; RefreshBurstTime(); _onChange(); };
         Controls.Add(_burst);
 
         Controls.Add(new Label
@@ -164,7 +165,8 @@ public sealed class GlobePanel : GroupBox
         _hold.Maximum = 400;
         _hold.Increment = 10;
         _hold.Value = Math.Clamp(cfg.HoldMs, 10, 400);
-        _hold.ValueChanged += (_, _) => { _cfg.HoldMs = (int)_hold.Value; _onChange(); };
+        _hold.ValueChanged += (_, _) =>
+        { _cfg.HoldMs = (int)_hold.Value; RefreshBurstTime(); _onChange(); };
         Controls.Add(_hold);
         Controls.Add(Lab("ms", 204, y + 4));
 
@@ -174,12 +176,35 @@ public sealed class GlobePanel : GroupBox
             ForeColor = SystemColors.GrayText,
             Text = "raise if presses are missed",
         });
+        y += 26;
+
+        // Hold time and press count multiply out into how long a trigger takes
+        // to send, and nothing else can go out during it. Worth seeing.
+        _burstTime.SetBounds(14, y, 340, 18);
+        _burstTime.ForeColor = SystemColors.GrayText;
+        Controls.Add(_burstTime);
+        RefreshBurstTime();
     }
 
     /// <summary>
     /// Flags settings that let a drained globe read as full - the failure that
     /// looks like nothing at all until it costs you a character.
     /// </summary>
+    /// <summary>
+    /// Shows how long one trigger takes to send. Nothing else can be sent
+    /// during it, so this is the real floor on how often it can act - the
+    /// cooldown cannot go below it however low it is set.
+    /// </summary>
+    private void RefreshBurstTime()
+    {
+        int n = Math.Max(1, _cfg.BurstCount);
+        int ms = n * _cfg.HoldMs + (n - 1) * _cfg.BurstGapMs;
+        _burstTime.Text = n == 1
+            ? $"One press takes {ms} ms to send, so at most {1000 / Math.Max(1, ms)} a second."
+            : $"{n} presses take {ms} ms to send, so at most "
+              + $"{1000 / Math.Max(1, ms)} bursts a second.";
+    }
+
     private void RefreshWarning()
     {
         if (!_cfg.Region.IsValid) { _warn.Text = ""; return; }

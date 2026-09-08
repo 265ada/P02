@@ -220,7 +220,9 @@ so detection, the trigger, the window check and the send all worked - the press
 left P02 and the game did not act on it. In order of likelihood:
 
 1. **The press is too short.** Raise **Hold each press**. This was 20 ms by
-   default and is the single most likely cause below 50 fps.
+   default and is the single most likely cause below 50 fps. Set Presses per
+   trigger to 1 while testing, so each ding is exactly one press and the result
+   is unambiguous.
 2. **Wrong key.** Click the key box and press the actual flask key.
 3. **No charges.** P02 cannot see them; it will happily press into an empty
    flask.
