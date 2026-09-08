@@ -71,6 +71,32 @@ public sealed class MainForm : Form
             ForeColor = SystemColors.GrayText,
         }, Tips.Pin));
 
+        var snap = new CheckBox
+        {
+            Text = "Snap to the game's numbers",
+            Bounds = new Rectangle(392, 8, 190, 22),
+            Checked = cfg.OverlaySnap,
+        };
+        snap.CheckedChanged += (_, _) =>
+        {
+            _cfg.OverlaySnap = snap.Checked;
+            Save();
+            if (_overlay is { IsDisposed: false }) _overlay.Locked = snap.Checked;
+            PlaceOverlay();
+        };
+        Controls.Add(snap);
+        Tips.On(snap, Tips.OverlaySnap);
+
+        var autoHide = new CheckBox
+        {
+            Text = "Hide it when they are covered",
+            Bounds = new Rectangle(190, 8, 200, 22),
+            Checked = cfg.OverlayAutoHide,
+        };
+        autoHide.CheckedChanged += (_, _) => { _cfg.OverlayAutoHide = autoHide.Checked; Save(); };
+        Controls.Add(autoHide);
+        Tips.On(autoHide, Tips.OverlayAutoHide);
+
         var probe = new TextProbe(_engine.TextAvailable, _engine.TextUnavailable,
                                   _engine.ProbeText);
 
@@ -539,6 +565,7 @@ public sealed class MainForm : Form
                 };
             }
 
+            _overlay.Locked = _cfg.OverlaySnap;
             PlaceOverlay();
             _overlay.SetArmed(_engine.Armed);
             _overlay.Show();
@@ -568,6 +595,19 @@ public sealed class MainForm : Form
     private void PlaceOverlay(bool forceDefault = false)
     {
         if (_overlay is null || _overlay.IsDisposed) return;
+
+        // Snapped, it sits directly above the game's own life numbers. That box
+        // is a fixed part of the HUD and already tracked, so it follows the
+        // readout it is describing rather than a remembered screen position
+        // that is wrong the moment a window moves or a monitor changes.
+        if (!forceDefault && _cfg.OverlaySnap && _cfg.Life.TextRegion.IsValid)
+        {
+            var box = _cfg.Life.TextRegion.ToRect();
+            var at = new Point(box.X, box.Y - _overlay.Height - 6);
+            if (at.Y < 0) at.Y = box.Bottom + 6;
+            _overlay.Location = at;
+            return;
+        }
 
         var wanted = new Rectangle(_cfg.OverlayX, _cfg.OverlayY,
                                    _overlay.Width, _overlay.Height);
@@ -608,10 +648,25 @@ public sealed class MainForm : Form
         {
             BeginInvoke(() =>
             {
-                if (_overlay is { IsDisposed: false, Visible: true })
+                if (_overlay is { IsDisposed: false })
                 {
-                    _overlay.Show(life, mana, _cfg.Life.Threshold, _cfg.Mana.Threshold);
-                    _overlay.SetFightCount(_engine.FiresThisFight, _engine.InCombat);
+                    // Nothing true to say while a shop or the passive tree
+                    // covers the HUD, and nothing can fire either - so getting
+                    // out of the way says something rather than hides it.
+                    bool blind = life.Note == "numbers not on screen";
+                    bool wanted = !_cfg.OverlayAutoHide || (!blind && focused);
+
+                    if (_cfg.OverlayOn && wanted != _overlay.Visible)
+                    {
+                        if (wanted) _overlay.Show(); else _overlay.Hide();
+                    }
+
+                    if (_overlay.Visible)
+                    {
+                        _overlay.Show(life, mana, _cfg.Life.Threshold, _cfg.Mana.Threshold);
+                        _overlay.SetFightCount(_engine.FiresThisFight, _engine.InCombat);
+                        if (_cfg.OverlaySnap) PlaceOverlay();
+                    }
                 }
 
                 _life.Update(life);

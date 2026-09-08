@@ -478,4 +478,29 @@ internal static class Tips
         "The last thing that happened, as it happens: what was read, what was",
         "decided, and whether a key went out.",
     ];
+
+    public static readonly string[] OverlaySnap =
+    [
+        "Sits the readout directly above the game's own life numbers, instead",
+        "of wherever it was last dragged.",
+        "",
+        "It anchors to the numbers box, which is a fixed part of the HUD and",
+        "already tracked - so it follows the readout it describes rather than a",
+        "remembered screen position, which is wrong the moment a window moves or",
+        "a monitor is added.",
+        "",
+        "Dragging is off while this is on; untick it to place it by hand again.",
+    ];
+
+    public static readonly string[] OverlayAutoHide =
+    [
+        "Hides the readout whenever the game's numbers are not on screen.",
+        "",
+        "A shop, the passive tree or an inventory covers the HUD, and while one",
+        "is up the readout has nothing true to say - it is only in the way of",
+        "the thing you opened.",
+        "",
+        "It is also exactly when nothing can fire, so the readout disappearing",
+        "is information rather than a gap: gone means not watching.",
+    ];
 }

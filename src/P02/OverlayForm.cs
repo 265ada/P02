@@ -43,6 +43,12 @@ public sealed class OverlayForm : Form
     /// <summary>Raised when a drag finishes, so the position can be saved.</summary>
     public event Action? Moved;
 
+    /// <summary>
+    /// Set while the readout is anchored to something in the game, so a drag
+    /// cannot quietly fight the thing that keeps putting it back.
+    /// </summary>
+    public bool Locked { get; set; }
+
     public OverlayForm()
     {
         Text = "P02";
@@ -57,7 +63,7 @@ public sealed class OverlayForm : Form
 
         MouseDown += (_, e) =>
         {
-            if (e.Button != MouseButtons.Left) return;
+            if (e.Button != MouseButtons.Left || Locked) return;
             _dragging = true;
             _grabbedAt = Cursor.Position;
             _wasAt = Location;

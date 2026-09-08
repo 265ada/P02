@@ -327,6 +327,26 @@ public sealed class AppConfig
     public int OverlayX { get; set; } = -1;
 
     public int OverlayY { get; set; } = -1;
+
+    /// <summary>
+    /// Sit the readout directly above the game's own life numbers instead of
+    /// wherever it was dragged.
+    ///
+    /// Anchored to the numbers box, which is a fixed part of the HUD and
+    /// already tracked - so it follows the game's own readout rather than a
+    /// remembered screen position that is wrong the moment anything moves.
+    /// </summary>
+    public bool OverlaySnap { get; set; }
+
+    /// <summary>
+    /// Hide the readout whenever the game's numbers are not on screen.
+    ///
+    /// A shop, the passive tree or an inventory covers the HUD, and the
+    /// readout has nothing true to say while they are up - it is only in the
+    /// way. It is also exactly the moment nothing can fire, so hiding it says
+    /// something rather than hiding something.
+    /// </summary>
+    public bool OverlayAutoHide { get; set; }
     public bool StartMinimised { get; set; }
     public bool CheckUpdatesOnStart { get; set; } = true;
 
