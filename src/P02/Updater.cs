@@ -72,8 +72,30 @@ internal static class Updater
         return http;
     }
 
+    /// <summary>
+    /// The newest release marked critical, or null. Set by any check, silent or
+    /// not, so a launch check is enough to raise the alarm.
+    /// </summary>
+    public static string? Critical { get; private set; }
+
+    /// <summary>One line saying what the critical release fixes.</summary>
+    public static string CriticalWhy { get; private set; } = "";
+
+    private static string FirstLine(string body)
+    {
+        foreach (string line in body.Split([(char)10, (char)13],
+                                           StringSplitOptions.RemoveEmptyEntries))
+        {
+            string t = line.Replace("[critical]", "", StringComparison.OrdinalIgnoreCase)
+                           .Trim(' ', '#', '-', '*');
+            if (t.Length > 0) return t;
+        }
+
+        return "it fixes something that can get you killed";
+    }
+
     public static async Task CheckAsync(IWin32Window owner, bool silent,
-                                        Action? beforeExit = null)
+                                        Action? beforeExit = null, bool ui = true)
     {
         try
         {
@@ -134,6 +156,20 @@ internal static class Updater
 
             newer.Sort((x, y) => y.V.CompareTo(x.V));
             var latest = newer[0].V;
+
+            // A release says for itself whether it is one people must not stay
+            // behind on. Anything that fixes a way for this to sit quiet while
+            // somebody dies belongs here and nothing else does - the moment it
+            // is used for a tidy-up nobody will believe the next one.
+            foreach (var (v, t, body, _) in newer)
+            {
+                if (!body.Contains("[critical]", StringComparison.OrdinalIgnoreCase)) continue;
+                Critical = t;
+                CriticalWhy = FirstLine(body);
+                Log.Write($"update: {t} is marked critical - {CriticalWhy}");
+                break;
+            }
+
             var root = newer[0].Rel;
 
             // Newest first, each under its own version, so a jump of several
@@ -165,6 +201,11 @@ internal static class Updater
 
             string notes = story.ToString();
             Log.Write($"update: {newer.Count} newer release(s), {Current} -> {latest}");
+
+            // The background watch only exists to notice a critical release;
+            // a dialog over the game every few minutes would be worse than the
+            // problem it is looking for.
+            if (!ui) return;
 
             using (var dlg = new UpdateDialog(latest, Current, notes, newer.Count))
             {

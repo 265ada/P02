@@ -34,6 +34,7 @@ public sealed class OverlayForm : Form
     private int _fired;
     private bool _inCombat;
     private string _detail = "";
+    private string _alert = "";
 
     private Point _grabbedAt;
     private Point _wasAt;
@@ -110,6 +111,18 @@ public sealed class OverlayForm : Form
         Render();
     }
 
+    /// <summary>
+    /// A line under everything else, for something that cannot wait until the
+    /// player next looks at the window - which, mid-map, is never.
+    /// </summary>
+    public void SetAlert(string text)
+    {
+        if (text == _alert) return;
+        _alert = text;
+        FitHeight();
+        Render();
+    }
+
     public void SetArmed(bool armed)
     {
         _armed = armed;
@@ -138,7 +151,8 @@ public sealed class OverlayForm : Form
 
     private void FitHeight()
     {
-        int h = Pad + RowH + (ManaShown ? RowH : 0) + 26 + Pad;
+        int h = Pad + RowH + (ManaShown ? RowH : 0) + 26
+                + (_alert.Length > 0 ? 22 : 0) + Pad;
         if (ClientSize.Height != h) ClientSize = new Size(ClientSize.Width, h);
     }
 
@@ -248,6 +262,18 @@ public sealed class OverlayForm : Form
         }
 
         Status(g, y + 4);
+
+        if (_alert.Length > 0)
+        {
+            // Loud on purpose. Everything else here is meant to be glanceable
+            // and ignorable; this one is meant to interrupt.
+            var box = new Rectangle(Pad - 4, y + 26, ClientSize.Width - 2 * Pad + 8, 19);
+            using (var back = new SolidBrush(Color.FromArgb(210, 150, 30, 26)))
+            using (var path = Rounded(box, 5))
+                g.FillPath(back, path);
+
+            Glyph(g, _alert, Color.White, Theme.Small, box.X + 7, box.Y + 2);
+        }
     }
 
     private void Row(Graphics g, string name, GlobeReading r, double trigger, int y)

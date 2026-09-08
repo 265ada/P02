@@ -423,6 +423,11 @@ internal static class Tips
         "Checks for a new version each time it starts.",
         "",
         "One request, and nothing installs without you saying so.",
+        "",
+        "It also looks again every five minutes for releases marked critical -",
+        "the ones that fix a way for this to sit quiet while you die. Those are",
+        "the only ones that interrupt: thirty seconds of warning on the overlay,",
+        "then your game is paused, and never while you are in a fight.",
     ];
 
     public static readonly string[] FindNumbers =

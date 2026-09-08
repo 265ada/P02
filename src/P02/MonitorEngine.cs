@@ -251,7 +251,8 @@ public sealed class MonitorEngine : IDisposable
         _cfg.InputMethod.Equals("postmessage", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Handle of the game window, looked up rarely and cached.</summary>
-    private nint GameWindow
+    /// <summary>The game's window, or 0 when it is not up.</summary>
+    internal nint GameWindow
     {
         get
         {

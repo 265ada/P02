@@ -10,6 +10,11 @@ public sealed class MainForm : Form
 
     private readonly AppConfig _cfg;
     private readonly MonitorEngine _engine;
+    private readonly System.Windows.Forms.Timer _critical = new();
+    private readonly System.Windows.Forms.Timer _watch = new();
+    private int _criticalLeft = 31;
+    private bool _criticalDone;
+
     private readonly GlobePanel _life;
     private readonly GlobePanel _mana;
     private readonly Button _arm = new();
@@ -42,6 +47,19 @@ public sealed class MainForm : Form
         var tip = new ToolTip();
         Tips.On(_pin, Tips.Pin);
         _pin.MouseUp += (_, e) => { if (e.Button == MouseButtons.Right) ResetOverlay(); };
+        _critical.Interval = 1000;
+        _critical.Tick += (_, _) => OnCriticalTick();
+
+        // One small request every five minutes, and no window unless something
+        // is actually wrong. A release that fixes a way to die quietly is no
+        // use sitting on a server while somebody plays the version it fixes.
+        _watch.Interval = 5 * 60 * 1000;
+        _watch.Tick += (_, _) =>
+        {
+            if (Updater.Critical is not null) return;
+            _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow, ui: false);
+        };
+
         _pin.Click += (_, _) => ToggleOverlay(!(_overlay?.Visible ?? false));
         Controls.Add(_pin);
 
@@ -762,7 +780,67 @@ public sealed class MainForm : Form
         FirstRunSetup();
         if (_cfg.CheckUpdatesOnStart)
             _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow);
+        _critical.Start();
+        _watch.Start();
         if (_cfg.StartMinimised) Hide();
+    }
+
+    /// <summary>
+    /// Counts a critical update down in the overlay and then stops the session.
+    ///
+    /// A message box behind a fullscreen game is not a warning, it is a thing
+    /// discovered afterwards - and the releases this is for are the ones that
+    /// were letting somebody die while the app watched. Thirty seconds of
+    /// notice on the overlay, then Escape into the game's own menu so play
+    /// actually stops, and this window brought forward with the update ready.
+    ///
+    /// Never mid-fight. Pausing someone who is being hit is its own way of
+    /// getting them killed, so the countdown holds at zero until they are out
+    /// of combat.
+    /// </summary>
+    private void OnCriticalTick()
+    {
+        if (Updater.Critical is null || _criticalDone) return;
+
+        _criticalLeft--;
+
+        if (_criticalLeft > 0)
+        {
+            _overlay?.SetAlert($"UPDATE {Updater.Critical} - pausing in {_criticalLeft}s");
+            return;
+        }
+
+        if (_engine.InCombat)
+        {
+            _overlay?.SetAlert($"UPDATE {Updater.Critical} - pausing once you are safe");
+            return;
+        }
+
+        _criticalDone = true;
+        _critical.Stop();
+        _overlay?.SetAlert("");
+        Log.Write($"update: pausing the session for critical release {Updater.Critical}");
+
+        if (_engine.GameWindow != 0)
+        {
+            KeySender.PostTo(_engine.GameWindow, "Escape", 70);
+            KeySender.Tap("Escape", 70);
+        }
+
+        Show();
+        WindowState = FormWindowState.Normal;
+        Activate();
+        BringToFront();
+
+        MessageBox.Show(this,
+            $"{Updater.Critical} fixes something that can get you killed:"
+            + Environment.NewLine + Environment.NewLine
+            + Updater.CriticalWhy
+            + Environment.NewLine + Environment.NewLine
+            + "Your game has been paused. Update before carrying on.",
+            "Critical update", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+        _ = Updater.CheckAsync(this, silent: false, beforeExit: _cfg.SaveNow);
     }
 
     /// <summary>
