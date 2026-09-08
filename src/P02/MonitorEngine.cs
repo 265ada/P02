@@ -216,7 +216,7 @@ public sealed class MonitorEngine : IDisposable
     }
 
     /// <summary>Reads a region once, for the setup button.</summary>
-    public string ProbeText(Rectangle r) => _ocr.ProbeOnce(r);
+    public string ProbeText(Rectangle r, out Bitmap? shot) => _ocr.ProbeOnce(r, out shot);
 
     /// <summary>Loudest boost the ding can take without clipping, in dB.</summary>
     public static int MaxGainDb => Chime.MaxGainDb;

@@ -418,16 +418,16 @@ public sealed class GlobePanel : GroupBox
         var r = RegionPickerForm.Pick(
             "Drag a box around the Shield LINE ONLY - the word \"Shield\" and its "
             + "numbers, nothing above or below it");
-        owner?.Show();
-        if (r is null) return;
+        if (r is null) { owner?.Show(); return; }
 
-        string got = _probe.Probe(r.Value);
+        string got = _probe.Probe(r.Value, out var shieldShot);
+        owner?.Show();
         if (got.Length == 0)
         {
-            MessageBox.Show(this, "Nothing readable in that box.", "Energy shield",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ReportUnreadable(r.Value, shieldShot);
             return;
         }
+        shieldShot?.Dispose();
 
         _shield!.TextRegion = Box.From(r.Value);
         _shield.UseText = true;
@@ -506,18 +506,19 @@ public sealed class GlobePanel : GroupBox
         var r = RegionPickerForm.Pick(
             $"Drag a box around the {Text} LINE ONLY - the word \"{Text}\" and its "
             + "numbers, nothing above or below it");
-        owner?.Show();
-        if (r is null) return;
+        if (r is null) { owner?.Show(); return; }
 
-        string got = _probe.Probe(r.Value);
+        // Read it while this window is still hidden. Capture takes whatever is
+        // on the screen, so showing the window first risks reading P02 instead
+        // of the game.
+        string got = _probe.Probe(r.Value, out var shot);
+        owner?.Show();
         if (got.Length == 0)
         {
-            MessageBox.Show(this,
-                "Nothing readable in that box. Include the whole \"1,465/1,465\" and a "
-                + "little space around it, and try not to catch the label.",
-                "Numbers", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ReportUnreadable(r.Value, shot);
             return;
         }
+        shot?.Dispose();
 
         _cfg.TextRegion = Box.From(r.Value);
         _cfg.UseText = true;
@@ -529,6 +530,44 @@ public sealed class GlobePanel : GroupBox
             + "This is now what decides when to fire, and it needs no calibration. "
             + "The globe pixels stay as the fallback.",
             "Numbers", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    /// <summary>
+    /// "Nothing readable" on its own is a dead end. Saving what was actually in
+    /// the box turns it into something anyone can look at - most often it shows
+    /// the box landed on scenery, or on this window.
+    /// </summary>
+    private void ReportUnreadable(Rectangle box, Bitmap? shot)
+    {
+        string saved = "";
+        try
+        {
+            if (shot is not null)
+            {
+                Directory.CreateDirectory(AppConfig.Dir);
+                saved = Path.Combine(AppConfig.Dir,
+                    $"{Text}-numbers-{DateTime.Now:yyyyMMdd-HHmmss}.png");
+                shot.Save(saved, System.Drawing.Imaging.ImageFormat.Png);
+            }
+        }
+        catch (Exception ex) { Log.Write($"could not save probe image: {ex.Message}"); }
+        finally { shot?.Dispose(); }
+
+        Log.Write($"{Text}: nothing readable in {box}"
+                  + (saved.Length > 0 ? $" - saved {saved}" : ""));
+
+        string msg = $"Nothing readable in that box ({box.Width}x{box.Height} at "
+                   + $"{box.X},{box.Y})." + Environment.NewLine + Environment.NewLine
+                   + "Include the whole line - the word and its numbers - and a little space "
+                   + "around it. A box only a few pixels tall cannot be read at all."
+                   + Environment.NewLine + Environment.NewLine
+                   + "Find numbers, at the bottom of the window, does this without dragging.";
+
+        if (saved.Length > 0)
+            msg += Environment.NewLine + Environment.NewLine
+                 + "What was in the box has been saved to:" + Environment.NewLine + saved;
+
+        MessageBox.Show(this, msg, "Numbers", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     private void PickRegion()

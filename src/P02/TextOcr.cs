@@ -480,15 +480,32 @@ internal sealed partial class TextOcr : IDisposable
         return sawText.Length > 0 && TryParse(sawText, out cur, out max, label, 0);
     }
 
-    /// <summary>One-off read, for the setup button to show what it sees.</summary>
-    public string ProbeOnce(Rectangle region)
+    /// <summary>
+    /// One-off read, for the setup buttons. Tries a few magnifications: the
+    /// engine ignores text below a certain size and gets confused above
+    /// another, and where those limits fall depends on the size of the box.
+    /// </summary>
+    public string ProbeOnce(Rectangle region) => ProbeOnce(region, out _);
+
+    /// <summary>As above, handing back the picture it read so an unreadable
+    /// box can be looked at rather than merely reported.</summary>
+    public string ProbeOnce(Rectangle region, out Bitmap? shot)
     {
+        shot = null;
         if (_engine is null) return "";
+
         using var cap = new ScreenCapture();
         if (!cap.Grab(region)) return "";
-        using var shot = ToBitmap(cap.Buffer, cap.Width, cap.Height);
-        using var big = Upscale(shot, 3);
-        return Recognise(big).Replace("\n", " ").Trim();
+
+        shot = ToBitmap(cap.Buffer, cap.Width, cap.Height);
+        foreach (int scale in new[] { 3, 2, 4, 5 })
+        {
+            using var big = Upscale(shot, scale);
+            string text = Recognise(big).Replace('\n', ' ')
+                                        .Replace('\r', ' ').Trim();
+            if (text.Length > 0) return text;
+        }
+        return "";
     }
 
     public void Dispose()
