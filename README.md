@@ -114,6 +114,7 @@ hit, so each globe has two speeds:
 | Panic below | Under this fraction, switch to the short gap and fire on the first low frame instead of waiting for a second. |
 | gap | The short gap. Default 260 ms. |
 | Presses per trigger | Send the key more than once, for when one charge does not cover the hit. |
+| Hold each press | How long the key is held down. A game reads input once a frame, so a press shorter than one frame can go down and up between two of them and never register - 20 ms is invisible below about 50 fps. Default 70 ms, which spans a frame down to 14 fps. Raise it if the ding sounds but nothing happens in game. |
 
 It also panics on **rate**, not just level: if the globe is falling faster than
 30% per second it switches to the short gap even while you are still above the
@@ -211,6 +212,20 @@ The button writes a zip and a matching plain-text report to `%APPDATA%\P02`:
 
 Your update token is never included, and anything token-shaped in the log is
 redacted. The `.txt` is meant to be pasted straight into a chat.
+
+## The ding sounds but the flask is not used
+
+That narrows it a long way. The ding plays on the same path as the key press,
+so detection, the trigger, the window check and the send all worked - the press
+left P02 and the game did not act on it. In order of likelihood:
+
+1. **The press is too short.** Raise **Hold each press**. This was 20 ms by
+   default and is the single most likely cause below 50 fps.
+2. **Wrong key.** Click the key box and press the actual flask key.
+3. **No charges.** P02 cannot see them; it will happily press into an empty
+   flask.
+4. **The game is elevated and P02 is not.** Windows discards the input with no
+   error anywhere. Export diagnostics reports this.
 
 ## If it never fires
 

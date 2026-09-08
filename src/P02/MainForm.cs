@@ -31,7 +31,7 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(772, 624);
+        ClientSize = new Size(772, 656);
 
         _life = new GlobePanel("Life", cfg.Life, blue: false, Save,
             () => _cfg.WindowMatch, () => _cfg.Mana.Region) { Location = new Point(12, 12) };
@@ -40,7 +40,7 @@ public sealed class MainForm : Form
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 428;
+        int y = 460;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);

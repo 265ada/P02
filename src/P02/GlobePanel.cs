@@ -16,6 +16,7 @@ public sealed class GlobePanel : GroupBox
     private readonly NumericUpDown _panicBelow = new();
     private readonly NumericUpDown _panicGap = new();
     private readonly NumericUpDown _burst = new();
+    private readonly NumericUpDown _hold = new();
     private readonly Label _tuned = new();
     private readonly Label _warn = new();
     private readonly KeyBindBox _key = new();
@@ -33,7 +34,7 @@ public sealed class GlobePanel : GroupBox
 
         Text = title;
         Width = 366;
-        Height = 398;
+        Height = 430;
         Padding = new Padding(10);
 
         int y = 24;
@@ -154,6 +155,24 @@ public sealed class GlobePanel : GroupBox
             Bounds = new Rectangle(196, y + 4, 120, 18),
             ForeColor = SystemColors.GrayText,
             Text = "charges allowing",
+        });
+        y += 32;
+
+        Controls.Add(Lab("Hold each press", 14, y + 4));
+        _hold.SetBounds(140, y, 60, 24);
+        _hold.Minimum = 10;
+        _hold.Maximum = 400;
+        _hold.Increment = 10;
+        _hold.Value = Math.Clamp(cfg.HoldMs, 10, 400);
+        _hold.ValueChanged += (_, _) => { _cfg.HoldMs = (int)_hold.Value; _onChange(); };
+        Controls.Add(_hold);
+        Controls.Add(Lab("ms", 204, y + 4));
+
+        Controls.Add(new Label
+        {
+            Bounds = new Rectangle(232, y + 4, 130, 18),
+            ForeColor = SystemColors.GrayText,
+            Text = "raise if presses are missed",
         });
     }
 

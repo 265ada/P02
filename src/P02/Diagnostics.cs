@@ -179,6 +179,11 @@ internal static partial class Diagnostics
                           + "usually means a drained globe counts as liquid and the reading "
                           + "never falls below the trigger.");
 
+            if (c.HoldMs < 40)
+                notes.Add($"- {name}: key held for only {c.HoldMs} ms. A game reads input once "
+                          + "a frame, so below about 50 fps a press this short can go down and "
+                          + "up between frames and never register. 70 ms is safer.");
+
             int burstMs = c.BurstCount * c.HoldMs + Math.Max(0, c.BurstCount - 1) * c.BurstGapMs;
             if (burstMs > c.PanicCooldownMs)
                 notes.Add($"- {name}: a burst takes about {burstMs} ms to send but the panic gap "

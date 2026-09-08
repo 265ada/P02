@@ -33,7 +33,13 @@ public sealed class WatcherConfig
     public double Threshold { get; set; } = 0.50;
 
     public string Key { get; set; } = "1";
-    public int HoldMs { get; set; } = 20;
+    /// <summary>
+    /// How long the key is held down. A game reads input once a frame, so a
+    /// press shorter than a frame can go down and back up between two of them
+    /// and never be seen: 20 ms is invisible below about 50 fps. 70 ms spans a
+    /// frame down to 14 fps.
+    /// </summary>
+    public int HoldMs { get; set; } = 70;
 
     /// <summary>Normal gap between presses while sitting below the trigger.</summary>
     public int CooldownMs { get; set; } = 350;
@@ -163,7 +169,7 @@ public sealed class AppConfig
     /// </summary>
     public void Repair()
     {
-        if (SettingsVersion >= 2) return;
+        if (SettingsVersion >= 3) return;
 
         foreach (var (name, w) in new[] { ("Life", Life), ("Mana", Mana) })
         {
@@ -182,9 +188,16 @@ public sealed class AppConfig
                             + "empty globe read as full. Reset to 30.");
                 w.ColourMargin = 30;
             }
+
+            if (w.HoldMs < 40)
+            {
+                Repairs.Add($"{name}: key was held for {w.HoldMs} ms, short enough for the "
+                            + "game to miss it between frames. Raised to 70 ms.");
+                w.HoldMs = 70;
+            }
         }
 
-        SettingsVersion = 2;
+        SettingsVersion = 3;
         foreach (string r in Repairs) Log.Write($"repair: {r}");
         if (Repairs.Count > 0) SaveNow();
     }
