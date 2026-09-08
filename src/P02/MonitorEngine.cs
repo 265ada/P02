@@ -518,7 +518,22 @@ public sealed class MonitorEngine : IDisposable
             // correction, so the pixels win and the disagreement is logged.
             if (name == "Life") ReadingAgeMs = textAge;
 
-            if (textAge < 1200 && Math.Abs(tr.Fraction - frac) <= 0.40)
+            // The pixels used to be able to veto this, on the theory that they
+            // are crude but never wildly wrong. They can be: a globe covered by
+            // a panel, or one whose colours no longer separate, reads a flat
+            // 100% forever - and it then vetoed 557 correct readings in a
+            // single session, including "617/1,490" on the way to a death. The
+            // pixels are the fallback. They do not get to overrule the numbers.
+            //
+            // What the check was actually guarding against - a stray digit
+            // turning 1,465 into 11,465 - is caught properly by the maximum,
+            // which is read from the same line and has to match. Only when
+            // there is no maximum to check against is a second opinion worth
+            // anything, and only then are the pixels asked for one.
+            bool pixelsMayObject = c.KnownMax <= 0;
+            bool agrees = !pixelsMayObject || Math.Abs(tr.Fraction - frac) <= 0.40;
+
+            if (textAge < 1200 && agrees)
             {
                 frac = tr.Fraction;
                 fromText = true;
