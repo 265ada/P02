@@ -1139,33 +1139,38 @@ public sealed class GlobePanel : Card
             // globe pixels cannot tell life from energy shield - the shield is
             // drawn over the same globe - while the numbers and memory read the
             // life value specifically.
+            //
+            // A source being thrown out is reported here too, and that is not
+            // good news however well the fallback is coping - so it does not
+            // get to be green.
+            bool refused = r.TextRaw.Contains("ignored", StringComparison.Ordinal);
             _numbers.Text = $"Deciding: {r.TextRaw}";
-            _numbers.ForeColor = Color.FromArgb(0, 100, 0);
+            _numbers.ForeColor = refused ? Theme.Warn : Theme.Good;
         }
         else if (r.Note == "cannot read the globe")
         {
             _numbers.Text = "Holding fire: the globe cannot be read - press Numbers...";
-            _numbers.ForeColor = Color.FromArgb(200, 30, 30);
+            _numbers.ForeColor = Theme.Bad;
         }
         else if (r.Note == "no exact reading yet")
         {
             _numbers.Text = "Holding fire: memory or numbers asked for but never read yet";
-            _numbers.ForeColor = Color.FromArgb(190, 60, 0);
+            _numbers.ForeColor = Theme.Warn;
         }
         else if (r.Note == "numbers not on screen")
         {
             _numbers.Text = "Numbers not on screen - holding fire until they are back";
-            _numbers.ForeColor = Color.FromArgb(0, 90, 160);
+            _numbers.ForeColor = Theme.Accent;
         }
         else if (_cfg.TextRegion.IsValid)
         {
             _numbers.Text = "Deciding: globe pixels (numbers set but not readable)";
-            _numbers.ForeColor = Color.FromArgb(190, 60, 0);
+            _numbers.ForeColor = Theme.Warn;
         }
         else
         {
             _numbers.Text = "Deciding: globe pixels - these follow energy shield too";
-            _numbers.ForeColor = Color.FromArgb(190, 60, 0);
+            _numbers.ForeColor = Theme.Warn;
         }
     }
 }
