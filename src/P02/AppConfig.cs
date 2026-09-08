@@ -331,6 +331,26 @@ public sealed class AppConfig
     public bool CheckUpdatesOnStart { get; set; } = true;
 
     /// <summary>
+    /// Install an update without being asked, when only a few releases behind.
+    ///
+    /// Being behind is what killed this twice: fixes sat on a server while the
+    /// version they fixed kept playing. A jump of a release or three is a
+    /// change small enough to have been read about; a bigger one is a decision
+    /// worth making rather than having made for you.
+    /// </summary>
+    public bool AutoInstall { get; set; } = true;
+
+    public int AutoInstallMaxBehind { get; set; } = 3;
+
+    /// <summary>
+    /// Set only while restarting for an update, so it comes back armed if it
+    /// was armed. Every other launch starts disarmed on purpose - a monitor
+    /// that arms itself when you did not ask is a monitor firing into a game
+    /// you have not looked at yet.
+    /// </summary>
+    public bool ResumeArmed { get; set; }
+
+    /// <summary>
     /// Hide P02's windows from screen capture so they cannot be read as a
     /// globe. Off, and staying off: it also hides them from screenshots, the
     /// Snipping Tool, Discord and OBS.

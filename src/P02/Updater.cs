@@ -81,6 +81,12 @@ internal static class Updater
     /// <summary>One line saying what the critical release fixes.</summary>
     public static string CriticalWhy { get; private set; } = "";
 
+    /// <summary>The newest release available, or null when up to date.</summary>
+    public static string? Pending { get; private set; }
+
+    /// <summary>How many releases behind the installed version is.</summary>
+    public static int Behind { get; private set; }
+
     private static string FirstLine(string body)
     {
         // The release notes open with a generated header - "Changes since
@@ -104,7 +110,8 @@ internal static class Updater
     }
 
     public static async Task CheckAsync(IWin32Window owner, bool silent,
-                                        Action? beforeExit = null, bool ui = true)
+                                        Action? beforeExit = null, bool ui = true,
+                                        bool install = false)
     {
         try
         {
@@ -156,6 +163,8 @@ internal static class Updater
 
             if (newer.Count == 0)
             {
+                Pending = null;
+                Behind = 0;
                 if (!silent)
                     MessageBox.Show(owner, $"You're on the latest version ({Current}).",
                                     "Check for updates", MessageBoxButtons.OK,
@@ -165,6 +174,8 @@ internal static class Updater
 
             newer.Sort((x, y) => y.V.CompareTo(x.V));
             var latest = newer[0].V;
+            Pending = newer[0].Tag;
+            Behind = newer.Count;
 
             // A release says for itself whether it is one people must not stay
             // behind on. Anything that fixes a way for this to sit quiet while
@@ -211,19 +222,25 @@ internal static class Updater
             string notes = story.ToString();
             Log.Write($"update: {newer.Count} newer release(s), {Current} -> {latest}");
 
-            // The background watch only exists to notice a critical release;
+            // The background watch only exists to notice what is available;
             // a dialog over the game every few minutes would be worse than the
-            // problem it is looking for.
-            if (!ui) return;
+            // problem it is looking for. Installing without one is deliberate -
+            // the caller has already given notice on the overlay and waited for
+            // a safe moment.
+            if (!ui && !install) return;
 
-            using (var dlg = new UpdateDialog(latest, Current, notes, newer.Count))
-            {
-                if (dlg.ShowDialog(owner) != DialogResult.Yes) return;
-            }
+            if (install) Log.Write($"update: installing {newer[0].Tag} unattended");
+
+            if (!install)
+                using (var dlg = new UpdateDialog(latest, Current, notes, newer.Count))
+                {
+                    if (dlg.ShowDialog(owner) != DialogResult.Yes) return;
+                }
 
             if (!TargetWritable(out string blocked))
             {
                 Log.Write($"update blocked: {blocked}");
+                if (install) return;
                 MessageBox.Show(owner, blocked, "Update",
                                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -282,8 +299,9 @@ internal static class Updater
                            + "Not swapping a half-downloaded file - try again.";
                 Log.Write($"update: {msg}");
                 try { File.Delete(tmp); } catch { /* best effort */ }
-                MessageBox.Show(owner, msg, "Update",
-                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                if (!install)
+                    MessageBox.Show(owner, msg, "Update",
+                                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
             Log.Write($"update: downloaded {got} bytes ok");

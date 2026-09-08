@@ -56,7 +56,7 @@ public sealed class MainForm : Form
         _watch.Interval = 5 * 60 * 1000;
         _watch.Tick += (_, _) =>
         {
-            if (Updater.Critical is not null) return;
+            if (_criticalDone || Updater.Critical is not null) return;
             _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow, ui: false);
         };
 
@@ -778,8 +778,20 @@ public sealed class MainForm : Form
         base.OnShown(e);
         ReportRepairs();
         FirstRunSetup();
+        // With unattended installs on, the launch check has nothing to ask
+        // about: the countdown below handles it a few seconds later, in one
+        // place, and having waited for a fight to end.
         if (_cfg.CheckUpdatesOnStart)
-            _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow);
+            _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow,
+                                   ui: !_cfg.AutoInstall);
+        if (_cfg.ResumeArmed)
+        {
+            _cfg.ResumeArmed = false;
+            _cfg.SaveNow();
+            Log.Write("armed again after an update restart");
+            _engine.Toggle();
+        }
+
         _critical.Start();
         _watch.Start();
         if (_cfg.StartMinimised) Hide();
@@ -800,25 +812,63 @@ public sealed class MainForm : Form
     /// </summary>
     private void OnCriticalTick()
     {
-        if (Updater.Critical is null || _criticalDone) return;
+        if (_criticalDone) return;
+
+        // Two kinds of interruption, the same countdown. A critical release
+        // stops the game and says why, because staying behind on it is how
+        // somebody dies. An ordinary one, only a release or three ahead, is
+        // small enough to simply take: notice on the overlay, then it swaps
+        // itself and comes back. Both wait for the fight to end first.
+        bool critical = Updater.Critical is not null;
+        bool ordinary = !critical && _cfg.AutoInstall && Updater.Pending is not null
+                        && Updater.Behind <= _cfg.AutoInstallMaxBehind;
+
+        if (!critical && !ordinary)
+        {
+            _criticalLeft = 0;
+            return;
+        }
+
+        // A fresh countdown from whichever kind was found. Thirty seconds to
+        // stop and read something that can kill you; ten to notice a restart
+        // that takes a couple of seconds and puts everything back.
+        if (_criticalLeft <= 0) _criticalLeft = critical ? 31 : 11;
 
         _criticalLeft--;
 
+        string what = Updater.Critical ?? Updater.Pending ?? "";
+
         if (_criticalLeft > 0)
         {
-            _overlay?.SetAlert($"UPDATE {Updater.Critical} - pausing in {_criticalLeft}s");
+            _overlay?.SetAlert(critical
+                ? $"UPDATE {what} - pausing in {_criticalLeft}s"
+                : $"UPDATE {what} - restarting in {_criticalLeft}s");
             return;
         }
 
         if (_engine.InCombat)
         {
-            _overlay?.SetAlert($"UPDATE {Updater.Critical} - pausing once you are safe");
+            _overlay?.SetAlert($"UPDATE {what} - waiting until you are safe");
             return;
         }
 
         _criticalDone = true;
         _critical.Stop();
         _overlay?.SetAlert("");
+
+        // Come back the way it was left. Only here - every ordinary launch
+        // starts disarmed on purpose.
+        _cfg.ResumeArmed = _engine.Armed;
+        _cfg.SaveNow();
+
+        if (!critical)
+        {
+            Log.Write($"update: taking {what} unattended, armed={_cfg.ResumeArmed}");
+            _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow,
+                                   ui: false, install: true);
+            return;
+        }
+
         Log.Write($"update: pausing the session for critical release {Updater.Critical}");
 
         if (_engine.GameWindow != 0)
