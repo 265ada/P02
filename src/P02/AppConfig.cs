@@ -40,6 +40,16 @@ public sealed class WatcherConfig
     public bool UseText { get; set; } = true;
 
     /// <summary>
+    /// Your maximum for this pool, or 0 to work it out automatically.
+    ///
+    /// Memory holds thousands of number pairs that look exactly like a health
+    /// pool - ward at 90/90 is indistinguishable from life at 90/90 - so the
+    /// search needs something to aim at. Given a maximum it can pick the right
+    /// one; without one it is guessing, and it guessed wrong.
+    /// </summary>
+    public int KnownMax { get; set; }
+
+    /// <summary>
     /// Once a text region is set, how long its numbers may be unreadable before
     /// P02 stops acting at all.
     ///

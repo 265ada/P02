@@ -18,6 +18,7 @@ public sealed class GlobePanel : GroupBox
     private readonly NumericUpDown _panicGap = new();
     private readonly NumericUpDown _burst = new();
     private readonly NumericUpDown _hold = new();
+    private readonly NumericUpDown _knownMax = new();
     private readonly Label _burstTime = new();
     private readonly Label _effect = new();
     private bool _blind;
@@ -40,7 +41,7 @@ public sealed class GlobePanel : GroupBox
 
         Text = title;
         Width = 382;
-        Height = 442;
+        Height = 472;
         Padding = new Padding(10);
 
         int y = 24;
@@ -184,6 +185,22 @@ public sealed class GlobePanel : GroupBox
             Bounds = new Rectangle(232, y + 4, 130, 18),
             ForeColor = SystemColors.GrayText,
             Text = "raise if presses are missed",
+        });
+        y += 30;
+
+        Controls.Add(Lab("My max", 14, y + 4));
+        _knownMax.SetBounds(140, y, 72, 24);
+        _knownMax.Minimum = 0;
+        _knownMax.Maximum = 1_000_000;
+        _knownMax.Increment = 1;
+        _knownMax.Value = Math.Clamp(cfg.KnownMax, 0, 1_000_000);
+        _knownMax.ValueChanged += (_, _) => { _cfg.KnownMax = (int)_knownMax.Value; _onChange(); };
+        Controls.Add(_knownMax);
+        Controls.Add(new Label
+        {
+            Bounds = new Rectangle(218, y + 4, 150, 18),
+            ForeColor = SystemColors.GrayText,
+            Text = "0 = work it out",
         });
         y += 26;
 

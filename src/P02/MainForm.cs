@@ -31,7 +31,7 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(800, 704);
+        ClientSize = new Size(800, 734);
 
         var probe = new TextProbe(_engine.TextAvailable, _engine.TextUnavailable,
                                   _engine.ProbeText);
@@ -45,7 +45,7 @@ public sealed class MainForm : Form
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 470;
+        int y = 500;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);

@@ -10,6 +10,14 @@ with looking at a screen. It is also by far the most intrusive: reading another
 process is what anti-cheat looks for, where watching the screen is passive. Off
 unless you turn it on, and it asks before it does.
 
+**Tell it your maximum.** A heap holds thousands of number pairs shaped exactly
+like a health pool - ward at 90/90 is indistinguishable from life at 90/90, and
+that is precisely what it locked onto once. Put your maximum life and mana in the
+**My max** boxes and the search has something to aim at; leave them at 0 and it
+is guessing. A memory reading whose maximum does not match what you entered is
+ignored and triggers a fresh search, so a wrong lock corrects itself instead of
+sitting there being confidently wrong.
+
 No offsets are hardcoded. Published ones go stale on the first patch - the set
 this was built from resolved to a null pointer within two months of being
 written. It searches for the *shape* of the structure instead: maximum and

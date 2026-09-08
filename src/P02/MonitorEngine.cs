@@ -187,6 +187,7 @@ public sealed class MonitorEngine : IDisposable
         public long BlindSinceMs;
         public long LastGoodMs = long.MinValue / 2;
         public long LastDisagreeMs = long.MinValue / 2;
+        public long LastMemBadMs = long.MinValue / 2;
         public bool Blind;
     }
 
@@ -314,28 +315,45 @@ public sealed class MonitorEngine : IDisposable
             }
         }
 
-        // Memory beats everything on screen when it is working: exact, and
-        // free of every way a picture can mislead. The screen stays as the
-        // fallback, and as the hint that finds the address in the first place.
+        // Whatever the screen can tell us about the size of the pool, the
+        // memory search needs - and it needs it whether or not memory is
+        // currently reading, since a wrong answer can only be corrected by
+        // something that knows better.
+        int expectedMax = c.KnownMax > 0 ? c.KnownMax : (fromText ? ParseMax(textRaw) : 0);
+        if (_cfg.UseMemory)
+        {
+            if (name == "Life") _mem.HintMaxHp = expectedMax;
+            else _mem.HintMaxMp = expectedMax;
+        }
+
+        // Memory is exact when it is pointed at the right thing, and worthless
+        // when it is not. Thousands of pairs in a heap look like a health pool,
+        // so it is only believed when it agrees with what we already know.
         if (_cfg.UseMemory && _mem.TryGet(out var ms) && _mem.NowMs - ms.AtMs < 500)
         {
-            double memFrac = name == "Life" ? ms.LifeFraction : ms.ManaFraction;
             int cur = name == "Life" ? ms.CurHp : ms.CurMp;
             int max = name == "Life" ? ms.MaxHp : ms.MaxMp;
-            if (max > 0)
+
+            bool trusted = max > 0 && (expectedMax == 0 || max == expectedMax);
+
+            if (trusted)
             {
-                frac = memFrac;
+                frac = name == "Life" ? ms.LifeFraction : ms.ManaFraction;
                 fromText = true;
                 textRaw = $"{cur:N0}/{max:N0} (memory)";
                 textLostOverride = false;
             }
-        }
-        else if (fromText && _cfg.UseMemory)
-        {
-            // Feed what the screen says back to the search, so it can pick the
-            // right candidate out of everything with the same shape.
-            if (name == "Life") _mem.HintMaxHp = ParseMax(textRaw);
-            else _mem.HintMaxMp = ParseMax(textRaw);
+            else if (max > 0 && expectedMax > 0)
+            {
+                textRaw = $"memory says max {max:N0}, yours is {expectedMax:N0} - ignored";
+                if (now - st.LastMemBadMs > 10000)
+                {
+                    st.LastMemBadMs = now;
+                    Log.Write($"{name}: memory found max {max} but the max is {expectedMax}"
+                              + " - wrong structure, searching again");
+                    _mem.Rescan();
+                }
+            }
         }
 
         // The numbers are only drawn on the gameplay screen. Losing them for
