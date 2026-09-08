@@ -268,6 +268,29 @@ static class T
             fails += bad;
         }
 
+        // With a label configured but absent from what was read, nothing is
+        // reported. Falling back to position is what put ward on screen as
+        // life, and a refused reading is better than the wrong one.
+        {
+            int bad = 0;
+            string noLabel = "1,465/1,465\n2,005/2,005\n90/90";
+
+            bool gotNoLabel = TextOcr.TryParse(noLabel, out int c, out int m, "Life", 0);
+            Console.WriteLine((!gotNoLabel ? "PASS" : "FAIL")
+                + "  label configured but missing -> "
+                + (gotNoLabel ? $"{c}/{m}" : "refused") + "  (wanted refused)");
+            if (gotNoLabel) bad++;
+
+            // The maximum still rescues it when the label is not readable.
+            bool gotByMax = TextOcr.TryParse(noLabel, out int c2, out int m2, "Life", 1465);
+            Console.WriteLine((gotByMax && c2 == 1465 && m2 == 1465 ? "PASS" : "FAIL")
+                + "  missing label, known maximum -> "
+                + (gotByMax ? $"{c2}/{m2}" : "refused") + "  (wanted 1465/1465)");
+            if (!(gotByMax && c2 == 1465 && m2 == 1465)) bad++;
+
+            fails += bad;
+        }
+
         // Every key the bind box can capture must be sendable. Numpad keys
         // share scancodes with the navigation cluster and differ only by the
         // extended flag, so this guards a genuinely easy mistake.

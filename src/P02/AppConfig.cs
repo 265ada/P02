@@ -307,7 +307,31 @@ public sealed class AppConfig
     /// </summary>
     public void Repair()
     {
-        if (SettingsVersion >= 4) return;
+        // Each repair carries its own version, because a settings file stamped
+        // by an earlier release must still receive later fixes. A single gate
+        // meant the label repair below never ran on any config that had already
+        // been through the previous one - which left the numbers being picked
+        // by position, and reading ward as life.
+        int was = SettingsVersion;
+        if (was >= 5) return;
+
+        foreach (var (name, w) in new[] { ("Life", Life), ("Mana", Mana), ("Shield", Shield) })
+        {
+            if (w.TextLabel.Length == 0)
+            {
+                w.TextLabel = name;
+                Repairs.Add($"{name}: the numbers had no label to look for, so whichever line "
+                            + $"came first was used - ward included. Now anchored on \"{name}\".");
+            }
+        }
+
+        if (was >= 4)
+        {
+            SettingsVersion = 5;
+            foreach (string r in Repairs) Log.Write($"repair: {r}");
+            if (Repairs.Count > 0) SaveNow();
+            return;
+        }
 
         if (HideFromCapture)
         {
@@ -334,9 +358,6 @@ public sealed class AppConfig
                 w.ColourMargin = 30;
             }
 
-            if (w.TextLabel.Length == 0)
-                w.TextLabel = name;
-
             if (w.HoldMs < 40)
             {
                 Repairs.Add($"{name}: key was held for {w.HoldMs} ms, short enough for the "
@@ -345,7 +366,7 @@ public sealed class AppConfig
             }
         }
 
-        SettingsVersion = 4;
+        SettingsVersion = 5;
         foreach (string r in Repairs) Log.Write($"repair: {r}");
         if (Repairs.Count > 0) SaveNow();
     }

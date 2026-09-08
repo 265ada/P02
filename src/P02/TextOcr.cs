@@ -42,6 +42,7 @@ internal sealed partial class TextOcr : IDisposable
         public int StableMax;
         public int PendingMax;
         public int PendingCount;
+        public long LastComplaintMs = long.MinValue / 2;
     }
 
     private readonly Dictionary<string, Slot> _slots = new();
@@ -164,7 +165,21 @@ internal sealed partial class TextOcr : IDisposable
         int expected;
         lock (_gate) { label = slot.Label; expected = slot.ExpectedMax; }
 
-        if (!TryParse(text, out int cur, out int max, label, expected)) return;
+        if (!TryParse(text, out int cur, out int max, label, expected))
+        {
+            // Silence here is correct - a refused reading is better than the
+            // wrong line - but it should be explicable.
+            if (label.Length > 0
+                && !text.Contains(label, StringComparison.OrdinalIgnoreCase)
+                && _clock.ElapsedMilliseconds - slot.LastComplaintMs > 10000)
+            {
+                slot.LastComplaintMs = _clock.ElapsedMilliseconds;
+                string seen = text.Replace('\n', ' ').Replace('\r', ' ').Trim();
+                Log.Write($"{name}: read \"{seen}\" but it does not contain "
+                          + $"\"{label}\" - include that word in the box");
+            }
+            return;
+        }
 
         // A maximum changes rarely, and a misread one is the difference between
         // 40% and 4%. Accept a new maximum only once it has repeated.
