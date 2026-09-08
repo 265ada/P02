@@ -75,7 +75,8 @@ distance the candidates agree on. Which side of a maximum its current value sits
 on is learned the same way. Two known values inside one structure is a far
 stronger signature than one known value at a guessed offset.
 
-A heap holds thousands of pairs shaped like a health pool — ward at 90/90 is
+**Both maxima are needed, including one for a pool you are not watching.** A
+heap holds thousands of pairs shaped like a health pool — ward at 90/90 is
 indistinguishable from life at 90/90 — so it will not search without both maxima.
 Set the numbers up first and they arrive on their own. A reading whose maximum
 drifts from what is expected is ignored and starts a fresh search, so a wrong

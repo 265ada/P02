@@ -241,7 +241,15 @@ internal sealed class GameMemory : IDisposable
         int wantHp = HintMaxHp, wantMp = HintMaxMp;
         if (wantHp <= 0 || wantMp <= 0)
         {
-            Status = "enter your maximum life and mana - both are needed to find you";
+            // Saying which one is missing matters: one of these is usually
+            // already filled in, and "enter both" reads as though neither is.
+            Status = wantHp <= 0 && wantMp <= 0
+                ? "needs your maximum life and mana - press Find numbers and they fill in"
+                : wantMp <= 0
+                    ? $"has life ({wantHp}) but needs maximum mana - one number matches "
+                      + "thousands of places, two identifies you"
+                    : $"has mana ({wantMp}) but needs maximum life - one number matches "
+                      + "thousands of places, two identifies you";
             return 0;
         }
 

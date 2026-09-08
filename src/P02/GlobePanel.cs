@@ -327,6 +327,19 @@ public sealed class GlobePanel : Card
               + $"{1000 / Math.Max(1, ms)} bursts a second.";
     }
 
+    /// <summary>
+    /// Memory needs both maxima even for a pool nobody is watching: one number
+    /// matches thousands of places in a heap, two identify a character. That is
+    /// not obvious from a panel that is switched off.
+    /// </summary>
+    public void NeedMaxForMemory(bool needed)
+    {
+        if (!needed || _cfg.KnownMax > 0) return;
+        _warn.Text = "Memory needs this maximum too, even with this globe off - "
+                   + "press Find numbers.";
+        _warn.ForeColor = Color.FromArgb(240, 180, 70);
+    }
+
     private void RefreshWarning()
     {
         if (_blind) return;

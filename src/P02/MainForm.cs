@@ -590,6 +590,12 @@ public sealed class MainForm : Form
                 _mana.Update(mana);
 
                 _life.UpdateShield(shield);
+
+                // Memory sits idle until both maxima are known, and the panel
+                // that is missing one is the place to say so.
+                bool waiting = _cfg.UseMemory && !_engine.MemoryFound;
+                _life.NeedMaxForMemory(waiting);
+                _mana.NeedMaxForMemory(waiting);
                 _focus.Text = focused
                     ? "game window focused — firing allowed"
                     : "not firing: focused window does not match";
