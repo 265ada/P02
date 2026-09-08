@@ -39,8 +39,15 @@ fraction of the globe; loose, and the globe merges into its frame. It then
 calibrates against the full globe and checks the result actually reads 100%,
 saying so plainly when it does not rather than accepting a bad box silently.
 
-P02's own windows are excluded from screen capture, so the Check window can sit
-over the globe it is watching without being read as the globe.
+Capture reads the screen, so a P02 window sitting over a globe gets read as the
+globe. The status line says so when that happens, rather than P02 quietly
+reading the wrong thing.
+
+There is a **Hide from screen capture** option for this, and it is off for a
+reason: the flag it uses hides the window from *every* capture path on the
+system - screenshots, the Snipping Tool, Discord and OBS all see nothing. It was
+briefly on by default, which made P02 impossible to screenshot or share. Moving
+the window is the better fix.
 
 Auto-find looks in the corners of the **game window**, found by the same title
 match, and falls back to the screen your other globe is on. It used to search the

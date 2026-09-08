@@ -175,6 +175,13 @@ public sealed class AppConfig
     public bool StartMinimised { get; set; }
     public bool CheckUpdatesOnStart { get; set; } = true;
 
+    /// <summary>
+    /// Hide P02's windows from screen capture so they cannot be read as a
+    /// globe. Off, and staying off: it also hides them from screenshots, the
+    /// Snipping Tool, Discord and OBS.
+    /// </summary>
+    public bool HideFromCapture { get; set; }
+
     /// <summary>Bumped when a stored setting needs repairing on load.</summary>
     public int SettingsVersion { get; set; }
 
@@ -189,7 +196,14 @@ public sealed class AppConfig
     /// </summary>
     public void Repair()
     {
-        if (SettingsVersion >= 3) return;
+        if (SettingsVersion >= 4) return;
+
+        if (HideFromCapture)
+        {
+            HideFromCapture = false;
+            Repairs.Add("Turned off hiding from screen capture - it also hid the window from "
+                        + "screenshots and screen sharing.");
+        }
 
         foreach (var (name, w) in new[] { ("Life", Life), ("Mana", Mana) })
         {
@@ -217,7 +231,7 @@ public sealed class AppConfig
             }
         }
 
-        SettingsVersion = 3;
+        SettingsVersion = 4;
         foreach (string r in Repairs) Log.Write($"repair: {r}");
         if (Repairs.Count > 0) SaveNow();
     }

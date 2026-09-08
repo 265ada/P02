@@ -120,9 +120,9 @@ public sealed class PreviewForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        // So the preview can be dragged over the globe it is watching without
-        // showing itself back.
-        Native.ExcludeFromCapture(Handle);
+        // Left visible to capture on purpose: this is the window people are
+        // most often asked to screenshot.
+        Native.ExcludeFromCapture(Handle, false);
     }
 
     private void Refresh_()

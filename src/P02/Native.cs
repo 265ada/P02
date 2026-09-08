@@ -231,16 +231,24 @@ internal static class Native
     /// <summary>Window is skipped by screen-capture APIs entirely.</summary>
     public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
 
+    /// <summary>Normal: the window appears in captures like anything else.</summary>
+    public const uint WDA_NONE = 0x00;
+
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool SetWindowDisplayAffinity(nint hWnd, uint dwAffinity);
 
     /// <summary>
-    /// Makes a window invisible to BitBlt. Our capture reads the screen, so any
-    /// P02 window sitting over a globe would be read as the globe.
+    /// Hides a window from BitBlt, so P02's own windows are not read as a globe
+    /// when they sit over one.
+    ///
+    /// This is off by default and must stay that way: the flag hides the window
+    /// from every capture path, not just ours - screenshots, the Snipping Tool,
+    /// Discord and OBS all see nothing. Turning it on silently made the app
+    /// impossible to screenshot or share.
     /// </summary>
-    public static void ExcludeFromCapture(nint hWnd)
+    public static void ExcludeFromCapture(nint hWnd, bool hide)
     {
-        try { SetWindowDisplayAffinity(hWnd, WDA_EXCLUDEFROMCAPTURE); }
+        try { SetWindowDisplayAffinity(hWnd, hide ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE); }
         catch { /* older Windows: nothing to do */ }
     }
 }

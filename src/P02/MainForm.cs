@@ -117,6 +117,29 @@ public sealed class MainForm : Form
         { _cfg.CheckUpdatesOnStart = upd.Checked; Save(); };
         Controls.Add(upd);
 
+        var hide = new CheckBox
+        {
+            Text = "Hide from screen capture",
+            Bounds = new Rectangle(560, y + 3, 200, 22),
+            Checked = cfg.HideFromCapture,
+        };
+        hide.CheckedChanged += (_, _) =>
+        {
+            _cfg.HideFromCapture = hide.Checked;
+            Save();
+            Native.ExcludeFromCapture(Handle, hide.Checked);
+            if (hide.Checked)
+                MessageBox.Show(this,
+                    "This window is now invisible to screen capture of any kind - "
+                    + "screenshots, the Snipping Tool, Discord and OBS included."
+                    + Environment.NewLine + Environment.NewLine
+                    + "It stops P02 being read as a globe if it covers one. Untick it "
+                    + "before trying to screenshot or share the window.",
+                    "Hide from screen capture", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        };
+        Controls.Add(hide);
+
+
         var diagBtn = new Button
         {
             Text = "Export diagnostics",
@@ -250,9 +273,16 @@ public sealed class MainForm : Form
                 _focus.ForeColor = focused
                     ? Color.FromArgb(0, 120, 0)
                     : SystemColors.GrayText;
-                _live.Text = $"focused window: \"{_engine.ForegroundTitle}\"     "
-                    + $"polls/sec: {_engine.ActualHz}     "
-                    + $"work per poll: {_engine.LastPollMs:0.0} ms";
+                string covering = CoveredGlobes();
+                _live.Text = covering.Length > 0
+                    ? $"This window is covering the {covering} globe - move it, or the "
+                      + "capture reads P02 instead of the globe."
+                    : $"focused window: \"{_engine.ForegroundTitle}\"     "
+                      + $"polls/sec: {_engine.ActualHz}     "
+                      + $"work per poll: {_engine.LastPollMs:0.0} ms";
+                _live.ForeColor = covering.Length > 0
+                    ? Color.FromArgb(190, 60, 0)
+                    : SystemColors.GrayText;
             });
         }
         catch (ObjectDisposedException) { /* closing */ }
@@ -320,7 +350,7 @@ public sealed class MainForm : Form
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        Native.ExcludeFromCapture(Handle);
+        Native.ExcludeFromCapture(Handle, _cfg.HideFromCapture);
         RegisterArmHotkey();
     }
 
@@ -400,6 +430,24 @@ public sealed class MainForm : Form
             MessageBox.Show(this, ex.Message, "Export diagnostics",
                             MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    /// <summary>
+    /// Capture reads the screen, so a P02 window sitting over a globe is read
+    /// as the globe. Saying so beats the old fix of hiding the window from
+    /// every capture on the system.
+    /// </summary>
+    private string CoveredGlobes()
+    {
+        if (!Visible || WindowState == FormWindowState.Minimized || _cfg.HideFromCapture)
+            return string.Empty;
+
+        var names = new List<string>();
+        if (_cfg.Life.Enabled && _cfg.Life.Region.IsValid
+            && Bounds.IntersectsWith(_cfg.Life.Region.ToRect())) names.Add("Life");
+        if (_cfg.Mana.Enabled && _cfg.Mana.Region.IsValid
+            && Bounds.IntersectsWith(_cfg.Mana.Region.ToRect())) names.Add("Mana");
+        return string.Join(" and ", names);
     }
 
     protected override void OnFormClosing(FormClosingEventArgs e)
