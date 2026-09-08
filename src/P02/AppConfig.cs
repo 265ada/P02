@@ -359,6 +359,17 @@ public sealed class AppConfig
     public bool OverlayFollowBar { get; set; }
 
     /// <summary>
+    /// Where the readout sits relative to the character's bar.
+    ///
+    /// Kept as an offset rather than a position, so it stays exactly where it
+    /// was dropped while the bar is where it usually is - and moves with it
+    /// when the view shifts, which is what opening the inventory does.
+    /// </summary>
+    public int FollowOffsetX { get; set; } = int.MinValue;
+
+    public int FollowOffsetY { get; set; } = int.MinValue;
+
+    /// <summary>
     /// Hide the readout whenever the game's numbers are not on screen.
     ///
     /// A shop, the passive tree or an inventory covers the HUD, and the

@@ -87,7 +87,7 @@ public sealed class MainForm : Form
             if (follow.Checked) { _cfg.OverlaySnap = false; snap.Checked = false; }
             Save();
             if (_overlay is { IsDisposed: false })
-                _overlay.Locked = _cfg.OverlaySnap || _cfg.OverlayFollowBar;
+                _overlay.Locked = _cfg.OverlaySnap;
             PlaceOverlay();
         };
         Controls.Add(follow);
@@ -102,7 +102,7 @@ public sealed class MainForm : Form
             if (snap.Checked) { _cfg.OverlayFollowBar = false; follow.Checked = false; }
             Save();
             if (_overlay is { IsDisposed: false })
-                _overlay.Locked = _cfg.OverlaySnap || _cfg.OverlayFollowBar;
+                _overlay.Locked = _cfg.OverlaySnap;
             PlaceOverlay();
         };
 
@@ -690,11 +690,21 @@ public sealed class MainForm : Form
                     if (_overlay is not { IsDisposed: false }) return;
                     _cfg.OverlayX = _overlay.Location.X;
                     _cfg.OverlayY = _overlay.Location.Y;
+
+                    // While following, a drag is choosing where it sits
+                    // relative to the bar rather than on the screen.
+                    if (_cfg.OverlayFollowBar
+                        && _engine.CharacterBar is { Width: > 0 } at)
+                    {
+                        _cfg.FollowOffsetX = _overlay.Location.X - at.X;
+                        _cfg.FollowOffsetY = _overlay.Location.Y - at.Y;
+                    }
+
                     _cfg.Save();
                 };
             }
 
-            _overlay.Locked = _cfg.OverlaySnap || _cfg.OverlayFollowBar;
+            _overlay.Locked = _cfg.OverlaySnap;
             PlaceOverlay();
             _overlay.SetArmed(_engine.Armed);
             _overlay.Show();
@@ -729,17 +739,27 @@ public sealed class MainForm : Form
         // is a fixed part of the HUD and already tracked, so it follows the
         // readout it is describing rather than a remembered screen position
         // that is wrong the moment a window moves or a monitor changes.
-        // Following the character's own bar wins, being the most specific
-        // request: sit just under it and go where it goes.
+        // Following the character's bar does not mean chasing it. The readout
+        // stays exactly where it was dropped - what is remembered is where that
+        // was relative to the bar, so it only actually moves when the view
+        // does, which is what opening the inventory does to it. Chasing every
+        // twitch of a bar that is redrawn constantly was unusable.
         if (!forceDefault && _cfg.OverlayFollowBar && _engine.CharacterBar is { Width: > 0 } bar)
         {
-            int x = bar.X + bar.Width / 2 - _overlay.Width / 2;
-            int yy = bar.Bottom + 8;
+            if (_cfg.FollowOffsetX == int.MinValue)
+            {
+                // Nothing chosen yet: under the bar, and that becomes the
+                // offset the moment it is dragged anywhere else.
+                _cfg.FollowOffsetX = -_overlay.Width / 2 + bar.Width / 2;
+                _cfg.FollowOffsetY = bar.Height + 8;
+            }
+
             var screen = Screen.FromPoint(new Point(bar.X, bar.Y)).WorkingArea;
-            if (yy + _overlay.Height > screen.Bottom) yy = bar.Y - _overlay.Height - 8;
             _overlay.Location = new Point(
-                Math.Clamp(x, screen.Left, screen.Right - _overlay.Width),
-                Math.Clamp(yy, screen.Top, screen.Bottom - _overlay.Height));
+                Math.Clamp(bar.X + _cfg.FollowOffsetX, screen.Left,
+                           screen.Right - _overlay.Width),
+                Math.Clamp(bar.Y + _cfg.FollowOffsetY, screen.Top,
+                           screen.Bottom - _overlay.Height));
             return;
         }
 

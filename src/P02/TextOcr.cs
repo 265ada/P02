@@ -543,6 +543,26 @@ internal sealed partial class TextOcr : IDisposable
             }
         }
 
+        // Life, Shield and Ward are one stacked block in the same corner, the
+        // same width, evenly spaced. So finding any of them locates the others
+        // whether or not their own word came back readable - and Life is the
+        // one that keeps not coming back, because it sits at the top of the
+        // block where the capture edge cuts closest to the glyphs.
+        //
+        // Geometry, not guesswork: the box is placed where the found line says
+        // it must be, and only when nothing was found for it directly.
+        if (!found.ContainsKey("Life") && found.TryGetValue("Shield", out var shield))
+        {
+            var life = new Rectangle(shield.X, shield.Y - shield.Height,
+                                     shield.Width, shield.Height);
+            if (life.Y >= search.Y)
+            {
+                found["Life"] = life;
+                Log.Write($"placed Life at {life} - one line above Shield, which was "
+                          + "found; its own word did not come back readable");
+            }
+        }
+
         return found;
     }
 
