@@ -13,6 +13,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Needed for the changelog below: it walks back to the previous tag.
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -26,6 +29,30 @@ jobs:
           [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || v="0.0.0"
           echo "version=$v" >> "$GITHUB_OUTPUT"
 
+      - name: Build release notes
+        shell: bash
+        run: |
+          # GitHub's generated notes only list pull requests, so a repository
+          # pushed straight to main gets a body containing nothing but the
+          # compare link - and an empty "what changed" panel in the updater.
+          prev=$(git tag --sort=-v:refname | grep -vFx "$GITHUB_REF_NAME" | head -n 1)
+          if [ -n "$prev" ]; then
+            range="$prev..HEAD"
+            echo "Changes since $prev" > notes.md
+          else
+            range="HEAD"
+            echo "First release" > notes.md
+          fi
+          echo "" >> notes.md
+          git log --no-merges --reverse --pretty=format:'### %s%n%n%b' "$range" >> notes.md
+          echo "" >> notes.md
+          echo "" >> notes.md
+          if [ -n "$prev" ]; then
+            echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${prev}...${GITHUB_REF_NAME}" >> notes.md
+          fi
+          echo "--- notes.md ---"
+          cat notes.md
+
       - name: Publish single-file exe
         run: >
           dotnet publish src/P02/P02.csproj -c Release
@@ -35,4 +62,4 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: publish/P02.exe
-          generate_release_notes: true
+          body_path: notes.md

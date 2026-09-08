@@ -19,8 +19,13 @@ public sealed partial class UpdateDialog : Form
         t = Regex.Replace(t, @"\*\*(.+?)\*\*", "$1");   // bold
         t = Regex.Replace(t, @"^#+\s*", "", RegexOptions.Multiline);
         t = Regex.Replace(t, @"^\s*\*\s+", "  - ", RegexOptions.Multiline);
-        t = Regex.Replace(t, @"(\r?\n){3,}", Environment.NewLine + Environment.NewLine);
         t = Regex.Replace(t, @"(?m)^\s*Full Changelog\s*:?\s*$", "");
+
+        // A multiline TextBox only breaks on CRLF. The API returns bare
+        // newlines, so without this the whole changelog renders as one line.
+        t = Regex.Replace(t, @"\r\n|\r|\n", "\n");
+        t = Regex.Replace(t, @"\n{3,}", "\n\n");
+        t = t.Replace("\n", Environment.NewLine);
         return t.Trim();
     }
 
@@ -50,6 +55,17 @@ public sealed partial class UpdateDialog : Form
             Bounds = new Rectangle(16, 46, 428, 170),
             Text = Tidy(notes),
         };
+
+        // A release whose notes are only a compare link used to leave this
+        // panel completely blank, which reads as a broken dialog.
+        if (body.Text.Length == 0)
+        {
+            body.Text = "No release notes were published for this version."
+                      + Environment.NewLine + Environment.NewLine
+                      + "The changelog link below shows what changed.";
+            body.ForeColor = SystemColors.GrayText;
+        }
+
         body.Select(0, 0);
         Controls.Add(body);
 
