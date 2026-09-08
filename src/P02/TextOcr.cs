@@ -122,6 +122,13 @@ internal sealed partial class TextOcr : IDisposable
         return false;
     }
 
+    /// <summary>The maximum currently being read and settled on, or 0.</summary>
+    public int StableMaxOf(string name)
+    {
+        lock (_gate)
+            return _slots.TryGetValue(name, out var slot) ? slot.StableMax : 0;
+    }
+
     /// <summary>
     /// A maximum that keeps being read while a different one is configured, or
     /// 0 when there is no such disagreement.
@@ -459,6 +466,18 @@ internal sealed partial class TextOcr : IDisposable
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// Reads a region once and parses it exactly as the watcher will, so a
+    /// setup can be proved rather than assumed.
+    /// </summary>
+    public bool VerifyRegion(Rectangle region, string label, out int cur, out int max,
+                             out string sawText)
+    {
+        cur = max = 0;
+        sawText = ProbeOnce(region);
+        return sawText.Length > 0 && TryParse(sawText, out cur, out max, label, 0);
     }
 
     /// <summary>One-off read, for the setup button to show what it sees.</summary>

@@ -892,7 +892,9 @@ public sealed class GlobePanel : GroupBox
         _knownMax.Value = Math.Clamp(now, 0, 1_000_000);
         _settingMax = false;
 
-        _warn.Text = $"Maximum changed from {was:N0} to {now:N0} - updated to match.";
+        _warn.Text = was == 0
+            ? $"Maximum read as {now:N0} - filled in from the numbers."
+            : $"Maximum changed from {was:N0} to {now:N0} - updated to match.";
         _warn.ForeColor = Color.FromArgb(0, 100, 0);
     }
 

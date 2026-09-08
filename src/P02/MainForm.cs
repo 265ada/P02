@@ -343,7 +343,8 @@ public sealed class MainForm : Form
             {
                 BeginInvoke(() =>
                 {
-                    (name == "Life" ? _life : _mana).MaxAdopted(was, now);
+                    if (name == "Life") _life.MaxAdopted(was, now);
+                    else if (name == "Mana") _mana.MaxAdopted(was, now);
                     _cfg.SaveNow();
                 });
             }
@@ -713,10 +714,10 @@ public sealed class MainForm : Form
         _life.RefreshFromConfig();
         _mana.RefreshFromConfig();
 
+        bool trouble = result.Contains("WARNING") || result.Contains("could not")
+                       || result.Contains("Could not");
         MessageBox.Show(this, result, "Find numbers", MessageBoxButtons.OK,
-                        result.StartsWith("Found")
-                            ? MessageBoxIcon.Information
-                            : MessageBoxIcon.Warning);
+                        trouble ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
     }
 
     private void ExportDiagnostics()

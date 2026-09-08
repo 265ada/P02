@@ -43,7 +43,11 @@ roughly two seconds on first use. If more than one candidate matches, the
 numbers read off the screen pick between them, and failing that it watches which
 one moves.
 
-**Numbers on screen** - press **Find numbers** and it locates them itself. The
+**Numbers on screen** - press **Find numbers** and it locates them itself, then
+reads each one back and tells you what it will be watching. That last part
+matters: a box a few pixels out lands on the line below, and life reading the
+shield value looks perfectly healthy right up until it kills you. Two stats
+reading the same numbers is called out as well. The
 OCR engine reports where every word it reads was, so there is no need to drag a
 box around anything: it looks in the corners of the game for the words Life,
 Mana and Shield, and the numbers beside them are the region. Setting a box by
@@ -59,7 +63,11 @@ so firing at it is pure waste.
 **Numbers** - point it at the `1,465/1,465` beside the globe and that becomes
 what decides. It is an exact ratio, needs no calibration and no colour tuning,
 and because the maximum is read too, gear and buffs that move your pool change
-nothing. Windows does the reading, so there is nothing extra to install. **A maximum that changes looks after itself.** Levelling and gear move it, and a
+nothing. Windows does the reading, so there is nothing extra to install. **Nobody has to type a maximum.** Left at 0, it is read from the numbers and
+filled in, which is also what lets the memory search find you - the numbers give
+the maximum, the maximum finds the character, and no field needs touching.
+
+**A maximum that changes looks after itself.** Levelling and gear move it, and a
 stated maximum that has gone stale refuses every reading in silence - which
 looks exactly like the app being broken. The numbers on screen already carry the
 true maximum, so when they have insisted on a different one for long enough to

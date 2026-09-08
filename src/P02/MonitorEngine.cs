@@ -113,14 +113,19 @@ public sealed class MonitorEngine : IDisposable
     /// </summary>
     private void AdoptChangedMax(string name, WatcherConfig c)
     {
-        if (c.KnownMax <= 0) return;
+        if (!c.UseText || !c.TextRegion.IsValid) return;
 
-        int seen = _ocr.SuggestedMax(name);
+        // Nothing entered: learn it. This is the whole chain - the numbers give
+        // the maximum, the maximum lets the memory search find you, and nobody
+        // types anything.
+        int seen = c.KnownMax <= 0 ? _ocr.StableMaxOf(name) : _ocr.SuggestedMax(name);
         if (seen <= 0 || seen == c.KnownMax) return;
 
         int was = c.KnownMax;
         c.KnownMax = seen;
-        Log.Write($"{name}: maximum changed from {was} to {seen} - adopted");
+        Log.Write(was == 0
+            ? $"{name}: maximum read as {seen} - filled in"
+            : $"{name}: maximum changed from {was} to {seen} - adopted");
 
         SyncTextRegions();
         if (_cfg.UseMemory) _mem.Rescan();
@@ -172,8 +177,42 @@ public sealed class MonitorEngine : IDisposable
             return "Could not find the numbers. Is the game on screen, with life and mana "
                  + "showing? They are only drawn during play.";
 
-        return "Found " + string.Join(", ", done)
-             + ". These now decide when to fire - no calibration needed.";
+        // Reading each one back is the only way to know it landed on the right
+        // line. A box a few pixels out lands on the line below, and life
+        // reading the shield value looks perfectly healthy until it kills you.
+        var report = new List<string>();
+        var seen = new Dictionary<string, int>();
+
+        foreach (var (label, cfg) in new[]
+                 { ("Life", _cfg.Life), ("Mana", _cfg.Mana), ("Shield", _cfg.Shield) })
+        {
+            if (!done.Contains(label)) continue;
+
+            if (!_ocr.VerifyRegion(cfg.TextRegion.ToRect(), label,
+                                   out int cur, out int max, out string raw))
+            {
+                cfg.TextRegion = new Box();
+                report.Add($"{label}: could not read it back"
+                           + (raw.Length > 0 ? $" (saw \"{raw}\")" : "") + " - not used");
+                continue;
+            }
+
+            seen[label] = max;
+            report.Add($"{label}: {cur:N0}/{max:N0}");
+        }
+
+        // Two stats reading the same numbers means one box is on the other's
+        // line. Life reading shield is the dangerous direction.
+        foreach (var (a, b) in new[] { ("Life", "Shield"), ("Life", "Mana"), ("Mana", "Shield") })
+        {
+            if (!seen.TryGetValue(a, out int x) || !seen.TryGetValue(b, out int y)) continue;
+            if (x != y) continue;
+            report.Add($"WARNING: {a} and {b} are reading the same numbers - one box is on "
+                       + "the other's line. Use Numbers... on that panel and drag it yourself.");
+        }
+
+        SyncTextRegions();
+        return string.Join(Environment.NewLine, report);
     }
 
     /// <summary>Reads a region once, for the setup button.</summary>
