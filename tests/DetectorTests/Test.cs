@@ -321,6 +321,47 @@ static class T
             fails += bad;
         }
 
+        // The globe pixels must never decide once memory or the numbers are
+        // asked for. This has come back three times in different disguises -
+        // most recently as a ding on every loading screen, where the numbers
+        // vanish and the pixels read the loading screen.
+        {
+            int bad = 0;
+            const int grace = 2000;
+
+            void Case(string what, bool better, bool exactNow, bool hadExact,
+                      long since, long now, double wantFrac, bool wantHold)
+            {
+                var c = MonitorEngine.ChooseSource(better, exactNow,
+                                                   exactFrac: 0.20, pixelFrac: 0.00,
+                                                   hadExact: hadExact, lastExactFrac: 0.95,
+                                                   sinceMs: since, nowMs: now, graceMs: grace);
+                bool ok = Math.Abs(c.Frac - wantFrac) < 0.001 && c.Hold == wantHold;
+                Console.WriteLine((ok ? "PASS" : "FAIL") + $"  {what} -> "
+                    + $"{c.Frac:P0}{(c.Hold ? ", held" : "")}"
+                    + $"  (wanted {wantFrac:P0}{(wantHold ? ", held" : "")})");
+                if (!ok) bad++;
+            }
+
+            // Nothing better asked for: the pixels are all there is.
+            Case("pixels only", false, false, false, 0, 10_000, 0.00, false);
+
+            // An exact reading is available and wins.
+            Case("numbers reading", true, true, true, 0, 10_000, 0.20, false);
+
+            // Numbers gone for a moment: carry the last exact value, do NOT
+            // fall to the pixels, which read 0% on a loading screen.
+            Case("gone 500ms, carries last", true, false, true, 9_500, 10_000, 0.95, false);
+
+            // Gone too long: hold fire outright.
+            Case("gone 3s, holds", true, false, true, 7_000, 10_000, 0.95, true);
+
+            // Never worked: holds immediately, no grace at all.
+            Case("never read, holds now", true, false, false, 10_000, 10_000, 0.00, true);
+
+            fails += bad;
+        }
+
         // Every key the bind box can capture must be sendable. Numpad keys
         // share scancodes with the navigation cluster and differ only by the
         // extended flag, so this guards a genuinely easy mistake.

@@ -114,6 +114,16 @@ public sealed class WatcherConfig
     /// <summary>Below this fraction, switch to the short gap and fire on sight.</summary>
     public double PanicBelow { get; set; } = 0.30;
 
+    /// <summary>
+    /// The emergency floor: below this, every gap is ignored and it presses as
+    /// fast as a key can physically be sent.
+    ///
+    /// Capped at 30% deliberately. Above that it stops being an emergency and
+    /// becomes a way to spend a flask's charges on chip damage, which is what
+    /// leaves nothing left for the hit that matters.
+    /// </summary>
+    public double UberBelow { get; set; } = 0.15;
+
     /// <summary>Gap between presses while panicking. Charges allow this.</summary>
     public int PanicCooldownMs { get; set; } = 60;
 

@@ -20,6 +20,7 @@ public sealed class GlobePanel : GroupBox
     private readonly NumericUpDown _burst = new();
     private readonly NumericUpDown _hold = new();
     private readonly NumericUpDown _knownMax = new();
+    private readonly NumericUpDown _uber = new();
     private readonly Label _burstTime = new();
     private readonly Label _effect = new();
     private bool _blind;
@@ -54,7 +55,7 @@ public sealed class GlobePanel : GroupBox
 
         Text = title;
         Width = 382;
-        Height = 492;
+        Height = 552;
         Padding = new Padding(10);
 
         int y = 24;
@@ -175,7 +176,39 @@ public sealed class GlobePanel : GroupBox
         _panicGap.ValueChanged += (_, _) =>
             { _cfg.PanicCooldownMs = (int)_panicGap.Value; _onChange(); };
         Controls.Add(_panicGap);
-        y += 32;
+        y += 30;
+
+        Controls.Add(Lab("Emergency below", 14, y + 4));
+        _uber.SetBounds(140, y, 56, 24);
+        _uber.Minimum = 0;
+        _uber.Maximum = 30;
+        _uber.Value = (decimal)Math.Clamp(cfg.UberBelow * 100, 0, 30);
+        _uber.ValueChanged += (_, _) =>
+        { _cfg.UberBelow = (double)_uber.Value / 100.0; _onChange(); };
+        Controls.Add(_uber);
+        Controls.Add(Lab("%", 200, y + 4));
+
+        Controls.Add(new Label
+        {
+            Bounds = new Rectangle(220, y + 4, 150, 18),
+            ForeColor = SystemColors.GrayText,
+            Text = "no gaps at all below this",
+        });
+
+        var uberTip = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
+        uberTip.SetToolTip(_uber,
+            "Below this, every gap is ignored - cooldown, panic gap and the second"
+            + Environment.NewLine
+            + "confirming frame - and it presses as fast as a key can physically be"
+            + Environment.NewLine
+            + "sent. Set to 0 to turn it off."
+            + Environment.NewLine + Environment.NewLine
+            + "It stops at 30% on purpose. Higher than that it is not an emergency,"
+            + Environment.NewLine
+            + "it is a way to spend a flask's charges on chip damage - which leaves"
+            + Environment.NewLine
+            + "nothing for the hit that actually matters.");
+        y += 30;
 
         Controls.Add(Lab("Presses per trigger", 14, y + 4));
         _burst.SetBounds(140, y, 50, 24);

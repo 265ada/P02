@@ -33,7 +33,7 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(900, 778);
+        ClientSize = new Size(900, 838);
 
         _pin.SetBounds(864, 6, 24, 22);
         _pin.Text = "P";
@@ -67,7 +67,7 @@ public sealed class MainForm : Form
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 544;
+        int y = 604;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -441,6 +441,7 @@ public sealed class MainForm : Form
         // Panic is a rule about how hard you are being hit, not about which
         // pool is being hit, so the shield uses the same one as life.
         _cfg.Shield.PanicBelow = _cfg.Life.PanicBelow;
+        _cfg.Shield.UberBelow = _cfg.Life.UberBelow;
         _cfg.Shield.FastDropPctPerSec = _cfg.Life.FastDropPctPerSec;
         _cfg.Shield.ConfirmFrames = _cfg.Life.ConfirmFrames;
         _cfg.Shield.IgnoreBelow = _cfg.Life.IgnoreBelow;

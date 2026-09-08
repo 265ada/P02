@@ -96,11 +96,14 @@ cannot do:
   looks like a killing blow and fires accordingly.
 
 **A better source never falls back quietly.** Once memory or the numbers are
-asked for, the pixels are not allowed to decide in their place. A source that has
-been working and drops out for a moment gets a couple of seconds of grace,
-because a heal should not wait on one missed frame — but a source that has never
-once produced a reading gets none at all. It is not having a hiccup, it is not
-set up.
+asked for, the pixels are not allowed to decide in their place — not even
+briefly. A source that drops out for a moment gets a couple of seconds of grace
+so a heal is not blocked by one missed frame, but that grace **carries the last
+exact reading through the gap** rather than handing the decision to the pixels.
+Stale and real beats fresh and wrong: on a loading screen the numbers are gone
+and the pixels read the loading screen, and two seconds is long enough to act on
+that. A source that has never once produced a reading gets no grace at all — it
+is not having a hiccup, it is not set up.
 
 Each panel names which source is deciding, and the pinned readout shows the
 percentage in amber whenever it is the pixels.
@@ -267,6 +270,7 @@ hit, so each globe has two speeds:
 | Cooldown | Normal gap between presses while below the trigger. Default 900 ms. |
 | Panic below | Under this fraction, switch to the short gap and fire on the first low frame instead of waiting for a second. |
 | gap | The short gap. Default 260 ms. |
+| Emergency below | The floor. Under this, every gap is ignored - cooldown, panic gap, and the second confirming frame - and it presses as fast as a key can physically be sent. Capped at 30% on purpose: higher than that it stops being an emergency and becomes a way to spend charges on chip damage, leaving nothing for the hit that matters. 0 turns it off. |
 | Presses per trigger | Send the key more than once, for when one charge does not cover the hit. |
 | Hold each press | How long the key is held down. A game reads input once a frame, so a press shorter than one frame can go down and up between two of them and never register - 20 ms is invisible below about 50 fps. Default 70 ms, which spans a frame down to 14 fps. Raise it if the ding sounds but nothing happens in game. |
 

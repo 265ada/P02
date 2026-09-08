@@ -316,6 +316,7 @@ public sealed class MonitorEngine : IDisposable
         public long LastMemBadMs = long.MinValue / 2;
         public long NoGoodSourceSinceMs;
         public bool HadGoodSource;
+        public double LastGoodFrac;
         public bool Blind;
     }
 
@@ -637,10 +638,23 @@ public sealed class MonitorEngine : IDisposable
         {
             st.NoGoodSourceSinceMs = 0;
             st.HadGoodSource = true;
+            st.LastGoodFrac = frac;
         }
-        else if (betterWanted && st.NoGoodSourceSinceMs == 0)
+        else if (betterWanted)
         {
-            st.NoGoodSourceSinceMs = now;
+            if (st.NoGoodSourceSinceMs == 0) st.NoGoodSourceSinceMs = now;
+
+            // The grace exists so one missed frame does not block a heal. It
+            // was letting the globe pixels decide during it, which is how a
+            // loading screen got to fire: the numbers are gone, the pixels read
+            // whatever is on screen, and two seconds is long enough to act on
+            // it. Carry the last exact reading through the gap instead. Stale
+            // and real beats fresh and wrong.
+            if (st.HadGoodSource)
+            {
+                frac = st.LastGoodFrac;
+                textRaw = $"last known {frac:P0}";
+            }
         }
 
         // The grace period is for a source that was working and dropped out for
@@ -666,8 +680,13 @@ public sealed class MonitorEngine : IDisposable
         // Deep in the red, or dropping fast enough that waiting a full cooldown
         // means dying with charges unspent: press again as soon as the game
         // will accept it, and do not wait for a second confirming frame.
-        bool panic = frac < c.PanicBelow || dropRate >= c.FastDropPctPerSec;
-        int gap = panic ? c.PanicCooldownMs : c.CooldownMs;
+        // The emergency floor. Below it nothing waits: no cooldown, no panic
+        // gap, no second confirming frame. The only limit left is how fast a
+        // key can physically be sent, which the sender enforces on its own.
+        bool uber = frac <= c.UberBelow;
+        bool panic = uber || frac < c.PanicBelow || dropRate >= c.FastDropPctPerSec;
+
+        int gap = uber ? 0 : panic ? c.PanicCooldownMs : c.CooldownMs;
         int confirm = panic ? 1 : Math.Max(1, c.ConfirmFrames);
 
         st.Below++;
@@ -700,11 +719,40 @@ public sealed class MonitorEngine : IDisposable
         st.Reset();
         if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
 
-        Log.Write($"{name}: '{c.Key}' x{shots} at {frac:P1}" +
-                  (panic ? $" PANIC (drop {dropRate:0}%/s)" : ""));
+        Log.Write($"{name}: '{c.Key}' x{shots} at {frac:P1}"
+                  + (uber ? " EMERGENCY" : panic ? $" PANIC (drop {dropRate:0}%/s)" : ""));
         Fired?.Invoke(name, frac);
 
         return new GlobeReading(name, frac, true, "", fromText, textRaw);
+    }
+
+    /// <summary>What a watcher should act on, and whether it should act at all.</summary>
+    internal readonly record struct SourceChoice(double Frac, bool Hold, bool Exact);
+
+    /// <summary>
+    /// Decides which reading a watcher uses when an exact source is wanted.
+    ///
+    /// The globe pixels must never stand in for memory or the numbers. They
+    /// cannot tell life from energy shield, they read a recoloured globe as
+    /// empty, and on a loading screen they read the loading screen. The grace
+    /// period exists so one missed frame does not block a heal - so it carries
+    /// the last exact reading through the gap rather than handing the decision
+    /// to the pixels for two seconds, which is long enough to act on nonsense.
+    /// </summary>
+    internal static SourceChoice ChooseSource(bool betterWanted, bool exactNow,
+                                              double exactFrac, double pixelFrac,
+                                              bool hadExact, double lastExactFrac,
+                                              long sinceMs, long nowMs, int graceMs)
+    {
+        if (!betterWanted) return new SourceChoice(pixelFrac, false, false);
+        if (exactNow) return new SourceChoice(exactFrac, false, true);
+
+        // Never had one: not a hiccup, not set up. Nothing to carry, and the
+        // pixels do not get to fill in.
+        if (!hadExact) return new SourceChoice(pixelFrac, true, false);
+
+        bool expired = nowMs - sinceMs > graceMs;
+        return new SourceChoice(lastExactFrac, expired, false);
     }
 
     /// <summary>
