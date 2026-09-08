@@ -60,6 +60,8 @@ public sealed class MonitorEngine : IDisposable
 
     public bool MemoryFound => _cfg.UseMemory && _mem.Found;
 
+    public bool MemoryEnabled => _cfg.UseMemory;
+
     /// <summary>Turns memory reading on or off at runtime.</summary>
     public void SetMemory(bool on)
     {
@@ -184,6 +186,7 @@ public sealed class MonitorEngine : IDisposable
         public long LastWouldFireMs = long.MinValue / 2;
         public long BlindSinceMs;
         public long LastGoodMs = long.MinValue / 2;
+        public long LastDisagreeMs = long.MinValue / 2;
         public bool Blind;
     }
 
@@ -290,11 +293,24 @@ public sealed class MonitorEngine : IDisposable
         if (textConfigured && _ocr.TryGet(name, out var tr))
         {
             textAge = _ocr.NowMs - tr.AtMs;
-            if (textAge < 1200)
+            // The pixels are crude but they are never wildly wrong. A text
+            // reading that disagrees with them by this much is a misread, not a
+            // correction, so the pixels win and the disagreement is logged.
+            if (textAge < 1200 && Math.Abs(tr.Fraction - frac) <= 0.40)
             {
                 frac = tr.Fraction;
                 fromText = true;
                 textRaw = $"{tr.Current:N0}/{tr.Max:N0}";
+            }
+            else if (textAge < 1200)
+            {
+                textRaw = $"{tr.Current:N0}/{tr.Max:N0} ignored, pixels say {frac:P0}";
+                if (now - st.LastDisagreeMs > 5000)
+                {
+                    st.LastDisagreeMs = now;
+                    Log.Write($"{name}: text says {tr.Fraction:P0} but pixels say {frac:P0}"
+                              + $" - ignoring the text ({tr.Current}/{tr.Max})");
+                }
             }
         }
 

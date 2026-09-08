@@ -27,9 +27,18 @@ one moves.
 what decides. It is an exact ratio, needs no calibration and no colour tuning,
 and because the maximum is read too, gear and buffs that move your pool change
 nothing. Windows does the reading, so there is nothing extra to install. Every
-reading is checked before it is believed: current cannot exceed maximum, and a
-changed maximum has to repeat before it is accepted, because a misread maximum
-is the difference between 40% and 4%.
+reading is checked before it is believed. The maximum has to look like a
+character's pool and has to repeat before a change to it is accepted, since a
+misread maximum is the difference between 40% and 4%. Numbers are only read
+within a line, never across one - a box that also catches the shield line turned
+a life of 1,465 and a shield of 2,005 into a maximum of 14,652,005, which reads
+as 0% life at full health. And a text reading that disagrees with the globe
+pixels by more than 40 points is discarded: the pixels are crude, but they are
+never wildly wrong.
+
+Current above maximum is normal here - skills push life past the pool - so that
+is not treated as an error. It is simply clamped: above maximum is above full,
+and above full does not fire.
 
 Setting the numbers does one more thing worth having: **the numbers are only
 drawn on the gameplay screen**. Open an inventory, the passive tree, a vendor or

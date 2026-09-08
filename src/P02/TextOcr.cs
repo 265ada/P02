@@ -15,16 +15,20 @@ namespace P02;
 /// change nothing.
 ///
 /// Windows has an OCR engine built in, so this costs no extra binaries. It is
-/// not free of mistakes though - "747/747" has come back as "1747/747" - so
-/// every reading is checked before it is believed, and the check that catches
-/// that one is simply that current cannot exceed maximum.
+/// not free of mistakes though - "747/747" has come back as "1747/747", and a
+/// box spanning two lines once turned a life of 1,465 and a shield of 2,005
+/// into a maximum of 14,652,005 - so every reading is checked before it is
+/// believed, and the pixels are kept as a second opinion.
 /// </summary>
 internal sealed partial class TextOcr : IDisposable
 {
     public readonly record struct Reading(double Fraction, int Current, int Max,
                                           long AtMs, string Raw);
 
-    [GeneratedRegex(@"([0-9][0-9.,\s]*)\s*/\s*([0-9][0-9.,\s]*)")]
+    // No whitespace inside a number. Allowing it glued the life and shield
+    // lines together when the box spanned both: "1,465" and "2,005" became
+    // "14,652,005", and a max of fourteen million reads as 0% life.
+    [GeneratedRegex(@"([0-9][0-9.,]*)\s*/\s*([0-9][0-9.,]*)")]
     private static partial Regex PairPattern();
 
     private sealed class Slot
@@ -152,15 +156,7 @@ internal sealed partial class TextOcr : IDisposable
 
         if (text.Length == 0) return;
 
-        var m = PairPattern().Match(text.Replace("\n", " "));
-        if (!m.Success) return;
-
-        if (!TryNumber(m.Groups[1].Value, out int cur)) return;
-        if (!TryNumber(m.Groups[2].Value, out int max)) return;
-
-        // The check that catches a phantom leading digit: you cannot have more
-        // life than your maximum.
-        if (max <= 0 || cur > max) return;
+        if (!TryParse(text, out int cur, out int max)) return;
 
         // A maximum changes rarely, and a misread one is the difference between
         // 40% and 4%. Accept a new maximum only once it has repeated.
@@ -175,11 +171,58 @@ internal sealed partial class TextOcr : IDisposable
 
         lock (_gate)
         {
-            slot.Last = new Reading(cur / (double)max, cur, max, _clock.ElapsedMilliseconds,
+            // Clamped for the decision, raw numbers kept for display.
+            slot.Last = new Reading(Math.Clamp(cur / (double)max, 0, 1), cur, max,
+                                    _clock.ElapsedMilliseconds,
                                     text.Trim());
             slot.HasLast = true;
         }
     }
+
+    /// <summary>
+    /// Pulls "current/maximum" out of whatever the engine returned.
+    ///
+    /// Matching happens inside a line and never across one: a box that also
+    /// catches the shield or ward line must not have their numbers combined.
+    /// That is not hypothetical - it produced a maximum of 14,652,005 from a
+    /// life of 1,465 and a shield of 2,005, which reads as 0% life.
+    /// </summary>
+    internal static bool TryParse(string text, out int cur, out int max)
+    {
+        cur = max = 0;
+        var breaks = new[] { '\n', '\r' };
+        foreach (string line in text.Split(breaks, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var m = PairPattern().Match(line);
+            if (!m.Success) continue;
+
+            // The first line carrying a pair is the one the box was aimed at.
+            // If it does not make sense, give up rather than walking on to the
+            // next line - that would quietly report shield or ward as life.
+            if (TryNumber(m.Groups[1].Value, out cur)
+                && TryNumber(m.Groups[2].Value, out max)
+                && Sane(cur, max))
+                return true;
+
+            break;
+        }
+        cur = max = 0;
+        return false;
+    }
+
+    /// <summary>
+    /// Current above maximum is legitimate in this game - skills can push life
+    /// past the pool - so that is not a rejection. What is rejected is a pool
+    /// of a size no character has, which is what a misread produces when it
+    /// glues two lines together.
+    ///
+    /// A current value that is too high needs no special handling either way:
+    /// above maximum means above full, and above full never fires, so a genuine
+    /// overheal and a misread current lead to the same decision. The pixels are
+    /// what catch a misread that matters, by disagreeing with it.
+    /// </summary>
+    private static bool Sane(int cur, int max) =>
+        max >= 10 && max <= 1_000_000 && cur >= 0 && cur <= 2_000_000;
 
     private static bool TryNumber(string raw, out int value)
     {

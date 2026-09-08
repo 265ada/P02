@@ -14,9 +14,9 @@ namespace P02;
 /// patch - the set this was built from resolved to a null pointer within two
 /// months. Instead it searches for the shape of the structure itself: maximum
 /// and current life as adjacent integers, mana the same 0x50 further on, energy
-/// shield 0x88 further still, every current value inside its maximum. That
-/// survives patches, because the layout of a struct changes far less often than
-/// where a pointer to it happens to live.
+/// shield 0x88 further still, each current value within a plausible distance of
+/// its maximum. That survives patches, because the layout of a struct changes
+/// far less often than where a pointer to it happens to live.
 /// </summary>
 internal sealed class GameMemory : IDisposable
 {
@@ -55,8 +55,13 @@ internal sealed class GameMemory : IDisposable
     public readonly record struct Stats(int CurHp, int MaxHp, int CurMp, int MaxMp,
                                         int CurEs, int MaxEs, long AtMs)
     {
-        public double LifeFraction => MaxHp > 0 ? CurHp / (double)MaxHp : 0;
-        public double ManaFraction => MaxMp > 0 ? CurMp / (double)MaxMp : 0;
+        // Clamped: skills can push a pool past its maximum, and above full is
+        // above full however far past it goes.
+        public double LifeFraction =>
+            MaxHp > 0 ? Math.Clamp(CurHp / (double)MaxHp, 0, 1) : 0;
+
+        public double ManaFraction =>
+            MaxMp > 0 ? Math.Clamp(CurMp / (double)MaxMp, 0, 1) : 0;
     }
 
     private readonly object _gate = new();
@@ -218,10 +223,12 @@ internal sealed class GameMemory : IDisposable
         BitConverter.ToInt32(b, i + EsDelta + 4), BitConverter.ToInt32(b, i + EsDelta),
         _clock.ElapsedMilliseconds);
 
+    // Current may exceed maximum - skills allow it - so the bound is generous
+    // rather than exact. It still has to look like a character sheet.
     private static bool Plausible(Stats s) =>
-        s.MaxHp is >= 20 and <= 100000 && s.CurHp >= 0 && s.CurHp <= s.MaxHp
-        && s.MaxMp is >= 1 and <= 100000 && s.CurMp >= 0 && s.CurMp <= s.MaxMp
-        && s.MaxEs is >= 0 and <= 200000 && s.CurEs >= 0 && s.CurEs <= s.MaxEs;
+        s.MaxHp is >= 20 and <= 100000 && s.CurHp >= 0 && s.CurHp <= s.MaxHp * 3
+        && s.MaxMp is >= 1 and <= 100000 && s.CurMp >= 0 && s.CurMp <= s.MaxMp * 3
+        && s.MaxEs is >= 0 and <= 200000 && s.CurEs >= 0 && s.CurEs <= Math.Max(1, s.MaxEs) * 3;
 
     /// <summary>
     /// Sweeps the writable heap for the stat structure. Measured at about

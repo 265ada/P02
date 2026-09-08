@@ -203,6 +203,39 @@ static class T
             fails += bad;
         }
 
+        // What the OCR box actually returns, including the exact misread that
+        // reported a maximum of 14,652,005 from a life of 1,465 and a shield of
+        // 2,005 - and read as 0% life while the character was at full.
+        {
+            int bad = 0;
+            void Parse(string what, string text, int wantCur, int wantMax)
+            {
+                bool ok = TextOcr.TryParse(text, out int cur, out int max);
+                bool right = wantMax == 0 ? !ok : ok && cur == wantCur && max == wantMax;
+                Console.WriteLine((right ? "PASS" : "FAIL") + $"  {what} -> "
+                    + (ok ? $"{cur}/{max}" : "rejected")
+                    + (wantMax == 0 ? "  (wanted rejected)" : $"  (wanted {wantCur}/{wantMax})"));
+                if (!right) bad++;
+            }
+
+            // Current above maximum is legitimate here - skills push life past
+            // the pool - and above full never fires either way.
+            Parse("overhealed above maximum", "2,029/1,465\n2,005/2,005", 2029, 1465);
+            Parse("good first line, shield below", "1,465/1,465\n2,005/2,005", 1465, 1465);
+            Parse("life over shield, one line", "1,465/1,465 2,005/2,005", 1465, 1465);
+            Parse("plain", "1,465/1,465", 1465, 1465);
+            Parse("space for comma", "1 465/1,465", 465, 1465);
+            Parse("dot for comma", "412/1.465", 412, 1465);
+            Parse("mana", "747/747", 747, 747);
+
+            // Rejections that matter.
+            Parse("phantom leading digit, clamps to full", "1747/747", 1747, 747);
+            Parse("absurd maximum", "2,029/14,652,005", 0, 0);
+            Parse("no pair at all", "Life Shield Ward", 0, 0);
+
+            fails += bad;
+        }
+
         // Every key the bind box can capture must be sendable. Numpad keys
         // share scancodes with the navigation cluster and differ only by the
         // extended flag, so this guards a genuinely easy mistake.
