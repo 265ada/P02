@@ -301,6 +301,11 @@ public sealed class MainForm : Form
     private void RefreshArmUi()
     {
         bool on = _engine.Armed;
+
+        // The per-globe line describes the last press, or the last time it
+        // would have pressed. Arming or disarming makes either one stale.
+        _life.ClearStatus();
+        _mana.ClearStatus();
         _arm.Text = on ? "ARMED  –  click to stop" : "DISARMED  –  click to arm";
         _arm.BackColor = on ? Color.FromArgb(200, 60, 60) : SystemColors.Control;
         _arm.ForeColor = on ? Color.White : SystemColors.ControlText;

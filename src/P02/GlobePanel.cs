@@ -557,10 +557,21 @@ public sealed class GlobePanel : GroupBox
         }
     }
 
+    /// <summary>
+    /// Wipes the last press/would-fire line. It describes a moment, not a
+    /// state, so it has to go when the state it was written under changes -
+    /// otherwise "Disarmed: would have fired" sits there while armed.
+    /// </summary>
+    public void ClearStatus()
+    {
+        _effect.Text = "";
+        _effect.ForeColor = SystemColors.GrayText;
+    }
+
     /// <summary>Shown while disarmed, when the trigger point is crossed.</summary>
     public void ShowWouldFire(double frac)
     {
-        _effect.Text = $"Disarmed: would have fired at {frac:P0}. Arm it to actually send.";
+        _effect.Text = $"Would have fired at {frac:P0} - disarmed, so nothing was sent.";
         _effect.ForeColor = Color.FromArgb(0, 90, 160);
     }
 
