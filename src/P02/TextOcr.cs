@@ -391,8 +391,18 @@ internal sealed partial class TextOcr : IDisposable
     /// overheal and a misread current lead to the same decision. The pixels are
     /// what catch a misread that matters, by disagreeing with it.
     /// </summary>
+    /// <summary>
+    /// Whether a parsed pair could be a real pool.
+    ///
+    /// Overhealing past the maximum is ordinary - 1,947 out of 1,490 happens on
+    /// any character with the skills for it - so a current above its maximum is
+    /// accepted. Ten times it is not: "14,610/1,490" appeared mid-fight, which
+    /// is 1,461 with a digit that was not there, and it clamps to a comfortable
+    /// 100% no matter how little life is actually left. The maximum being right
+    /// does not vouch for the current beside it.
+    /// </summary>
     private static bool Sane(int cur, int max) =>
-        max >= 10 && max <= 1_000_000 && cur >= 0 && cur <= 2_000_000;
+        max >= 10 && max <= 1_000_000 && cur >= 0 && cur <= max * 2;
 
     private static bool TryNumber(string raw, out int value)
     {

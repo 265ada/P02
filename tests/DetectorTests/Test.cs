@@ -229,7 +229,10 @@ static class T
             Parse("mana", "747/747", 747, 747);
 
             // Rejections that matter.
-            Parse("phantom leading digit, clamps to full", "1747/747", 1747, 747);
+            // A leading digit that was not there. Overhealing is real, but not
+            // to 234% - and the damage is that it clamps to a comfortable 100%
+            // while the pool it claims to describe may be nearly empty.
+            Parse("phantom leading digit, clamps to full", "1747/747", 0, 0);
             Parse("absurd maximum", "2,029/14,652,005", 0, 0);
             Parse("no pair at all", "Life Shield Ward", 0, 0);
 
@@ -403,6 +406,18 @@ static class T
             Console.WriteLine((bad == 0 ? "PASS" : "FAIL")
                               + $"  keybind map: {mapped} keys capturable, all sendable");
             fails += bad;
+        }
+
+        // A phantom digit in the CURRENT, where the maximum is still right, so
+        // nothing else catches it - and it clamps to a comfortable 100% however
+        // little life is really left. Seen mid-fight as "14,610/1,490".
+        {
+            bool bad = TextOcr.TryParse("Life 14,610/1,490", out _, out _, "Life", 1490);
+            bool overheal = TextOcr.TryParse("Life 1,947/1,490", out int oc, out int om, "Life", 1490);
+            Console.WriteLine((!bad ? "PASS" : "FAIL")
+                              + "  current with a phantom digit is refused");
+            Console.WriteLine((overheal && oc == 1947 && om == 1490 ? "PASS" : "FAIL")
+                              + $"  overheal is still accepted -> {oc}/{om}");
         }
 
         // OCR reads small pale text over a moving background; the label came
