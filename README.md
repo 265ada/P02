@@ -531,6 +531,11 @@ hammer the disk or risk a half-written file.
 and restarts into it. It also checks once quietly at startup, and only speaks
 up when there is something to install.
 
+The prompt lists **every release since the one you have**, newest first, not just
+the newest one's notes - and says how far behind you are, because three releases
+of changes is a different prospect from one. The changelog link spans the whole
+gap rather than the last hop.
+
 The swap is done by a small batch file that waits for P02 to exit, copies the
 new exe over the old one and starts it again, logging to
 `%APPDATA%\P02\update.log`. Every command in it is called by full path:
