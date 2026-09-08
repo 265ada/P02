@@ -121,7 +121,9 @@ whenever it is the pixels. The pixel path produces a
 - **Pin** in the top right corner puts a small readout over the game: the globes
   you are actually watching, the numbers being read, whether it is armed, and a
   light that blinks when a key goes out. It has no background or border - only
-  the readouts show - so drag it by the text. A globe that is switched off is
+  the readouts show - so drag it by any part of it; the position is saved as
+  soon as you let go. If it ever goes missing, right-click the pin or use
+  **Bring overlay back** on the tray icon. A globe that is switched off is
   left out entirely rather than sitting there saying "off".
 - **Energy shield**, off by default. Nothing recovers shield from a flask
   unless something in your build makes it do so, so firing at it is waste for

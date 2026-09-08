@@ -40,7 +40,10 @@ public sealed class MainForm : Form
         _pin.Font = new Font("Segoe UI", 8, FontStyle.Bold);
         _pin.FlatStyle = FlatStyle.System;
         var tip = new ToolTip();
-        tip.SetToolTip(_pin, "Pin a small always-on-top readout over the game");
+        tip.SetToolTip(_pin, "Pin a small always-on-top readout over the game."
+                             + Environment.NewLine
+                             + "Right-click to bring it back if it has gone missing.");
+        _pin.MouseUp += (_, e) => { if (e.Button == MouseButtons.Right) ResetOverlay(); };
         _pin.Click += (_, _) => ToggleOverlay(!(_overlay?.Visible ?? false));
         Controls.Add(_pin);
 
@@ -435,17 +438,21 @@ public sealed class MainForm : Form
             if (_overlay is null || _overlay.IsDisposed)
             {
                 _overlay = new OverlayForm();
-                var spot = new Rectangle(_cfg.OverlayX, _cfg.OverlayY,
-                                         _overlay.Width, _overlay.Height);
-                if (_cfg.OverlayX >= 0 && _cfg.OverlayY >= 0
-                    && Screen.AllScreens.Any(sc => sc.WorkingArea.IntersectsWith(spot)))
-                    _overlay.Location = new Point(_cfg.OverlayX, _cfg.OverlayY);
-                else
-                    _overlay.Location = new Point(
-                        Screen.PrimaryScreen!.WorkingArea.Right - _overlay.Width - 20, 20);
+                // Remember where it was dropped, so it comes back there rather
+                // than only being saved when the app closes.
+                _overlay.Moved += () =>
+                {
+                    if (_overlay is not { IsDisposed: false }) return;
+                    _cfg.OverlayX = _overlay.Location.X;
+                    _cfg.OverlayY = _overlay.Location.Y;
+                    _cfg.Save();
+                };
             }
+
+            PlaceOverlay();
             _overlay.SetArmed(_engine.Armed);
             _overlay.Show();
+            _overlay.BringToFront();
         }
         else
         {
@@ -460,6 +467,46 @@ public sealed class MainForm : Form
         _cfg.OverlayOn = on;
         _pin.BackColor = on ? Color.FromArgb(200, 60, 60) : SystemColors.Control;
         _pin.ForeColor = on ? Color.White : SystemColors.ControlText;
+        Save();
+    }
+
+    /// <summary>
+    /// Puts the overlay where it was left, unless that is somewhere it cannot
+    /// be seen. A window dragged mostly off a screen, or onto a monitor that is
+    /// no longer there, is indistinguishable from one that has vanished.
+    /// </summary>
+    private void PlaceOverlay(bool forceDefault = false)
+    {
+        if (_overlay is null || _overlay.IsDisposed) return;
+
+        var wanted = new Rectangle(_cfg.OverlayX, _cfg.OverlayY,
+                                   _overlay.Width, _overlay.Height);
+
+        bool visible = !forceDefault && _cfg.OverlayX >= 0 && _cfg.OverlayY >= 0
+            && Screen.AllScreens.Any(sc =>
+            {
+                var shown = Rectangle.Intersect(sc.WorkingArea, wanted);
+                // Most of it has to be on a screen, not merely a corner.
+                return shown.Width >= wanted.Width / 2 && shown.Height >= wanted.Height / 2;
+            });
+
+        _overlay.Location = visible
+            ? new Point(_cfg.OverlayX, _cfg.OverlayY)
+            : new Point(Screen.PrimaryScreen!.WorkingArea.Right - _overlay.Width - 20, 20);
+
+        if (!visible)
+        {
+            _cfg.OverlayX = _overlay.Location.X;
+            _cfg.OverlayY = _overlay.Location.Y;
+        }
+    }
+
+    /// <summary>Brings the overlay back to a known spot, however it was lost.</summary>
+    private void ResetOverlay()
+    {
+        ToggleOverlay(true);
+        PlaceOverlay(forceDefault: true);
+        _overlay?.BringToFront();
         Save();
     }
 
@@ -534,6 +581,7 @@ public sealed class MainForm : Form
         var menu = new ContextMenuStrip();
         menu.Items.Add("Show", null, (_, _) => RestoreFromTray());
         menu.Items.Add("Arm / disarm", null, (_, _) => _engine.Toggle());
+        menu.Items.Add("Bring overlay back", null, (_, _) => ResetOverlay());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit", null, (_, _) => { _tray.Visible = false; Application.Exit(); });
         _tray.ContextMenuStrip = menu;

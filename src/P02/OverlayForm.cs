@@ -18,6 +18,9 @@ public sealed class OverlayForm : Form
     private readonly Label _detail = new();
     private readonly System.Windows.Forms.Timer _fade = new();
 
+    /// <summary>Raised when a drag finishes, so the position can be saved.</summary>
+    public event Action? Moved;
+
     private readonly Label _manaCaption;
     private Point _grabbedAt;
     private Point _wasAt;
@@ -106,6 +109,7 @@ public sealed class OverlayForm : Form
         {
             _dragging = false;
             Cursor = Cursors.Default;
+            Moved?.Invoke();
         };
     }
 
