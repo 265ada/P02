@@ -245,13 +245,25 @@ public sealed class MonitorEngine : IDisposable
         // between OCR passes and for anyone who has not set the text region.
         bool fromText = false;
         string textRaw = "";
-        if (c.UseText && c.TextRegion.IsValid
-            && _ocr.TryGet(name, out var tr) && _ocr.NowMs - tr.AtMs < 1200)
+        bool textConfigured = c.UseText && c.TextRegion.IsValid && _ocr.Available;
+        long textAge = long.MaxValue;
+
+        if (textConfigured && _ocr.TryGet(name, out var tr))
         {
-            frac = tr.Fraction;
-            fromText = true;
-            textRaw = $"{tr.Current:N0}/{tr.Max:N0}";
+            textAge = _ocr.NowMs - tr.AtMs;
+            if (textAge < 1200)
+            {
+                frac = tr.Fraction;
+                fromText = true;
+                textRaw = $"{tr.Current:N0}/{tr.Max:N0}";
+            }
         }
+
+        // The numbers are only drawn on the gameplay screen. Losing them for
+        // more than a moment means an inventory, the passive tree, a vendor or
+        // the atlas is up - and those cover the globe, so the pixel fallback
+        // would be reading the panel and firing at it.
+        bool textLost = textConfigured && textAge > c.RequireTextMs;
 
         // Anything above the floor is a real reading, and the moment it happens
         // is what separates "nearly dead" from "cannot see it".
@@ -332,7 +344,7 @@ public sealed class MonitorEngine : IDisposable
             // there is nothing to announce. Chirping about an unreadable globe
             // while the firing path silently refuses to act on it made the
             // sound look like proof that keys were being sent.
-            if (!Armed && c.Enabled && frac < c.Threshold
+            if (!Armed && c.Enabled && frac < c.Threshold && !textLost
                 && !Unreadable(frac, now, st.LastGoodMs, c))
             {
                 if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
@@ -355,10 +367,11 @@ public sealed class MonitorEngine : IDisposable
         // makes this safe: a globe that read 60% a second ago and reads 1% now
         // is nearly dead and gets its flask, while one that has read nothing
         // for over a second is a loading screen and gets silence.
-        if (Unreadable(frac, now, st.LastGoodMs, c))
+        if (textLost || Unreadable(frac, now, st.LastGoodMs, c))
         {
             st.Below = 0;
-            return new GlobeReading(name, frac, true, "", fromText, textRaw);
+            return new GlobeReading(name, frac, true,
+                                    textLost ? "numbers not on screen" : "", fromText, textRaw);
         }
 
         // Deep in the red, or dropping fast enough that waiting a full cooldown

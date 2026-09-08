@@ -39,6 +39,19 @@ public sealed class WatcherConfig
 
     public bool UseText { get; set; } = true;
 
+    /// <summary>
+    /// Once a text region is set, how long its numbers may be unreadable before
+    /// P02 stops acting at all.
+    ///
+    /// The numbers vanish on every screen that is not gameplay - inventory, the
+    /// passive tree, a vendor, the atlas - and those screens also cover the
+    /// globe, so the pixel fallback reads the panel instead and fires at it.
+    /// Losing the numbers is the clearest signal there is that we are not
+    /// looking at the game, so it is treated as one. Short gaps still fall back
+    /// to pixels, since OCR misses the odd frame.
+    /// </summary>
+    public int RequireTextMs { get; set; } = 2000;
+
     /// <summary>Fire when the globe falls below this fraction (0-1).</summary>
     public double Threshold { get; set; } = 0.50;
 

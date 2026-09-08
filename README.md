@@ -13,6 +13,14 @@ reading is checked before it is believed: current cannot exceed maximum, and a
 changed maximum has to repeat before it is accepted, because a misread maximum
 is the difference between 40% and 4%.
 
+Setting the numbers does one more thing worth having: **the numbers are only
+drawn on the gameplay screen**. Open an inventory, the passive tree, a vendor or
+the atlas and they vanish - and those screens cover the globe too, so the pixel
+fallback ends up reading the panel and firing at it. Losing the numbers for more
+than a couple of seconds is taken as "not looking at the game", and P02 holds
+fire and stays silent until they come back. Short gaps still fall back to
+pixels, because OCR misses the odd frame.
+
 **Globe pixels** - the fallback, used between text reads and when no text region
 is set. The pixel path produces a
 *fraction* of the globe, so gear swaps and buffs change nothing there either -

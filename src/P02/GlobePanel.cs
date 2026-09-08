@@ -232,7 +232,10 @@ public sealed class GlobePanel : GroupBox
         if (_blind) return;
         if (!_cfg.Region.IsValid) { _warn.Text = ""; return; }
 
-        if (_cfg.ColourMargin < 10 && _cfg.EmptyDominance < 0)
+        if (!_cfg.TextRegion.IsValid && _probe.Available)
+            _warn.Text = "No numbers set. Press Numbers... - it is exact, needs no "
+                       + "calibration, and stops it acting on menu screens.";
+        else if (_cfg.ColourMargin < 10 && _cfg.EmptyDominance < 0)
             _warn.Text = "Colour margin is very low. An empty globe may read as full. "
                        + "Press Empty = 0% while drained.";
         else if (_cfg.EmptyDominance < 0)
@@ -687,6 +690,11 @@ public sealed class GlobePanel : GroupBox
         {
             _numbers.Text = $"Numbers: {r.TextRaw} - this is what decides";
             _numbers.ForeColor = Color.FromArgb(0, 100, 0);
+        }
+        else if (r.Note == "numbers not on screen")
+        {
+            _numbers.Text = "Numbers not on screen - holding fire until they are back";
+            _numbers.ForeColor = Color.FromArgb(0, 90, 160);
         }
         else if (_cfg.TextRegion.IsValid)
         {
