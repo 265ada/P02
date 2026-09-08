@@ -210,6 +210,16 @@ public sealed class MonitorEngine : IDisposable
                 long t0 = clock.ElapsedMilliseconds;
                 bool focused = WindowFocused();
 
+                // Both maxima go to the search every pass, whether or not that
+                // globe is switched on. Life alone does not identify the
+                // structure - the heap is full of pairs - and mana being off is
+                // no reason to withhold what we know about it.
+                if (_cfg.UseMemory)
+                {
+                    _mem.HintMaxHp = ExpectedMax("Life", _cfg.Life, 0);
+                    _mem.HintMaxMp = ExpectedMax("Mana", _cfg.Mana, 0);
+                }
+
                 var lr = Sample(life, _cfg.Life, "Life", focused, clock);
                 var mr = Sample(mana, _cfg.Mana, "Mana", focused, clock);
 
@@ -315,16 +325,7 @@ public sealed class MonitorEngine : IDisposable
             }
         }
 
-        // Whatever the screen can tell us about the size of the pool, the
-        // memory search needs - and it needs it whether or not memory is
-        // currently reading, since a wrong answer can only be corrected by
-        // something that knows better.
-        int expectedMax = c.KnownMax > 0 ? c.KnownMax : (fromText ? ParseMax(textRaw) : 0);
-        if (_cfg.UseMemory)
-        {
-            if (name == "Life") _mem.HintMaxHp = expectedMax;
-            else _mem.HintMaxMp = expectedMax;
-        }
+        int expectedMax = ExpectedMax(name, c, fromText ? ParseMax(textRaw) : 0);
 
         // Memory is exact when it is pointed at the right thing, and worthless
         // when it is not. Thousands of pairs in a heap look like a health pool,
@@ -526,6 +527,18 @@ public sealed class MonitorEngine : IDisposable
     /// </summary>
     internal static bool Unreadable(double frac, long nowMs, long lastGoodMs, WatcherConfig c)
         => frac <= c.IgnoreBelow && nowMs - lastGoodMs > c.BlindGraceMs;
+
+    /// <summary>
+    /// The maximum for a pool: what you typed, else what the numbers on screen
+    /// last said, else nothing.
+    /// </summary>
+    private int ExpectedMax(string name, WatcherConfig c, int fromRaw)
+    {
+        if (c.KnownMax > 0) return c.KnownMax;
+        if (fromRaw > 0) return fromRaw;
+        if (c.UseText && c.TextRegion.IsValid && _ocr.TryGet(name, out var t)) return t.Max;
+        return 0;
+    }
 
     private static int ParseMax(string raw)
     {

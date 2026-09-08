@@ -326,6 +326,9 @@ public sealed class MainForm : Form
             }
         }
 
+        _lastKnownLife = cfg.Life.KnownMax;
+        _lastKnownMana = cfg.Mana.KnownMax;
+
         SetupTray();
         RefreshArmUi();
         _engine.Start();
@@ -339,10 +342,27 @@ public sealed class MainForm : Form
     /// <summary>Any settings edit: persist it and re-render the summary line.
     /// Without the refresh, ticking a globe on while armed left the status text
     /// stale and it looked like arming had been lost.</summary>
+    private int _lastKnownLife, _lastKnownMana;
+
     private void Save()
     {
         _cfg.Save();
         _engine.SyncTextRegions();
+
+        // Telling it your maximum is the whole basis of the memory search, so
+        // changing it should start a new one rather than wait to be asked.
+        if (_cfg.Life.KnownMax != _lastKnownLife || _cfg.Mana.KnownMax != _lastKnownMana)
+        {
+            _lastKnownLife = _cfg.Life.KnownMax;
+            _lastKnownMana = _cfg.Mana.KnownMax;
+            if (_cfg.UseMemory)
+            {
+                Log.Write($"memory: max changed to life {_lastKnownLife}, "
+                          + $"mana {_lastKnownMana} - searching again");
+                _engine.RescanMemory();
+            }
+        }
+
         RefreshArmUi();
     }
 
