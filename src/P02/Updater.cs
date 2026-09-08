@@ -203,7 +203,17 @@ internal static class Updater
                                   StringComparison.OrdinalIgnoreCase))
                     expected = a.GetProperty("size").GetInt64();
 
-            string tmp = Path.Combine(Path.GetTempPath(), $"P02-{latest}.exe");
+            // A fixed name per version meant a second attempt reused the same
+            // path - and a 58 MB executable that was written moments ago is
+            // very often still held open by the virus scanner inspecting it, so
+            // the retry failed on the file the previous try had left behind.
+            // A new name each time cannot collide with anything.
+            string tmp = Path.Combine(
+                Path.GetTempPath(),
+                $"P02-{latest}-{DateTime.Now:HHmmss}-{Environment.ProcessId}.exe");
+
+            TidyOldDownloads();
+
             Log.Write($"update: downloading {expected} bytes to {tmp}");
             using (var req = new HttpRequestMessage(HttpMethod.Get, assetUrl))
             {
@@ -260,6 +270,30 @@ internal static class Updater
     /// a failed swap deleted its own script and left no trace. It now waits for
     /// this process to actually disappear and writes what happened to a log.
     /// </summary>
+    /// <summary>
+    /// Clears out downloads left behind by earlier updates.
+    ///
+    /// Each is the whole application, so leaving them accumulating in the temp
+    /// folder costs sixty megabytes a release. Anything still held open is
+    /// skipped rather than fought over.
+    /// </summary>
+    private static void TidyOldDownloads()
+    {
+        try
+        {
+            foreach (string old in Directory.EnumerateFiles(Path.GetTempPath(), "P02-*.exe"))
+            {
+                try
+                {
+                    if (DateTime.Now - File.GetCreationTime(old) > TimeSpan.FromMinutes(10))
+                        File.Delete(old);
+                }
+                catch { /* in use, or not ours to delete */ }
+            }
+        }
+        catch { /* the temp folder is not worth failing an update over */ }
+    }
+
     private static void SwapAndRestart(string newExe, Action? beforeExit)
     {
         string current = Environment.ProcessPath
