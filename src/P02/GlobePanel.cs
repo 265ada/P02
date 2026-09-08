@@ -831,6 +831,11 @@ public sealed class GlobePanel : GroupBox
             _numbers.Text = $"Deciding: {r.TextRaw}";
             _numbers.ForeColor = Color.FromArgb(0, 100, 0);
         }
+        else if (r.Note == "exact reading unavailable - holding fire")
+        {
+            _numbers.Text = "Holding fire: memory or numbers asked for but not reading";
+            _numbers.ForeColor = Color.FromArgb(190, 60, 0);
+        }
         else if (r.Note == "numbers not on screen")
         {
             _numbers.Text = "Numbers not on screen - holding fire until they are back";

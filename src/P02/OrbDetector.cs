@@ -18,11 +18,18 @@ internal static class OrbDetector
     /// proportionally, but still leads it by a wide margin.
     /// </summary>
     private static bool IsLiquid(byte b, byte g, byte r,
-                                 bool blue, int margin, int minV, bool glare)
+                                 bool blue, int margin, int minV, bool glare,
+                                 bool ignoreHue = false)
     {
         // The specular highlight on the glass is near-white, so it fails every
         // hue test even though it is plainly inside the liquid.
         if (glare && b > 170 && g > 170 && r > 170) return true;
+
+        // Colour is not dependable on the life globe: poison and other debuffs
+        // recolour it, and a green globe has no red in it to find. Brightness
+        // is what survives that - the liquid is bright in any colour, the
+        // drained part is dark in any colour.
+        if (ignoreHue) return Math.Max(b, Math.Max(g, r)) >= minV;
 
         return blue
             ? b >= minV && b - Math.Max(g, r) >= margin
@@ -38,7 +45,7 @@ internal static class OrbDetector
         {
             int i = rowStart + x * ScreenCapture.Bpp;
             if (IsLiquid(buf[i], buf[i + 1], buf[i + 2],
-                         blue, c.ColourMargin, c.MinValue, c.GlareIsLiquid))
+                         blue, c.ColourMargin, c.MinValue, c.GlareIsLiquid, c.IgnoreHue))
             {
                 if (++hits >= need) return true;
             }
@@ -181,7 +188,7 @@ internal static class OrbDetector
                 if (b > 170 && g > 170 && r > 170) continue;
 
                 int dom = blue ? b - Math.Max(g, r) : r - Math.Max(g, b);
-                int val = blue ? b : r;
+                int val = c.IgnoreHue ? Math.Max(b, Math.Max(g, r)) : (blue ? b : r);
                 domHist[Math.Clamp(dom, 0, 255)]++;
                 valHist[val]++;
                 n++;
@@ -239,6 +246,10 @@ internal static class OrbDetector
             c.ColourMargin = Math.Clamp(domEmpty + sepDom / 2, 4, 90);
         else
             c.ColourMargin = Math.Clamp(Math.Min(domFull - 2, 12), 4, 90);
+
+        // Colour told us nothing but brightness did, so stop asking about
+        // colour: it will only mislead when the globe is recoloured.
+        if (sepDom < 8 && sepVal >= 12) c.IgnoreHue = true;
 
         if (sepVal >= 12)
             c.MinValue = Math.Clamp(valEmpty + sepVal / 2, 0, 200);
@@ -426,7 +437,8 @@ internal static class OrbDetector
             {
                 int i = (y * shot.Width + x) * ScreenCapture.Bpp;
                 byte b = buf[i], g = buf[i + 1], r = buf[i + 2];
-                bool on = IsLiquid(b, g, r, blue, c.ColourMargin, c.MinValue, c.GlareIsLiquid);
+                bool on = IsLiquid(b, g, r, blue, c.ColourMargin, c.MinValue,
+                                   c.GlareIsLiquid, c.IgnoreHue);
                 outp.SetPixel(x, y, on
                     ? Color.FromArgb(0, 255, 0)
                     : Color.FromArgb(r / 3, g / 3, b / 3));

@@ -194,6 +194,7 @@ public sealed class MonitorEngine : IDisposable
         public long LastGoodMs = long.MinValue / 2;
         public long LastDisagreeMs = long.MinValue / 2;
         public long LastMemBadMs = long.MinValue / 2;
+        public long NoGoodSourceSinceMs;
         public bool Blind;
     }
 
@@ -309,6 +310,13 @@ public sealed class MonitorEngine : IDisposable
         string textRaw = "";
         bool textConfigured = c.UseText && c.TextRegion.IsValid && _ocr.Available;
         bool textLostOverride = true;
+
+        // Asking for memory or for the numbers is asking for the globe pixels
+        // NOT to decide. They cannot tell life from energy shield, and they
+        // read a poisoned globe - which turns green - as empty, which looks
+        // like a killing blow. Falling back to them quietly is how a better
+        // source turns into a worse one without saying so.
+        bool betterWanted = _cfg.UseMemory || textConfigured;
         long textAge = long.MaxValue;
 
         if (textConfigured && _ocr.TryGet(name, out var tr))
@@ -475,11 +483,26 @@ public sealed class MonitorEngine : IDisposable
         // makes this safe: a globe that read 60% a second ago and reads 1% now
         // is nearly dead and gets its flask, while one that has read nothing
         // for over a second is a loading screen and gets silence.
-        if (textLost || Unreadable(frac, now, st.LastGoodMs, c))
+        // fromText covers memory as well: it means something exact decided.
+        if (betterWanted && !fromText)
+        {
+            if (st.NoGoodSourceSinceMs == 0) st.NoGoodSourceSinceMs = now;
+        }
+        else
+        {
+            st.NoGoodSourceSinceMs = 0;
+        }
+
+        bool sourceLost = st.NoGoodSourceSinceMs != 0
+                          && now - st.NoGoodSourceSinceMs > c.RequireTextMs;
+
+        if (sourceLost || textLost || Unreadable(frac, now, st.LastGoodMs, c))
         {
             st.Below = 0;
-            return new GlobeReading(name, frac, true,
-                                    textLost ? "numbers not on screen" : "", fromText, textRaw);
+            string why = textLost ? "numbers not on screen"
+                       : sourceLost ? "exact reading unavailable - holding fire"
+                       : "";
+            return new GlobeReading(name, frac, true, why, fromText, textRaw);
         }
 
         // Deep in the red, or dropping fast enough that waiting a full cooldown

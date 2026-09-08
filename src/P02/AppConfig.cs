@@ -183,6 +183,20 @@ public sealed class WatcherConfig
     /// <summary>Brightness of the hue channel, high end of the drained globe.</summary>
     public int EmptyValue { get; set; } = -1;
 
+    /// <summary>
+    /// Judge the globe by brightness alone, ignoring its colour.
+    ///
+    /// The life globe is not always red: poison and other debuffs recolour it,
+    /// and a green globe has no red dominance at all - so a hue test reads it
+    /// as empty the instant the colour changes. That is not a slow drift, it is
+    /// a jump from full to nothing, which looks exactly like a killing blow and
+    /// fires accordingly.
+    ///
+    /// Brightness survives a recolour: the liquid is bright whatever colour it
+    /// has been turned, and the drained part stays dark.
+    /// </summary>
+    public bool IgnoreHue { get; set; }
+
     /// <summary>Count near-white pixels as liquid.
     /// Off by default: the life globe has a bright rune drawn across it that is
     /// near-white, so this made an empty globe read almost full. The globes carry a specular

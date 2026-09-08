@@ -78,9 +78,22 @@ than a couple of seconds is taken as "not looking at the game", and P02 holds
 fire and stays silent until they come back. Short gaps still fall back to
 pixels, because OCR misses the odd frame.
 
+**A better source never falls back quietly.** Once memory or the numbers are
+asked for, the globe pixels are not allowed to decide in their place: if the
+exact reading is unavailable for more than a couple of seconds, it holds fire
+and says so. Silently dropping to a worse source is how a setup that looks
+configured misfires anyway.
+
 **Globe pixels** - the last fallback, used between text reads and when no text
-region is set. Worth knowing what it cannot do: **energy shield is drawn over
-the life globe**, so the pixels follow shield loss as well as life loss and will
+region is set. Worth knowing what they cannot do. **The life globe is not always red**: poison
+and other debuffs recolour it, and a green globe has no red in it at all, so a
+colour test reads it as empty the moment the colour changes - a jump from full
+to nothing that looks exactly like a killing blow. **Empty = 0%** switches to
+judging brightness instead when colour turns out not to separate full from
+empty, which survives a recolour: the liquid is bright whatever colour it has
+been turned, and the drained part stays dark.
+
+And **energy shield is drawn over the life globe**, so the pixels follow shield loss as well as life loss and will
 pot for a shield that is draining while life is untouched. Numbers and memory
 both read the life value itself and do not have this problem. Each panel names
 which source is deciding, and the pinned readout shows the percentage in amber
