@@ -192,16 +192,22 @@ public sealed class GlobePanel : GroupBox
         {
             Bounds = new Rectangle(220, y + 4, 150, 18),
             ForeColor = SystemColors.GrayText,
-            Text = "no gaps at all below this",
+            Text = "one press, as a last resort",
         });
 
         var uberTip = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
         uberTip.SetToolTip(_uber,
-            "Below this, every gap is ignored - cooldown, panic gap and the second"
+            "One press, once, if you fall past this - whatever else is waiting."
+            + Environment.NewLine + Environment.NewLine
+            + "A cooldown running, a burst still going out, a confirming frame not"
             + Environment.NewLine
-            + "confirming frame - and it presses as fast as a key can physically be"
+            + "yet counted: any of those can be in the way at the moment a heal is"
             + Environment.NewLine
-            + "sent. Set to 0 to turn it off."
+            + "needed. This ignores all of them, fires a single press, and then"
+            + Environment.NewLine
+            + "stays quiet until you are back above it - a net, not a second"
+            + Environment.NewLine
+            + "trigger spending charges alongside the first. Set to 0 to turn off."
             + Environment.NewLine + Environment.NewLine
             + "It stops at 30% on purpose. Higher than that it is not an emergency,"
             + Environment.NewLine

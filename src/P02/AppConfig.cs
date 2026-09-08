@@ -115,12 +115,16 @@ public sealed class WatcherConfig
     public double PanicBelow { get; set; } = 0.30;
 
     /// <summary>
-    /// The emergency floor: below this, every gap is ignored and it presses as
-    /// fast as a key can physically be sent.
+    /// The safety net: one press when you fall past this, whatever else is
+    /// waiting, and then nothing until you have climbed back out.
     ///
-    /// Capped at 30% deliberately. Above that it stops being an emergency and
-    /// becomes a way to spend a flask's charges on chip damage, which is what
-    /// leaves nothing left for the hit that matters.
+    /// It exists because the ordinary path can be mid-cooldown, mid-burst or a
+    /// frame short of confirming at the moment it is needed, and that is when a
+    /// heal gets missed. It deliberately does not repeat - a net, not a second
+    /// trigger spending charges alongside the first.
+    ///
+    /// Capped at 30%. Above that it stops being an emergency and becomes a way
+    /// to spend charges on chip damage, leaving none for the hit that matters.
     /// </summary>
     public double UberBelow { get; set; } = 0.15;
 

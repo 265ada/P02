@@ -270,7 +270,7 @@ hit, so each globe has two speeds:
 | Cooldown | Normal gap between presses while below the trigger. Default 900 ms. |
 | Panic below | Under this fraction, switch to the short gap and fire on the first low frame instead of waiting for a second. |
 | gap | The short gap. Default 260 ms. |
-| Emergency below | The floor. Under this, every gap is ignored - cooldown, panic gap, and the second confirming frame - and it presses as fast as a key can physically be sent. Capped at 30% on purpose: higher than that it stops being an emergency and becomes a way to spend charges on chip damage, leaving nothing for the hit that matters. 0 turns it off. |
+| Emergency below | A safety net: **one press, once**, if you fall past this - whatever else is waiting. A cooldown running, a burst still going out, a confirming frame not yet counted; any of those can be in the way at the moment a heal is needed, and that is when one gets missed. It ignores all of them, fires a single press, then stays quiet until you are back above it. Deliberately not a second trigger firing alongside the first. Capped at 30%, 0 turns it off. |
 | Presses per trigger | Send the key more than once, for when one charge does not cover the hit. |
 | Hold each press | How long the key is held down. A game reads input once a frame, so a press shorter than one frame can go down and up between two of them and never register - 20 ms is invisible below about 50 fps. Default 70 ms, which spans a frame down to 14 fps. Raise it if the ding sounds but nothing happens in game. |
 

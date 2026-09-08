@@ -317,6 +317,7 @@ public sealed class MonitorEngine : IDisposable
         public long NoGoodSourceSinceMs;
         public bool HadGoodSource;
         public double LastGoodFrac;
+        public bool UberUsed;
         public bool Blind;
     }
 
@@ -623,6 +624,33 @@ public sealed class MonitorEngine : IDisposable
             return new GlobeReading(name, frac, true, "", fromText, textRaw);
         }
 
+        // The safety net: one press, once, when you fall past the floor.
+        //
+        // Everything above this can be waiting - a cooldown running, a burst
+        // still going out, a confirming frame not yet counted - and that is
+        // where a heal gets missed. This does not care what is waiting and does
+        // not repeat: it fires a single press and then stays quiet until you
+        // have climbed back out, so it is a net rather than a second trigger
+        // spending charges alongside the first.
+        if (c.UberBelow > 0 && frac > 0)
+        {
+            if (frac > c.UberBelow + 0.05) st.UberUsed = false;
+
+            if (frac <= c.UberBelow && !st.UberUsed && !_keys.Busy
+                && _keys.Send(c.Key, c.HoldMs, 1, 40, PostingKeys, GameWindow))
+            {
+                st.UberUsed = true;
+                st.LastFireMs = now;
+                st.Below = 0;
+                FiresThisFight++;
+                if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
+                Log.Write($"{name}: '{c.Key}' x1 at {frac:P1} EMERGENCY - one press, "
+                          + "will not repeat until recovered");
+                Fired?.Invoke(name, frac);
+                return new GlobeReading(name, frac, true, "", fromText, textRaw);
+            }
+        }
+
         if (frac >= c.Threshold)
         {
             st.Below = 0;
@@ -680,13 +708,8 @@ public sealed class MonitorEngine : IDisposable
         // Deep in the red, or dropping fast enough that waiting a full cooldown
         // means dying with charges unspent: press again as soon as the game
         // will accept it, and do not wait for a second confirming frame.
-        // The emergency floor. Below it nothing waits: no cooldown, no panic
-        // gap, no second confirming frame. The only limit left is how fast a
-        // key can physically be sent, which the sender enforces on its own.
-        bool uber = frac <= c.UberBelow;
-        bool panic = uber || frac < c.PanicBelow || dropRate >= c.FastDropPctPerSec;
-
-        int gap = uber ? 0 : panic ? c.PanicCooldownMs : c.CooldownMs;
+        bool panic = frac < c.PanicBelow || dropRate >= c.FastDropPctPerSec;
+        int gap = panic ? c.PanicCooldownMs : c.CooldownMs;
         int confirm = panic ? 1 : Math.Max(1, c.ConfirmFrames);
 
         st.Below++;
@@ -720,7 +743,7 @@ public sealed class MonitorEngine : IDisposable
         if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
 
         Log.Write($"{name}: '{c.Key}' x{shots} at {frac:P1}"
-                  + (uber ? " EMERGENCY" : panic ? $" PANIC (drop {dropRate:0}%/s)" : ""));
+                  + (panic ? $" PANIC (drop {dropRate:0}%/s)" : ""));
         Fired?.Invoke(name, frac);
 
         return new GlobeReading(name, frac, true, "", fromText, textRaw);
