@@ -21,6 +21,8 @@ public sealed class PreviewForm : Form
     private readonly TrackBar _margin = new();
     private readonly TrackBar _minv = new();
     private readonly CheckBox _showMask = new();
+    private readonly CheckBox _ignoreHue = new();
+    private readonly Label _marginLabel = new();
 
     private double _seenLow = 1.0;
     private double _seenHigh;
@@ -61,7 +63,9 @@ public sealed class PreviewForm : Form
         Controls.Add(_warn);
 
         int y = 112;
-        Controls.Add(new Label { Text = "Colour margin", Bounds = new Rectangle(cx, y, 110, 18) });
+        _marginLabel.Text = "Colour margin";
+        _marginLabel.Bounds = new Rectangle(cx, y, 110, 18);
+        Controls.Add(_marginLabel);
         _margin.SetBounds(cx + 110, y - 6, 200, 40);
         _margin.Minimum = 4;
         _margin.Maximum = 90;
@@ -69,7 +73,23 @@ public sealed class PreviewForm : Form
         _margin.Value = Math.Clamp(cfg.ColourMargin, 4, 90);
         _margin.ValueChanged += (_, _) => { _cfg.ColourMargin = _margin.Value; _onChange(); };
         Controls.Add(_margin);
-        y += 42;
+        y += 40;
+
+        // Brightness-only is a real mode, and while it is on the colour margin
+        // does nothing at all. A live slider wired to nothing is worse than no
+        // slider: it invites tuning that cannot have an effect.
+        _ignoreHue.Text = "Ignore colour, judge by brightness alone";
+        _ignoreHue.SetBounds(cx, y, cw, 22);
+        _ignoreHue.Checked = cfg.IgnoreHue;
+        _ignoreHue.CheckedChanged += (_, _) =>
+        {
+            _cfg.IgnoreHue = _ignoreHue.Checked;
+            ApplyHueMode();
+            _onChange();
+            Refresh_();
+        };
+        Controls.Add(_ignoreHue);
+        y += 26;
 
         Controls.Add(new Label { Text = "Min brightness", Bounds = new Rectangle(cx, y, 110, 18) });
         _minv.SetBounds(cx + 110, y - 6, 200, 40);
@@ -109,7 +129,9 @@ public sealed class PreviewForm : Form
         Controls.Add(ok);
         AcceptButton = ok;
 
-        ClientSize = new Size(cx + cw + 12, Math.Max(ph + 24, y + 40));
+        ClientSize = new Size(cx + cw + 12, Math.Max(ph + 24, y + 44));
+
+        ApplyHueMode();
 
         _tick.Interval = 120;
         _tick.Tick += (_, _) => Refresh_();
@@ -123,6 +145,15 @@ public sealed class PreviewForm : Form
         // Left visible to capture on purpose: this is the window people are
         // most often asked to screenshot.
         Native.ExcludeFromCapture(Handle, false);
+    }
+
+    /// <summary>Greys the colour margin out while it cannot do anything.</summary>
+    private void ApplyHueMode()
+    {
+        bool useHue = !_cfg.IgnoreHue;
+        _margin.Enabled = useHue;
+        _marginLabel.Enabled = useHue;
+        _marginLabel.Text = useHue ? "Colour margin" : "Colour margin (unused)";
     }
 
     private void Refresh_()

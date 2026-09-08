@@ -271,6 +271,12 @@ when the globe is half empty, something above the liquid is being counted —
 raise **Colour margin**. If it sits at the bottom when the globe is full, lower
 **Colour margin**, then **Min brightness**.
 
+**Colour margin does nothing while brightness-only is on.** Tune colours turns
+that mode on by itself when colour cannot separate full from drained, which is
+common - the drained part of a life globe is the same hue as the liquid. The
+Check window now shows the mode as a tickbox and greys the margin out while it
+is unused, rather than leaving a live slider wired to nothing.
+
 **Save image** writes a before/after pair to `%APPDATA%\P02` if you need to show
 someone what it sees.
 
