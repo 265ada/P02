@@ -83,12 +83,21 @@ internal static class Updater
 
     private static string FirstLine(string body)
     {
+        // The release notes open with a generated header - "Changes since
+        // v2.28.0" - which is true and says nothing. What is wanted is the
+        // heading of the change itself, so skip the scaffolding.
+        string[] skip = ["Changes since", "Full Changelog", "What's Changed"];
+
         foreach (string line in body.Split([(char)10, (char)13],
                                            StringSplitOptions.RemoveEmptyEntries))
         {
             string t = line.Replace("[critical]", "", StringComparison.OrdinalIgnoreCase)
                            .Trim(' ', '#', '-', '*');
-            if (t.Length > 0) return t;
+            if (t.Length == 0) continue;
+            if (skip.Any(h => t.StartsWith(h, StringComparison.OrdinalIgnoreCase))) continue;
+            if (t.StartsWith("v", StringComparison.OrdinalIgnoreCase)
+                && Version.TryParse(t.TrimStart('v', 'V'), out _)) continue;
+            return t;
         }
 
         return "it fixes something that can get you killed";
