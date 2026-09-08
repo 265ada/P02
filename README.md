@@ -85,9 +85,12 @@ fire and stays silent until they come back. Short gaps still fall back to
 pixels, because OCR misses the odd frame.
 
 **A better source never falls back quietly.** Once memory or the numbers are
-asked for, the globe pixels are not allowed to decide in their place: if the
-exact reading is unavailable for more than a couple of seconds, it holds fire
-and says so. Silently dropping to a worse source is how a setup that looks
+asked for, the globe pixels are not allowed to decide in their place. A source
+that has been working and drops out for a moment gets a couple of seconds of
+grace, because a heal should not wait on one missed frame - but a source that
+has never once produced a reading gets none at all. It is not having a hiccup,
+it is not set up, and two seconds is long enough for a globe turning green to
+spend every charge you have. Silently dropping to a worse source is how a setup that looks
 configured misfires anyway.
 
 **Globe pixels** - the last fallback, used between text reads and when no text

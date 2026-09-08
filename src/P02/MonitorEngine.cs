@@ -195,6 +195,7 @@ public sealed class MonitorEngine : IDisposable
         public long LastDisagreeMs = long.MinValue / 2;
         public long LastMemBadMs = long.MinValue / 2;
         public long NoGoodSourceSinceMs;
+        public bool HadGoodSource;
         public bool Blind;
     }
 
@@ -484,17 +485,26 @@ public sealed class MonitorEngine : IDisposable
         // is nearly dead and gets its flask, while one that has read nothing
         // for over a second is a loading screen and gets silence.
         // fromText covers memory as well: it means something exact decided.
-        if (betterWanted && !fromText)
-        {
-            if (st.NoGoodSourceSinceMs == 0) st.NoGoodSourceSinceMs = now;
-        }
-        else
+        if (fromText)
         {
             st.NoGoodSourceSinceMs = 0;
+            st.HadGoodSource = true;
+        }
+        else if (betterWanted && st.NoGoodSourceSinceMs == 0)
+        {
+            st.NoGoodSourceSinceMs = now;
         }
 
-        bool sourceLost = st.NoGoodSourceSinceMs != 0
-                          && now - st.NoGoodSourceSinceMs > c.RequireTextMs;
+        // The grace period is for a source that was working and dropped out for
+        // a moment - a heal should not wait on one missed frame. A source that
+        // has never once produced a reading is not having a hiccup, it is not
+        // set up, and there is nothing to be patient about: the pixels must not
+        // stand in for it even briefly. A globe turning green is a drop from
+        // full to nothing in one frame, and two seconds is long enough to spend
+        // every charge on it.
+        bool sourceLost = betterWanted && !fromText
+                          && (!st.HadGoodSource
+                              || now - st.NoGoodSourceSinceMs > c.RequireTextMs);
 
         if (sourceLost || textLost || Unreadable(frac, now, st.LastGoodMs, c))
         {

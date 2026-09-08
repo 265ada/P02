@@ -906,7 +906,7 @@ public sealed class GlobePanel : GroupBox
         }
         else if (r.Note == "exact reading unavailable - holding fire")
         {
-            _numbers.Text = "Holding fire: memory or numbers asked for but not reading";
+            _numbers.Text = "Holding fire: memory or numbers asked for but never read yet";
             _numbers.ForeColor = Color.FromArgb(190, 60, 0);
         }
         else if (r.Note == "numbers not on screen")
