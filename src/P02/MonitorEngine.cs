@@ -4,12 +4,15 @@ namespace P02;
 
 /// <summary>One globe's latest sample. <paramref name="Ok"/> false means there
 /// is no reading, and Note says why.</summary>
-public sealed record GlobeReading(string Name, double Fraction, bool Ok, string Note = "");
+public sealed record GlobeReading(string Name, double Fraction, bool Ok,
+                                  string Note = "", bool FromText = false,
+                                  string TextRaw = "");
 
 public sealed class MonitorEngine : IDisposable
 {
     private readonly AppConfig _cfg;
     private readonly KeyPresser _keys = new();
+    private readonly TextOcr _ocr = new();
     private readonly Chime _chime;
     private CancellationTokenSource? _cts;
     private Task? _task;
@@ -45,7 +48,27 @@ public sealed class MonitorEngine : IDisposable
     {
         _cfg = cfg;
         _chime = new Chime(cfg.SoundGainDb);
+        SyncTextRegions();
     }
+
+    /// <summary>True when Windows can do OCR at all.</summary>
+    public bool TextAvailable => _ocr.Available;
+
+    public string TextUnavailable => _ocr.Unavailable;
+
+    /// <summary>Pushes the configured text regions into the reader.</summary>
+    public void SyncTextRegions()
+    {
+        _ocr.Configure("Life", _cfg.Life.UseText && _cfg.Life.Enabled
+                               && _cfg.Life.TextRegion.IsValid
+            ? _cfg.Life.TextRegion.ToRect() : null);
+        _ocr.Configure("Mana", _cfg.Mana.UseText && _cfg.Mana.Enabled
+                               && _cfg.Mana.TextRegion.IsValid
+            ? _cfg.Mana.TextRegion.ToRect() : null);
+    }
+
+    /// <summary>Reads a region once, for the setup button.</summary>
+    public string ProbeText(Rectangle r) => _ocr.ProbeOnce(r);
 
     /// <summary>Loudest boost the ding can take without clipping, in dB.</summary>
     public static int MaxGainDb => Chime.MaxGainDb;
@@ -216,6 +239,19 @@ public sealed class MonitorEngine : IDisposable
         double frac = OrbDetector.Fraction(st.Cap.Buffer, st.Cap.Width, st.Cap.Height, c);
         long now = clock.ElapsedMilliseconds;
 
+        // The numbers beside the globe are exact. When there is a recent
+        // reading, it decides; the pixels stay as the fallback for the gaps
+        // between OCR passes and for anyone who has not set the text region.
+        bool fromText = false;
+        string textRaw = "";
+        if (c.UseText && c.TextRegion.IsValid
+            && _ocr.TryGet(name, out var tr) && _ocr.NowMs - tr.AtMs < 1200)
+        {
+            frac = tr.Fraction;
+            fromText = true;
+            textRaw = $"{tr.Current:N0}/{tr.Max:N0}";
+        }
+
         // A watched globe stuck at nothing is the single most common broken
         // setup, and it looks identical to a globe that is simply full: no
         // firing, no complaint. Say it out loud.
@@ -300,13 +336,13 @@ public sealed class MonitorEngine : IDisposable
                     WouldFire?.Invoke(name, frac);
                 }
             }
-            return new GlobeReading(name, frac, true);
+            return new GlobeReading(name, frac, true, "", fromText, textRaw);
         }
 
         if (frac >= c.Threshold)
         {
             st.Below = 0;
-            return new GlobeReading(name, frac, true);
+            return new GlobeReading(name, frac, true, "", fromText, textRaw);
         }
 
         // Only refuse when the globe has been unreadable for a while. Judging
@@ -317,7 +353,7 @@ public sealed class MonitorEngine : IDisposable
         if (st.Blind)
         {
             st.Below = 0;
-            return new GlobeReading(name, frac, true);
+            return new GlobeReading(name, frac, true, "", fromText, textRaw);
         }
 
         // Deep in the red, or dropping fast enough that waiting a full cooldown
@@ -329,16 +365,16 @@ public sealed class MonitorEngine : IDisposable
 
         st.Below++;
         if (st.Below < confirm || now - st.LastFireMs < gap)
-            return new GlobeReading(name, frac, true);
+            return new GlobeReading(name, frac, true, "", fromText, textRaw);
 
         // A burst still going out means the previous request has not even
         // finished leaving; asking for another only builds a backlog.
         if (_keys.Busy)
-            return new GlobeReading(name, frac, true);
+            return new GlobeReading(name, frac, true, "", fromText, textRaw);
 
         int shots = Math.Clamp(c.BurstCount, 1, 5);
         if (!_keys.Send(c.Key, c.HoldMs, shots, Math.Clamp(c.BurstGapMs, 5, 500)))
-            return new GlobeReading(name, frac, true);
+            return new GlobeReading(name, frac, true, "", fromText, textRaw);
 
         st.LastFireMs = now;
         st.Below = 0;
@@ -359,7 +395,7 @@ public sealed class MonitorEngine : IDisposable
                   (panic ? $" PANIC (drop {dropRate:0}%/s)" : ""));
         Fired?.Invoke(name, frac);
 
-        return new GlobeReading(name, frac, true);
+        return new GlobeReading(name, frac, true, "", fromText, textRaw);
     }
 
     private bool WindowFocused()
@@ -380,5 +416,6 @@ public sealed class MonitorEngine : IDisposable
         Stop();
         _keys.Dispose();
         _chime.Dispose();
+        _ocr.Dispose();
     }
 }

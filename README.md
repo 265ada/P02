@@ -3,10 +3,20 @@
 Watches the Life and Mana globes in Path of Exile 2 and taps a key when either
 one drops below a level you set.
 
-It reads the globes by **pixel colour**, not by the numbers next to them. The
-answer it produces is a *fraction* of the globe, so gear swaps, buffs and
-anything else that moves your maximum change nothing — 40% is 40% whether your
-pool is 1,440 or 3,000.
+It can read the globes two ways, and the better one is the numbers.
+
+**Numbers** - point it at the `1,465/1,465` beside the globe and that becomes
+what decides. It is an exact ratio, needs no calibration and no colour tuning,
+and because the maximum is read too, gear and buffs that move your pool change
+nothing. Windows does the reading, so there is nothing extra to install. Every
+reading is checked before it is believed: current cannot exceed maximum, and a
+changed maximum has to repeat before it is accepted, because a misread maximum
+is the difference between 40% and 4%.
+
+**Globe pixels** - the fallback, used between text reads and when no text region
+is set. The pixel path produces a
+*fraction* of the globe, so gear swaps and buffs change nothing there either -
+40% is 40% whether your pool is 1,440 or 3,000.
 
 ## What you get
 
@@ -25,12 +35,14 @@ pool is 1,440 or 3,000.
 
 1. Start the game **borderless fullscreen** and get to a safe spot with both
    globes full.
-2. Run `P02.exe`. Per globe: **Auto-find**, then **Full = 100%** while the globe
-   is topped up, then spend it down and press **Empty = 0%**.
-   Both calibrations matter — see below.
-3. Set the trigger percentage and click the key box, then press the key you want
+2. Run `P02.exe` and press **Numbers…**, then drag a box around the
+   `1,465/1,465` text beside the globe. It tells you what it read. That is the
+   whole setup - no calibration needed.
+3. Optionally set up the globe itself as a fallback: **Auto-find**, then
+   **Full = 100%** while topped up, then spend it down and press **Empty = 0%**.
+4. Set the trigger percentage and click the key box, then press the key you want
    sent — the flask slot, not a modifier.
-4. Tick **Watch this globe** on the ones you want, then click **ARM**.
+5. Tick **Watch this globe** on the ones you want, then click **ARM**.
 
 Auto-find sweeps a range of colour thresholds and keeps the largest disc any of
 them finds. One fixed threshold cannot work: strict, and only the bright core of

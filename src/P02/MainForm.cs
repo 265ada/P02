@@ -31,16 +31,21 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(772, 708);
+        ClientSize = new Size(800, 668);
+
+        var probe = new TextProbe(_engine.TextAvailable, _engine.TextUnavailable,
+                                  _engine.ProbeText);
 
         _life = new GlobePanel("Life", cfg.Life, blue: false, Save,
-            () => _cfg.WindowMatch, () => _cfg.Mana.Region) { Location = new Point(12, 12) };
+            () => _cfg.WindowMatch, () => _cfg.Mana.Region, probe)
+            { Location = new Point(12, 12) };
         _mana = new GlobePanel("Mana", cfg.Mana, blue: true, Save,
-            () => _cfg.WindowMatch, () => _cfg.Life.Region) { Location = new Point(392, 12) };
+            () => _cfg.WindowMatch, () => _cfg.Life.Region, probe)
+            { Location = new Point(406, 12) };
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 512;
+        int y = 470;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -208,7 +213,7 @@ public sealed class MainForm : Form
         Controls.Add(testBtn);
 
         y += 32;
-        _live.SetBounds(12, y, 748, 20);
+        _live.SetBounds(12, y, 776, 20);
         _live.ForeColor = SystemColors.GrayText;
         Controls.Add(_live);
 
@@ -275,6 +280,7 @@ public sealed class MainForm : Form
     private void Save()
     {
         _cfg.Save();
+        _engine.SyncTextRegions();
         RefreshArmUi();
     }
 

@@ -29,6 +29,16 @@ public sealed class WatcherConfig
     public bool Enabled { get; set; }
     public Box Region { get; set; } = new();
 
+    /// <summary>
+    /// The "1,465/1,465" text beside the globe. When set, this is the reading
+    /// that decides firing: it is an exact ratio, needs no calibration, and
+    /// reads the maximum too, so gear and buffs that move your pool change
+    /// nothing. The globe pixels stay as the fallback.
+    /// </summary>
+    public Box TextRegion { get; set; } = new();
+
+    public bool UseText { get; set; } = true;
+
     /// <summary>Fire when the globe falls below this fraction (0-1).</summary>
     public double Threshold { get; set; } = 0.50;
 

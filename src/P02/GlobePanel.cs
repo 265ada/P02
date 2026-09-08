@@ -8,6 +8,7 @@ public sealed class GlobePanel : GroupBox
     private readonly Action _onChange;
     private readonly Func<string> _windowMatch;
     private readonly Func<Box?> _other;
+    private readonly TextProbe _probe;
 
     private readonly CheckBox _enabled = new();
     private readonly Label _region = new();
@@ -20,6 +21,7 @@ public sealed class GlobePanel : GroupBox
     private readonly Label _burstTime = new();
     private readonly Label _effect = new();
     private bool _blind;
+    private readonly Label _numbers = new();
     private readonly Label _tuned = new();
     private readonly Label _warn = new();
     private readonly KeyBindBox _key = new();
@@ -27,8 +29,9 @@ public sealed class GlobePanel : GroupBox
     private readonly Label _pct = new();
 
     public GlobePanel(string title, WatcherConfig cfg, bool blue, Action onChange,
-                      Func<string> windowMatch, Func<Box?> otherRegion)
+                      Func<string> windowMatch, Func<Box?> otherRegion, TextProbe probe)
     {
+        _probe = probe;
         _cfg = cfg;
         _blue = blue;
         _onChange = onChange;
@@ -36,8 +39,8 @@ public sealed class GlobePanel : GroupBox
         _other = otherRegion;
 
         Text = title;
-        Width = 366;
-        Height = 482;
+        Width = 382;
+        Height = 442;
         Padding = new Padding(10);
 
         int y = 24;
@@ -79,6 +82,10 @@ public sealed class GlobePanel : GroupBox
         prevBtn.Click += (_, _) => Preview();
         Controls.Add(prevBtn);
         y += 30;
+
+        var numBtn = new Button { Text = "Numbers...", Bounds = new Rectangle(296, y, 76, 26) };
+        numBtn.Click += (_, _) => PickTextRegion();
+        Controls.Add(numBtn);
 
         var emptyBtn = new Button { Text = "Empty = 0%", Bounds = new Rectangle(206, y, 86, 26) };
         emptyBtn.Click += (_, _) => CalibrateEmpty();
@@ -191,6 +198,14 @@ public sealed class GlobePanel : GroupBox
         _effect.SetBounds(14, y, 340, 18);
         _effect.ForeColor = SystemColors.GrayText;
         Controls.Add(_effect);
+        y += 20;
+
+        _numbers.SetBounds(14, y, 340, 18);
+        _numbers.ForeColor = SystemColors.GrayText;
+        _numbers.Text = cfg.TextRegion.IsValid
+            ? "Numbers: set - this decides when to fire"
+            : "Numbers: not set - using globe pixels";
+        Controls.Add(_numbers);
     }
 
     /// <summary>
@@ -229,6 +244,53 @@ public sealed class GlobePanel : GroupBox
 
     private static Label Lab(string text, int x, int y) =>
         new() { Text = text, Bounds = new Rectangle(x, y, 76, 18), AutoSize = true };
+
+    /// <summary>
+    /// The numbers beside the globe are an exact reading, so this is the most
+    /// reliable thing to set: no calibration, no colour thresholds, and the
+    /// maximum is read too, so gear that changes your pool does not matter.
+    /// </summary>
+    private void PickTextRegion()
+    {
+        if (!_probe.Available)
+        {
+            MessageBox.Show(this,
+                "Windows OCR is not available on this machine, so the numbers cannot be "
+                + "read. The globe pixels will be used instead."
+                + Environment.NewLine + Environment.NewLine + _probe.Reason,
+                "Numbers", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var owner = FindForm();
+        owner?.Hide();
+        Thread.Sleep(180);
+        var r = RegionPickerForm.Pick(
+            $"Drag a box around the {Text} numbers, like 1,465/1,465");
+        owner?.Show();
+        if (r is null) return;
+
+        string got = _probe.Probe(r.Value);
+        if (got.Length == 0)
+        {
+            MessageBox.Show(this,
+                "Nothing readable in that box. Include the whole \"1,465/1,465\" and a "
+                + "little space around it, and try not to catch the label.",
+                "Numbers", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        _cfg.TextRegion = Box.From(r.Value);
+        _cfg.UseText = true;
+        _numbers.Text = $"Numbers: read \"{got}\"";
+        _onChange();
+
+        MessageBox.Show(this,
+            $"Read: \"{got}\"" + Environment.NewLine + Environment.NewLine
+            + "This is now what decides when to fire, and it needs no calibration. "
+            + "The globe pixels stay as the fallback.",
+            "Numbers", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
 
     private void PickRegion()
     {
@@ -620,5 +682,16 @@ public sealed class GlobePanel : GroupBox
         _bar.Value = r.Fraction;
         _bar.Below = r.Fraction < _cfg.Threshold;
         _pct.Text = $"{r.Fraction * 100:0.0} %";
+
+        if (r.FromText && r.TextRaw.Length > 0)
+        {
+            _numbers.Text = $"Numbers: {r.TextRaw} - this is what decides";
+            _numbers.ForeColor = Color.FromArgb(0, 100, 0);
+        }
+        else if (_cfg.TextRegion.IsValid)
+        {
+            _numbers.Text = "Numbers: set, but not being read - falling back to pixels";
+            _numbers.ForeColor = Color.FromArgb(190, 60, 0);
+        }
     }
 }
