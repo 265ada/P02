@@ -832,6 +832,14 @@ public sealed class MainForm : Form
         Activate();
         BringToFront();
 
+        // Activate() asks politely, and Windows refuses a background process
+        // the foreground - it flashes the taskbar instead, which behind a
+        // fullscreen game is nothing at all. Take it properly, and sit above
+        // the game until the warning has been read.
+        Native.ForceForeground(Handle);
+        bool wasTop = TopMost;
+        TopMost = true;
+
         MessageBox.Show(this,
             $"{Updater.Critical} fixes something that can get you killed:"
             + Environment.NewLine + Environment.NewLine
@@ -840,6 +848,7 @@ public sealed class MainForm : Form
             + "Your game has been paused. Update before carrying on.",
             "Critical update", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
+        TopMost = wasTop;
         _ = Updater.CheckAsync(this, silent: false, beforeExit: _cfg.SaveNow);
     }
 

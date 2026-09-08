@@ -301,4 +301,56 @@ internal static class Native
                                                   ref SIZE size, nint hdcSrc, ref POINT src,
                                                   int colorKey, ref BLENDFUNCTION blend,
                                                   int flags);
+
+    // --- taking the foreground from a fullscreen game --------------------
+
+    [DllImport("user32.dll")]
+    public static extern bool SetForegroundWindow(nint hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool BringWindowToTop(nint hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool AttachThreadInput(uint attach, uint to, bool join);
+
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(nint hWnd, int cmd);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    public const int SW_RESTORE = 9;
+
+    /// <summary>
+    /// Puts a window in front of whatever currently has the foreground.
+    ///
+    /// Windows will not simply hand the foreground to a background process -
+    /// it flashes the taskbar instead, which behind a fullscreen game is
+    /// nothing at all. Attaching to the input queue of the window that holds it
+    /// makes the request come from the foreground thread itself, which is
+    /// allowed. Used only to interrupt somebody for a fault that can kill them.
+    /// </summary>
+    public static void ForceForeground(nint hWnd)
+    {
+        if (hWnd == 0) return;
+
+        ShowWindow(hWnd, SW_RESTORE);
+
+        nint fore = GetForegroundWindow();
+        if (fore == hWnd) return;
+
+        uint theirs = GetWindowThreadProcessId(fore, out _);
+        uint ours = GetCurrentThreadId();
+        bool attached = theirs != 0 && theirs != ours && AttachThreadInput(ours, theirs, true);
+
+        try
+        {
+            BringWindowToTop(hWnd);
+            SetForegroundWindow(hWnd);
+        }
+        finally
+        {
+            if (attached) AttachThreadInput(ours, theirs, false);
+        }
+    }
 }
