@@ -466,6 +466,7 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>Which memory lock this is, and whether the numbers have vouched for it.</summary>
     private int _memGeneration = -1;
     private bool _memConfirmed;
+    private long _memDisagreeSinceMs;
 
     private GlobeReading Sample(State st, WatcherConfig c, string name,
                                 bool focused, Stopwatch clock)
@@ -575,6 +576,7 @@ public sealed class MonitorEngine : IDisposable
             {
                 _memGeneration = _mem.Generation;
                 _memConfirmed = false;
+                _memDisagreeSinceMs = 0;
             }
 
             // Agreeing with the configured maximum is not enough on its own:
@@ -591,18 +593,58 @@ public sealed class MonitorEngine : IDisposable
                           + "this address is confirmed");
             }
 
+            // Once the numbers have vouched for an address, they stop being the
+            // authority over it, because they are the less reliable of the two
+            // and fail differently. Memory reads the variable itself and can
+            // only be wrong by pointing somewhere wrong - which is what
+            // confirmation rules out, once. The numbers are guessed from pixels
+            // and drop or invent a digit now and then: "490/1,490" is 1,490
+            // with the leading 1 lost, and it read as 33% and fired three
+            // times while the pool was full.
+            //
+            // A wrong address disagrees forever; a misread disagrees for a
+            // frame. So disagreement is timed rather than acted on, and only a
+            // steady one costs the lock.
+            if (_memConfirmed && haveOcr && !matchesOcr)
+            {
+                if (_memDisagreeSinceMs == 0) _memDisagreeSinceMs = now;
+
+                if (now - _memDisagreeSinceMs > 2000)
+                {
+                    _memConfirmed = false;
+                    _memDisagreeSinceMs = 0;
+                    Log.Write($"{name}: memory has read {memFrac:P0} against the numbers' "
+                              + $"{ocrFrac:P0} for two seconds - dropping this address");
+                    _mem.Rescan();
+                }
+                else
+                {
+                    // Believe memory through the wobble, and say so, so a
+                    // rejected frame is never mistaken for a healthy one.
+                    textRaw = $"memory {memFrac:P0}, numbers misread {ocrFrac:P0}";
+                    frac = memFrac;
+                    fromText = true;
+                    textLostOverride = false;
+                    haveOcr = false;
+                }
+            }
+            else if (matchesOcr)
+            {
+                _memDisagreeSinceMs = 0;
+            }
+
             bool trusted = max > 0 && (expectedMax == 0 || max == expectedMax)
                            && matchesOcr && _memConfirmed;
 
-            if (!matchesOcr && max > 0)
+            if (!matchesOcr && max > 0 && !_memConfirmed)
             {
                 textRaw = $"memory says {memFrac:P0}, the numbers say {ocrFrac:P0} - ignored";
                 if (now - st.LastMemBadMs > 10000)
                 {
                     st.LastMemBadMs = now;
                     Log.Write($"{name}: memory reads {memFrac:P0} ({cur:N0}/{max:N0}) but the "
-                              + $"numbers on screen read {ocrFrac:P0} - wrong address, "
-                              + "searching again");
+                              + $"numbers on screen read {ocrFrac:P0} and this address was "
+                              + "never confirmed - searching again");
                     _mem.Rescan();
                 }
             }
