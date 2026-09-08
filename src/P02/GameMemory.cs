@@ -96,6 +96,12 @@ internal sealed class GameMemory : IDisposable
     public volatile int HintCurHp;
     public volatile int HintCurMp;
 
+    /// <summary>
+    /// Bumped every time a new address is adopted, so a caller can tell one
+    /// lock from the next and insist on confirming each one for itself.
+    /// </summary>
+    public volatile int Generation;
+
     public bool Attached => _handle != 0;
 
     public bool Found => _address != 0;
@@ -151,6 +157,7 @@ internal sealed class GameMemory : IDisposable
                         continue;
                     }
                     _address = found;
+                    Generation++;
                     Log.Write($"memory: found player stats at 0x{found:X}");
                 }
 
@@ -368,10 +375,12 @@ internal sealed class GameMemory : IDisposable
                 }
                 else
                 {
-                    // Nothing to check against: a current above its maximum is
-                    // possible but rare, so treat distance above it as cost.
-                    score = Math.Max(0, curHp - wantHp) / (double)wantHp
-                            + (wantMp > 0 ? Math.Max(0, curMp - wantMp) / (double)wantMp : 0);
+                    // Nothing to check against. There is no scoring scheme that
+                    // rescues this: the heap holds thousands of integers beside
+                    // a maximum and any of them can look reasonable. Guessing
+                    // the best-looking one produced a life of 240 out of 1,490
+                    // and then defended it, twice. Wait for the numbers instead.
+                    continue;
                 }
 
                 if (score >= bestScore) continue;
@@ -394,7 +403,8 @@ internal sealed class GameMemory : IDisposable
 
         Status = hintCurHp > 0
             ? "found the maxima but no current beside them matching the screen"
-            : "found the maxima but no sensible current value beside them";
+            : "found the maxima - waiting for the numbers to say what your "
+              + "current life is, so the right one can be picked";
         return 0;
     }
 

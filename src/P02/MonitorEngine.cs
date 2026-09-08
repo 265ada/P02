@@ -360,10 +360,15 @@ public sealed class MonitorEngine : IDisposable
                     // The currents as well, when the numbers can be read. The
                     // maxima locate the structure; only the current tells the
                     // search which integer beside it is actually yours.
-                    _mem.HintCurHp = _ocr.TryGet("Life", out var lh)
-                                     && _ocr.NowMs - lh.AtMs < 1500 ? lh.Current : 0;
-                    _mem.HintCurMp = _ocr.TryGet("Mana", out var mh)
-                                     && _ocr.NowMs - mh.AtMs < 1500 ? mh.Current : 0;
+                    // Held for a good while rather than only while fresh. A
+                    // search runs at the moment memory was thrown out, which is
+                    // exactly when the numbers are most likely to be missing -
+                    // so insisting on a reading from the last second meant the
+                    // search ran blind and picked the same wrong address again.
+                    if (_ocr.TryGet("Life", out var lh) && _ocr.NowMs - lh.AtMs < 20000)
+                        _mem.HintCurHp = lh.Current;
+                    if (_ocr.TryGet("Mana", out var mh) && _ocr.NowMs - mh.AtMs < 20000)
+                        _mem.HintCurMp = mh.Current;
                 }
 
                 AdoptChangedMax("Life", _cfg.Life);
@@ -457,6 +462,10 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>The run-up to each press, kept so one can be explained later.</summary>
     private readonly FireTrail _trail = new();
 
+    /// <summary>Which memory lock this is, and whether the numbers have vouched for it.</summary>
+    private int _memGeneration = -1;
+    private bool _memConfirmed;
+
     private GlobeReading Sample(State st, WatcherConfig c, string name,
                                 bool focused, Stopwatch clock)
     {
@@ -541,6 +550,17 @@ public sealed class MonitorEngine : IDisposable
 
             double memFrac = name == "Life" ? ms.LifeFraction : ms.ManaFraction;
 
+            // Every lock is provisional until the numbers have vouched for it
+            // once. The old check only ran while an OCR reading was fresh, and
+            // between those moments a wrong address had free rein - twenty
+            // presses went out at "16%" in the gaps, each one caught and thrown
+            // out afterwards, which is no use to anyone already drinking.
+            if (_memGeneration != _mem.Generation)
+            {
+                _memGeneration = _mem.Generation;
+                _memConfirmed = false;
+            }
+
             // Agreeing with the configured maximum is not enough on its own:
             // if that maximum was itself adopted from a misread, the search was
             // pointed at the wrong number to begin with and will happily find
@@ -548,7 +568,15 @@ public sealed class MonitorEngine : IDisposable
             // only independent witness, so when they are readable they get the
             // final say.
             bool matchesOcr = !haveOcr || Math.Abs(memFrac - ocrFrac) <= 0.15;
-            bool trusted = max > 0 && (expectedMax == 0 || max == expectedMax) && matchesOcr;
+            if (haveOcr && matchesOcr && !_memConfirmed)
+            {
+                _memConfirmed = true;
+                Log.Write($"{name}: memory agrees with the numbers ({memFrac:P0}) - "
+                          + "this address is confirmed");
+            }
+
+            bool trusted = max > 0 && (expectedMax == 0 || max == expectedMax)
+                           && matchesOcr && _memConfirmed;
 
             if (!matchesOcr && max > 0)
             {
