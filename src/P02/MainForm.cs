@@ -31,7 +31,7 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(800, 668);
+        ClientSize = new Size(800, 704);
 
         var probe = new TextProbe(_engine.TextAvailable, _engine.TextUnavailable,
                                   _engine.ProbeText);
@@ -208,9 +208,71 @@ public sealed class MainForm : Form
         });
 
         y += 32;
+        var rescan = new Button
+        {
+            Text = "Re-scan memory",
+            Bounds = new Rectangle(692, y, 96, 26),
+        };
+        rescan.Click += (_, _) => { _engine.RescanMemory(); Log.Write("memory: manual rescan"); };
+        Controls.Add(rescan);
+
         var testBtn = new Button { Text = "Test keys (3s)", Bounds = new Rectangle(12, y, 110, 26) };
         testBtn.Click += (_, _) => TestKeys();
         Controls.Add(testBtn);
+
+        y += 32;
+        Controls.Add(new Label { Text = "Send by", Bounds = new Rectangle(12, y + 4, 50, 20) });
+        var method = new ComboBox
+        {
+            Bounds = new Rectangle(64, y, 150, 24),
+            DropDownStyle = ComboBoxStyle.DropDownList,
+        };
+        method.Items.AddRange(["Injected input", "Posted to window"]);
+        method.SelectedIndex = cfg.InputMethod.Equals("postmessage",
+            StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        method.SelectedIndexChanged += (_, _) =>
+        {
+            _cfg.InputMethod = method.SelectedIndex == 1 ? "postmessage" : "sendinput";
+            Save();
+        };
+        Controls.Add(method);
+
+        Controls.Add(new Label
+        {
+            Text = "posted reaches an unfocused window; try it if injected is ignored",
+            Bounds = new Rectangle(220, y + 4, 372, 20),
+            ForeColor = SystemColors.GrayText,
+        });
+
+        var mem = new CheckBox
+        {
+            Text = "Read game memory",
+            Bounds = new Rectangle(600, y + 2, 150, 22),
+            Checked = cfg.UseMemory,
+        };
+        mem.CheckedChanged += (_, _) =>
+        {
+            if (mem.Checked && MessageBox.Show(this,
+                    "This reads life and mana straight out of the game's memory. It is exact "
+                    + "and instant, and it is the most intrusive thing here by a distance: "
+                    + "reading another process is what anti-cheat looks for, where watching "
+                    + "the screen is passive."
+                    + Environment.NewLine + Environment.NewLine
+                    + "It finds the values by searching for their shape rather than using "
+                    + "fixed offsets, so it survives patches, and it takes a couple of "
+                    + "seconds on first use."
+                    + Environment.NewLine + Environment.NewLine + "Turn it on?",
+                    "Read game memory", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning) != DialogResult.Yes)
+            {
+                mem.Checked = false;
+                return;
+            }
+            _engine.SetMemory(mem.Checked);
+            Save();
+        };
+        Controls.Add(mem);
+
 
         y += 32;
         _live.SetBounds(12, y, 776, 20);
@@ -303,9 +365,10 @@ public sealed class MainForm : Form
                 _live.Text = covering.Length > 0
                     ? $"This window is covering the {covering} globe - move it, or the "
                       + "capture reads P02 instead of the globe."
-                    : $"focused window: \"{_engine.ForegroundTitle}\"     "
-                      + $"polls/sec: {_engine.ActualHz}     "
-                      + $"work per poll: {_engine.LastPollMs:0.0} ms";
+                    : $"focused window: \"{_engine.ForegroundTitle}\"   "
+                      + $"polls/sec: {_engine.ActualHz}   "
+                      + $"work per poll: {_engine.LastPollMs:0.0} ms   "
+                      + $"memory: {_engine.MemoryStatus}";
                 _live.ForeColor = covering.Length > 0
                     ? Color.FromArgb(190, 60, 0)
                     : SystemColors.GrayText;

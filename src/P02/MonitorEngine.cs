@@ -13,6 +13,7 @@ public sealed class MonitorEngine : IDisposable
     private readonly AppConfig _cfg;
     private readonly KeyPresser _keys = new();
     private readonly TextOcr _ocr = new();
+    private readonly GameMemory _mem = new();
     private readonly Chime _chime;
     private CancellationTokenSource? _cts;
     private Task? _task;
@@ -49,7 +50,26 @@ public sealed class MonitorEngine : IDisposable
         _cfg = cfg;
         _chime = new Chime(cfg.SoundGainDb);
         SyncTextRegions();
+        _mem.ProcessName = cfg.GameProcess;
+        if (cfg.UseMemory) _mem.Start();
     }
+
+    /// <summary>What the memory reader is doing, for the UI.</summary>
+    public string MemoryStatus =>
+        !_cfg.UseMemory ? "off" : _mem.Status;
+
+    public bool MemoryFound => _cfg.UseMemory && _mem.Found;
+
+    /// <summary>Turns memory reading on or off at runtime.</summary>
+    public void SetMemory(bool on)
+    {
+        _cfg.UseMemory = on;
+        _mem.ProcessName = _cfg.GameProcess;
+        if (on) _mem.Start(); else _mem.Rescan();
+    }
+
+    /// <summary>Forces a fresh search.</summary>
+    public void RescanMemory() => _mem.Rescan();
 
     /// <summary>True when Windows can do OCR at all.</summary>
     public bool TextAvailable => _ocr.Available;
@@ -92,7 +112,25 @@ public sealed class MonitorEngine : IDisposable
 
     /// <summary>Fires a key straight away, ignoring arm state, so a keybind can
     /// be proven to reach the game.</summary>
-    public void TestKey(string key, int holdMs) => _keys.Send(key, holdMs);
+    public void TestKey(string key, int holdMs) =>
+        _keys.Send(key, holdMs, 1, 40, PostingKeys, GameWindow);
+
+    /// <summary>Posting to the window rather than injecting.</summary>
+    private bool PostingKeys =>
+        _cfg.InputMethod.Equals("postmessage", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Handle of the game window, looked up rarely and cached.</summary>
+    private nint GameWindow
+    {
+        get
+        {
+            if (_gameWindow != 0 && Native.IsWindowVisible(_gameWindow)) return _gameWindow;
+            _gameWindow = Native.FindWindowHandle(_cfg.WindowMatch);
+            return _gameWindow;
+        }
+    }
+
+    private nint _gameWindow;
 
     public void Start()
     {
@@ -246,6 +284,7 @@ public sealed class MonitorEngine : IDisposable
         bool fromText = false;
         string textRaw = "";
         bool textConfigured = c.UseText && c.TextRegion.IsValid && _ocr.Available;
+        bool textLostOverride = true;
         long textAge = long.MaxValue;
 
         if (textConfigured && _ocr.TryGet(name, out var tr))
@@ -259,11 +298,35 @@ public sealed class MonitorEngine : IDisposable
             }
         }
 
+        // Memory beats everything on screen when it is working: exact, and
+        // free of every way a picture can mislead. The screen stays as the
+        // fallback, and as the hint that finds the address in the first place.
+        if (_cfg.UseMemory && _mem.TryGet(out var ms) && _mem.NowMs - ms.AtMs < 500)
+        {
+            double memFrac = name == "Life" ? ms.LifeFraction : ms.ManaFraction;
+            int cur = name == "Life" ? ms.CurHp : ms.CurMp;
+            int max = name == "Life" ? ms.MaxHp : ms.MaxMp;
+            if (max > 0)
+            {
+                frac = memFrac;
+                fromText = true;
+                textRaw = $"{cur:N0}/{max:N0} (memory)";
+                textLostOverride = false;
+            }
+        }
+        else if (fromText && _cfg.UseMemory)
+        {
+            // Feed what the screen says back to the search, so it can pick the
+            // right candidate out of everything with the same shape.
+            if (name == "Life") _mem.HintMaxHp = ParseMax(textRaw);
+            else _mem.HintMaxMp = ParseMax(textRaw);
+        }
+
         // The numbers are only drawn on the gameplay screen. Losing them for
         // more than a moment means an inventory, the passive tree, a vendor or
         // the atlas is up - and those cover the globe, so the pixel fallback
         // would be reading the panel and firing at it.
-        bool textLost = textConfigured && textAge > c.RequireTextMs;
+        bool textLost = textConfigured && textAge > c.RequireTextMs && textLostOverride;
 
         // Anything above the floor is a real reading, and the moment it happens
         // is what separates "nearly dead" from "cannot see it".
@@ -391,7 +454,8 @@ public sealed class MonitorEngine : IDisposable
             return new GlobeReading(name, frac, true, "", fromText, textRaw);
 
         int shots = Math.Clamp(c.BurstCount, 1, 5);
-        if (!_keys.Send(c.Key, c.HoldMs, shots, Math.Clamp(c.BurstGapMs, 5, 500)))
+        if (!_keys.Send(c.Key, c.HoldMs, shots, Math.Clamp(c.BurstGapMs, 5, 500),
+                        PostingKeys, GameWindow))
             return new GlobeReading(name, frac, true, "", fromText, textRaw);
 
         st.LastFireMs = now;
@@ -429,6 +493,20 @@ public sealed class MonitorEngine : IDisposable
     internal static bool Unreadable(double frac, long nowMs, long lastGoodMs, WatcherConfig c)
         => frac <= c.IgnoreBelow && nowMs - lastGoodMs > c.BlindGraceMs;
 
+    private static int ParseMax(string raw)
+    {
+        int slash = raw.IndexOf('/');
+        if (slash < 0) return 0;
+        int n = 0;
+        foreach (char ch in raw.AsSpan(slash + 1))
+        {
+            if (char.IsAsciiDigit(ch)) n = n * 10 + (ch - '0');
+            else if (ch != ',' && ch != '.') break;
+            if (n > 1_000_000) return 0;
+        }
+        return n;
+    }
+
     private bool WindowFocused()
     {
         string title = Native.ForegroundTitle();
@@ -448,5 +526,6 @@ public sealed class MonitorEngine : IDisposable
         _keys.Dispose();
         _chime.Dispose();
         _ocr.Dispose();
+        _mem.Dispose();
     }
 }

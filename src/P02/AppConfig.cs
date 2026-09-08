@@ -190,6 +190,26 @@ public sealed class AppConfig
 
     public string ArmHotkey { get; set; } = "F8";
 
+    /// <summary>
+    /// "sendinput" injects into the system; "postmessage" posts straight to the
+    /// game window. Injected input is what most games read, but it can be
+    /// missed; posted messages reach a window without focus, and some games
+    /// ignore them entirely because they never touch real keyboard state.
+    /// Which works is a matter for testing, so both are here.
+    /// </summary>
+    public string InputMethod { get; set; } = "sendinput";
+
+    /// <summary>
+    /// Read life and mana from the game's memory instead of from the screen.
+    /// Exact and instant, and by far the most intrusive thing here - reading
+    /// another process is what anti-cheat looks for, where watching the screen
+    /// is passive. Off unless you turn it on.
+    /// </summary>
+    public bool UseMemory { get; set; }
+
+    /// <summary>Process to read, without ".exe".</summary>
+    public string GameProcess { get; set; } = "PathOfExileSteam";
+
     /// <summary>Short ding when a key is fired.</summary>
     public bool SoundOnFire { get; set; } = true;
 

@@ -251,4 +251,15 @@ internal static class Native
         try { SetWindowDisplayAffinity(hWnd, hide ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE); }
         catch { /* older Windows: nothing to do */ }
     }
+
+    // ---- posting keys to a window ----------------------------------------
+
+    public const uint WM_KEYDOWN = 0x0100;
+    public const uint WM_KEYUP = 0x0101;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool PostMessageW(nint hWnd, uint msg, nint wParam, nint lParam);
+
+    [DllImport("user32.dll")]
+    public static extern uint MapVirtualKeyW(uint code, uint mapType);
 }

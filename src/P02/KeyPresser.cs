@@ -17,7 +17,8 @@ namespace P02;
 /// </summary>
 internal sealed class KeyPresser : IDisposable
 {
-    private readonly record struct Job(string Key, int HoldMs, int Count, int GapMs);
+    private readonly record struct Job(string Key, int HoldMs, int Count, int GapMs,
+                                      bool Post, nint Window);
 
     private readonly BlockingCollection<Job> _queue = new(new ConcurrentQueue<Job>(), 1);
     private readonly Thread _thread;
@@ -47,7 +48,8 @@ internal sealed class KeyPresser : IDisposable
     /// Sends a press, unless one is already going out. Returns false when it
     /// was refused. Never blocks the caller.
     /// </summary>
-    public bool Send(string key, int holdMs, int count = 1, int gapMs = 40)
+    public bool Send(string key, int holdMs, int count = 1, int gapMs = 40,
+                     bool post = false, nint window = 0)
     {
         if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
         {
@@ -77,7 +79,7 @@ internal sealed class KeyPresser : IDisposable
 
         Volatile.Write(ref _busySinceMs, _clock.ElapsedMilliseconds);
 
-        if (_queue.TryAdd(new Job(key, holdMs, count, gapMs))) return true;
+        if (_queue.TryAdd(new Job(key, holdMs, count, gapMs, post, window))) return true;
 
         Volatile.Write(ref _busy, 0);
         return false;
@@ -93,7 +95,8 @@ internal sealed class KeyPresser : IDisposable
                 {
                     for (int i = 0; i < job.Count; i++)
                     {
-                        KeySender.Tap(job.Key, job.HoldMs);
+                        if (job.Post) KeySender.PostTo(job.Window, job.Key, job.HoldMs);
+                        else KeySender.Tap(job.Key, job.HoldMs);
                         if (i < job.Count - 1) Thread.Sleep(job.GapMs);
                     }
                 }

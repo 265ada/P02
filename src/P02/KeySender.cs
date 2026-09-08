@@ -55,6 +55,59 @@ internal static class KeySender
         return i;
     }
 
+    /// <summary>Virtual-key codes, needed for posting rather than injecting.</summary>
+    private static readonly Dictionary<string, ushort> Vk = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["escape"] = 0x1B, ["backspace"] = 0x08, ["tab"] = 0x09, ["enter"] = 0x0D,
+        ["space"] = 0x20, ["lshift"] = 0xA0, ["rshift"] = 0xA1,
+        ["lctrl"] = 0xA2, ["rctrl"] = 0xA3, ["lalt"] = 0xA4, ["ralt"] = 0xA5,
+        ["-"] = 0xBD, ["="] = 0xBB, ["["] = 0xDB, ["]"] = 0xDD, [";"] = 0xBA,
+        ["'"] = 0xDE, ["`"] = 0xC0, ["\\"] = 0xDC,
+        [","] = 0xBC, ["."] = 0xBE, ["/"] = 0xBF,
+        ["insert"] = 0x2D, ["delete"] = 0x2E, ["home"] = 0x24, ["end"] = 0x23,
+        ["pageup"] = 0x21, ["pagedown"] = 0x22,
+        ["up"] = 0x26, ["down"] = 0x28, ["left"] = 0x25, ["right"] = 0x27,
+    };
+
+    static KeySender()
+    {
+        for (char c = '0'; c <= '9'; c++) Vk[c.ToString()] = c;
+        for (char c = 'a'; c <= 'z'; c++) Vk[c.ToString()] = char.ToUpperInvariant(c);
+        for (int i = 1; i <= 12; i++) Vk[$"f{i}"] = (ushort)(0x6F + i);
+    }
+
+    /// <summary>
+    /// Posts the key to a specific window instead of injecting it into the
+    /// system.
+    ///
+    /// This reaches a window that does not have focus, and some games accept it
+    /// where injected input is missed - and some ignore it entirely, because it
+    /// never touches the keyboard state that raw input reads. Which one applies
+    /// is a matter for testing, so both are available.
+    /// </summary>
+    public static void PostTo(nint hWnd, string key, int holdMs)
+    {
+        key = key.Trim();
+        if (hWnd == 0) throw new InvalidOperationException("no game window to post to");
+        if (!Vk.TryGetValue(key, out ushort vk))
+            throw new ArgumentException($"no virtual-key code for '{key}'");
+
+        uint scan = Scan.TryGetValue(key, out ushort sc) ? sc : Native.MapVirtualKeyW(vk, 0);
+        bool ext = Extended.Contains(key);
+
+        // lParam: repeat count 1, scancode, extended flag, and for key-up the
+        // "was down" and "transition" bits a real release carries.
+        nint down = (nint)(1L | ((long)scan << 16) | (ext ? 1L << 24 : 0L));
+        nint up = (nint)((long)down | (1L << 30) | (1L << 31));
+
+        Native.PostMessageW(hWnd, Native.WM_KEYDOWN, vk, down);
+        Thread.Sleep(Math.Clamp(holdMs, 1, 500));
+        Native.PostMessageW(hWnd, Native.WM_KEYUP, vk, up);
+    }
+
+    /// <summary>True when this key can be posted as well as injected.</summary>
+    public static bool CanPost(string key) => Vk.ContainsKey(key.Trim());
+
     /// <summary>Taps <paramref name="key"/>. Blocks for <paramref name="holdMs"/>.</summary>
     public static void Tap(string key, int holdMs)
     {

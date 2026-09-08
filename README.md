@@ -3,7 +3,25 @@
 Watches the Life and Mana globes in Path of Exile 2 and taps a key when either
 one drops below a level you set.
 
-It can read the globes two ways, and the better one is the numbers.
+It can read your life and mana three ways.
+
+**Game memory** - exact, instant, and immune to everything that can go wrong
+with looking at a screen. It is also by far the most intrusive: reading another
+process is what anti-cheat looks for, where watching the screen is passive. Off
+unless you turn it on, and it asks before it does.
+
+No offsets are hardcoded. Published ones go stale on the first patch - the set
+this was built from resolved to a null pointer within two months of being
+written. It searches for the *shape* of the structure instead: maximum and
+current life as adjacent integers, mana 0x50 further on, energy shield 0x88
+further still, every current value inside its maximum. A struct's layout changes
+far less often than where a pointer to it lives, so this survives patches. The
+sweep covers writable heap only - about 7 GB of 23 - and measured 3.3 GB/s, so
+roughly two seconds on first use. If more than one candidate matches, the
+numbers read off the screen pick between them, and failing that it watches which
+one moves.
+
+**Numbers on screen** - point it at the `1,465/1,465` beside the globe.
 
 **Numbers** - point it at the `1,465/1,465` beside the globe and that becomes
 what decides. It is an exact ratio, needs no calibration and no colour tuning,
@@ -21,8 +39,8 @@ than a couple of seconds is taken as "not looking at the game", and P02 holds
 fire and stays silent until they come back. Short gaps still fall back to
 pixels, because OCR misses the odd frame.
 
-**Globe pixels** - the fallback, used between text reads and when no text region
-is set. The pixel path produces a
+**Globe pixels** - the last fallback, used between text reads and when no text
+region is set. The pixel path produces a
 *fraction* of the globe, so gear swaps and buffs change nothing there either -
 40% is 40% whether your pool is 1,440 or 3,000.
 
@@ -149,6 +167,18 @@ panic line, so a spike is caught on the way down rather than after it lands.
 
 Presses keep coming for as long as you are below the trigger. Whether they do
 anything is down to your charges — the app cannot see those.
+
+## Injected or posted keys
+
+**Injected input** is the default: the key goes into the system as a hardware
+scancode, which is what most games read.
+
+**Posted to window** sends the keypress straight to the game window instead. It
+reaches a window that does not have focus, and some games accept it where
+injected input is missed - and some ignore it completely, because it never
+touches the keyboard state that raw input reads. Which applies is a matter for
+testing, so both are there. If the ding sounds and nothing happens in game,
+this is worth trying before anything else.
 
 ## Speed, and what is actually achievable
 
