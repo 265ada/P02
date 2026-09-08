@@ -354,7 +354,12 @@ internal sealed class GameMemory : IDisposable
 
         foreach (long a in best.Value)
         {
-            foreach (int curOff in new[] { 4, -4 })
+            // Directly beside the maximum was an assumption, and with seven
+            // candidates all offering 240 it was plainly the wrong one - the
+            // real current was never four bytes away. A wider sweep would once
+            // have been reckless, but nothing is accepted now without matching
+            // what the screen reads, so looking further costs only time.
+            foreach (int curOff in CurrentOffsets)
             {
                 if (!ReadInt(a + curOff, out int curHp)) continue;
                 if (curHp < 0 || curHp > wantHp * 3) continue;
@@ -406,6 +411,24 @@ internal sealed class GameMemory : IDisposable
             : "found the maxima - waiting for the numbers to say what your "
               + "current life is, so the right one can be picked";
         return 0;
+    }
+
+    /// <summary>
+    /// Where a current value might sit relative to its maximum: the two places
+    /// beside it first, then outwards through the rest of the structure.
+    /// </summary>
+    private static IEnumerable<int> CurrentOffsets
+    {
+        get
+        {
+            yield return 4;
+            yield return -4;
+            for (int d = 8; d <= 128; d += 4)
+            {
+                yield return d;
+                yield return -d;
+            }
+        }
     }
 
     /// <summary>The maxima must still be the ones we searched for.</summary>
