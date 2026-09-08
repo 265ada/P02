@@ -1,144 +1,109 @@
 # P02
 
-Watches the Life and Mana globes in Path of Exile 2 and taps a key when either
-one drops below a level you set.
+Watches your life, mana and energy shield in Path of Exile 2 and taps a key when
+any of them drops below a level you set.
 
-It can read your life and mana three ways.
+There are three ways it can read them, and they are not equal.
 
-**Game memory** - exact, instant, and immune to everything that can go wrong
-with looking at a screen. It is also by far the most intrusive: reading another
-process is what anti-cheat looks for, where watching the screen is passive. Off
-unless you turn it on, and it asks before it does.
+## Numbers on screen — start here
 
-**It needs both maxima, and it will not guess without them.** Put your maximum
-life and mana in the **My max** boxes on each panel - both, even if you only
-watch one globe. Nothing is searched for until they are there.
+Press **Find numbers**. It looks in the corners of the game for the words Life,
+Mana and Shield, points itself at the numbers beside each, then reads every one
+back and tells you what it will be watching. That is the whole setup: no boxes to
+drag, no calibration, no thresholds.
 
-**Tell it your maximum.** A heap holds thousands of number pairs shaped exactly
-like a health pool - ward at 90/90 is indistinguishable from life at 90/90, and
-that is precisely what it locked onto once. Put your maximum life and mana in the
-**My max** boxes and the search has something to aim at; leave them at 0 and it
-is guessing. A memory reading whose maximum does not match what you entered is
-ignored and triggers a fresh search, so a wrong lock corrects itself instead of
-sitting there being confidently wrong.
+Reading it back matters. A box a few pixels out lands on the line below, and life
+reading the shield value looks perfectly healthy right up until it kills you. Two
+stats coming back with identical numbers is called out for the same reason.
 
-It assumes no layout at all, because assuming one is what made it read ward as
-life and a mana pool of 17,750. Given your two maxima it finds them sitting near
-each other in the heap and learns the distance between them from whichever
-distance the candidates agree on, then learns which side of a maximum its
-current value sits on the same way. Two known values in one structure is a much
-stronger signature than one known value at a guessed offset, and the only thing
-it needs to stay true across patches is that life and mana live near each other.
+There are two buttons named after numbers and they do different things:
 
-Current above maximum is expected - both pools overstack - so only the maxima
-are required to match, and a reading whose maxima drift away from what you
-entered starts a fresh search rather than being reported. Published ones go stale on the first patch - the set
-this was built from resolved to a null pointer within two months of being
-written. It searches for the *shape* of the structure instead: maximum and
-current life as adjacent integers, mana 0x50 further on, energy shield 0x88
-further still, every current value inside its maximum. A struct's layout changes
-far less often than where a pointer to it lives, so this survives patches. The
-sweep covers writable heap only - about 7 GB of 23 - and measured 3.3 GB/s, so
-roughly two seconds on first use. If more than one candidate matches, the
-numbers read off the screen pick between them, and failing that it watches which
-one moves.
-
-**Numbers on screen** - press **Find numbers** and it locates them itself, then
-reads each one back and tells you what it will be watching.
-
-There are two buttons and they do different things:
-
-| Button | Where | What it does |
+| Button | Where | What it wants |
 |---|---|---|
-| **Find numbers** | bottom of the main window | Finds life, mana and shield all at once, by looking for those words in the corners of the game. Nothing to drag. This is the whole setup. |
-| **Numbers…** | on a panel | Box **one line only** - that stat's word and its numbers, nothing above or below. One per stat. Only needed for what Find numbers misses. |
+| **Find numbers** | bottom of the main window | All of them at once. Nothing to drag. |
+| **Numbers…** | on a panel | **One line only** — that stat's word and its numbers, nothing above or below. Only for what Find numbers misses. |
 
-A box that spans several lines is not fatal, since the line is chosen by its
-label, but a tight one is more reliable and faster to read. The shield's box is
-separate from life's and only matters if **Also fire for energy shield** is
-ticked. That last part
-matters: a box a few pixels out lands on the line below, and life reading the
-shield value looks perfectly healthy right up until it kills you. Two stats
-reading the same numbers is called out as well. The
-OCR engine reports where every word it reads was, so there is no need to drag a
-box around anything: it looks in the corners of the game for the words Life,
-Mana and Shield, and the numbers beside them are the region. Setting a box by
-hand still works, and should **include the label word**.
+The label in the box is what makes the reading safe. A box drawn around the life
+numbers almost always catches shield and ward too, and those are number pairs as
+well — ward at 90/90 read as life against an 85% trigger fires every time. The
+line is chosen by its label first, by matching your maximum second, and by
+position only when neither is available. Ward, incidentally, cannot be helped by
+a flask at all, so firing at it is pure waste.
 
-That word matters. A box around the life numbers almost always catches shield
-and ward as well, and those are number pairs too - ward at 90/90 read as life
-is a misfire waiting to happen, and it happened. The line is picked by its
-label first, by matching your **My max** second, and only by position if
-neither is available. Ward, incidentally, cannot be helped by a flask at all,
-so firing at it is pure waste.
+**Nobody has to type a maximum.** Left at 0, it is read from the numbers and
+filled in — which is also what lets the memory search find you. Levelling and
+gear move it, and a stated maximum that has gone stale would refuse every reading
+in silence, so when the numbers insist on a different one for long enough to rule
+out a misread it is adopted, the search is re-pointed, and the panel says what
+changed.
 
-**Numbers** - point it at the `1,465/1,465` beside the globe and that becomes
-what decides. It is an exact ratio, needs no calibration and no colour tuning,
-and because the maximum is read too, gear and buffs that move your pool change
-nothing. Windows does the reading, so there is nothing extra to install. **Nobody has to type a maximum.** Left at 0, it is read from the numbers and
-filled in, which is also what lets the memory search find you - the numbers give
-the maximum, the maximum finds the character, and no field needs touching.
+Everything is checked before it is believed:
 
-**A maximum that changes looks after itself.** Levelling and gear move it, and a
-stated maximum that has gone stale refuses every reading in silence - which
-looks exactly like the app being broken. The numbers on screen already carry the
-true maximum, so when they have insisted on a different one for long enough to
-rule out a misread, it is adopted: the setting updates, the memory search is
-pointed at the new value, and the panel says what changed. Nothing to maintain.
+- Numbers are read **within a line, never across one**. A box catching the shield
+  line once turned a life of 1,465 and a shield of 2,005 into a maximum of
+  14,652,005 — which reads as 0% life at full health.
+- A stated maximum makes the check exact. A stray leading digit turns 1,465 into
+  11,465, and a current of 1,465 against that reads as 13% — under any trigger,
+  so it fires while you are full.
+- Without a stated maximum, one that changes by more than a fifth must repeat
+  five times before it is accepted. Real maxima barely change; misread ones
+  change constantly.
+- A reading disagreeing with the globe pixels by more than 40 points is dropped.
+  The pixels are crude but never wildly wrong.
 
-Every
-reading is checked before it is believed, and **filling in My max is what makes
-that check exact**. A stray leading digit turns 1,465 into 11,465; a current of
-1,465 against that reads as 13%, which is under any trigger, so it fires while
-you are at full health. Told what your maximum is, a reading that disagrees is
-simply dropped. Without one, a maximum that changes by more than a fifth has to
-repeat five times before it is believed, since a real maximum barely ever
-changes and a misread one changes constantly. The maximum has to look like a
-character's pool and has to repeat before a change to it is accepted, since a
-misread maximum is the difference between 40% and 4%. Numbers are only read
-within a line, never across one - a box that also catches the shield line turned
-a life of 1,465 and a shield of 2,005 into a maximum of 14,652,005, which reads
-as 0% life at full health. And a text reading that disagrees with the globe
-pixels by more than 40 points is discarded: the pixels are crude, but they are
-never wildly wrong.
+Current above maximum is normal — skills push pools past their cap — so it is not
+an error. It is clamped: above maximum is above full, and above full does not
+fire.
 
-Current above maximum is normal here - skills push life past the pool - so that
-is not treated as an error. It is simply clamped: above maximum is above full,
-and above full does not fire.
+One more thing the numbers give you: **they are only drawn during play**. Open an
+inventory, the passive tree, a vendor or the atlas and they vanish — and those
+screens cover the globes, so anything reading pixels would be reading the panel.
+Losing them for more than a couple of seconds is taken as "not looking at the
+game", and it holds fire until they come back.
 
-Setting the numbers does one more thing worth having: **the numbers are only
-drawn on the gameplay screen**. Open an inventory, the passive tree, a vendor or
-the atlas and they vanish - and those screens cover the globe too, so the pixel
-fallback ends up reading the panel and firing at it. Losing the numbers for more
-than a couple of seconds is taken as "not looking at the game", and P02 holds
-fire and stays silent until they come back. Short gaps still fall back to
-pixels, because OCR misses the odd frame.
+## Game memory — exact, and the most intrusive
+
+Off unless you turn it on, and it asks first. Reading another process is what
+anti-cheat looks for, where watching the screen is passive. That is the trade.
+
+It assumes no layout. Published offsets go stale on the first patch — the set
+this was built from resolved to a null pointer within two months, and assuming
+its field spacing made the search match unrelated numbers, reporting ward as
+life. Instead it needs your maximum life and mana, finds the two of them sitting
+near each other in the heap, and learns the distance between them from whichever
+distance the candidates agree on. Which side of a maximum its current value sits
+on is learned the same way. Two known values inside one structure is a far
+stronger signature than one known value at a guessed offset.
+
+A heap holds thousands of pairs shaped like a health pool — ward at 90/90 is
+indistinguishable from life at 90/90 — so it will not search without both maxima.
+Set the numbers up first and they arrive on their own. A reading whose maximum
+drifts from what is expected is ignored and starts a fresh search, so a wrong
+lock corrects itself instead of sitting there being confidently wrong.
+
+The sweep covers writable heap only — about 7 GB of 23 — and measured 3.3 GB/s,
+so roughly two seconds.
+
+## Globe pixels — the fallback
+
+Used between text reads and when nothing better is set up. Worth knowing what it
+cannot do:
+
+- **Energy shield is drawn over the life globe**, so shield loss looks exactly
+  like life loss.
+- **The globe is not always red.** Poison recolours it, and a green globe has no
+  red in it at all — the reading drops from full to nothing in one frame, which
+  looks like a killing blow and fires accordingly.
 
 **A better source never falls back quietly.** Once memory or the numbers are
-asked for, the globe pixels are not allowed to decide in their place. A source
-that has been working and drops out for a moment gets a couple of seconds of
-grace, because a heal should not wait on one missed frame - but a source that
-has never once produced a reading gets none at all. It is not having a hiccup,
-it is not set up, and two seconds is long enough for a globe turning green to
-spend every charge you have. Silently dropping to a worse source is how a setup that looks
-configured misfires anyway.
+asked for, the pixels are not allowed to decide in their place. A source that has
+been working and drops out for a moment gets a couple of seconds of grace,
+because a heal should not wait on one missed frame — but a source that has never
+once produced a reading gets none at all. It is not having a hiccup, it is not
+set up.
 
-**Globe pixels** - the last fallback, used between text reads and when no text
-region is set. Worth knowing what they cannot do. **The life globe is not always red**: poison
-and other debuffs recolour it, and a green globe has no red in it at all, so a
-colour test reads it as empty the moment the colour changes - a jump from full
-to nothing that looks exactly like a killing blow. **Tune colours** switches to
-judging brightness instead when colour turns out not to separate full from
-empty, which survives a recolour: the liquid is bright whatever colour it has
-been turned, and the drained part stays dark.
-
-And **energy shield is drawn over the life globe**, so the pixels follow shield loss as well as life loss and will
-pot for a shield that is draining while life is untouched. Numbers and memory
-both read the life value itself and do not have this problem. Each panel names
-which source is deciding, and the pinned readout shows the percentage in amber
-whenever it is the pixels. The pixel path produces a
-*fraction* of the globe, so gear swaps and buffs change nothing there either -
-40% is 40% whether your pool is 1,440 or 3,000.
+Each panel names which source is deciding, and the pinned readout shows the
+percentage in amber whenever it is the pixels.
 
 ## What you get
 
