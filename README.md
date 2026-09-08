@@ -199,6 +199,8 @@ is impossible by construction rather than by picking a cautious multiplier.
 | Window match | Only fires while the focused window title contains your string. "Path of Exile" matches "Path of Exile 2" — it is a substring test, not an exact one. The status line shows the focused window's real title, so you can see what it is comparing against. |
 | Cooldown | Minimum gap between presses, per globe. |
 | Confirm frames | Two consecutive low reads required, so one flash frame can't fire it. |
+| Ignore below | A reading at or under this counts as nothing seen. With the grace period below, that is what stops a loading screen drawing an endless stream of presses. |
+| Blind grace | How long a globe may read nothing before it counts as unseen rather than nearly empty. About a second: long enough that a crash to 1% life still fires, short enough that a loading screen goes quiet almost at once. |
 
 The app runs unelevated on purpose. If the game is running as administrator,
 Windows blocks our input — run the game normally, or nothing will happen.
