@@ -198,7 +198,7 @@ internal sealed partial class TextOcr : IDisposable
             // Silence here is correct - a refused reading is better than the
             // wrong line - but it should be explicable.
             if (label.Length > 0
-                && !text.Contains(label, StringComparison.OrdinalIgnoreCase)
+                && !HasLabel(text, label)
                 && _clock.ElapsedMilliseconds - slot.LastComplaintMs > 10000)
             {
                 slot.LastComplaintMs = _clock.ElapsedMilliseconds;
@@ -285,6 +285,44 @@ internal sealed partial class TextOcr : IDisposable
     }
 
     /// <summary>
+    /// Whether a line carries this label, allowing for the engine getting a
+    /// letter of it wrong.
+    ///
+    /// Demanding the exact word threw away whole frames - numbers included -
+    /// over "tife", "Li" and "Li fiv", which is small pale text on a moving
+    /// background read three times a second. The label is there to say which
+    /// line this is, and a word that is one letter out still says it: nothing
+    /// else in the box looks remotely like "Life". The numbers themselves are
+    /// never guessed at, only the word beside them.
+    /// </summary>
+    internal static bool HasLabel(string text, string label)
+    {
+        if (label.Length == 0) return true;
+        if (text.Contains(label, StringComparison.OrdinalIgnoreCase)) return true;
+
+        char[] gaps = [' ', (char)10, (char)13, (char)9, ','];
+        foreach (string word in text.Split(gaps, StringSplitOptions.RemoveEmptyEntries))
+        {
+            // A truncated read - "Li" for "Life" - is still unambiguous when
+            // nothing else in the box starts that way.
+            if (word.Length >= 2 && label.StartsWith(word, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (word.Length == label.Length && Off(word, label) <= 1) return true;
+        }
+
+        return false;
+
+        static int Off(string a, string b)
+        {
+            int wrong = 0;
+            for (int i = 0; i < a.Length; i++)
+                if (char.ToLowerInvariant(a[i]) != char.ToLowerInvariant(b[i])) wrong++;
+            return wrong;
+        }
+    }
+
+    /// <summary>
     /// Pulls "current/maximum" out of whatever the engine returned.
     ///
     /// Matching happens inside a line and never across one: a box that also
@@ -309,7 +347,7 @@ internal sealed partial class TextOcr : IDisposable
         // decide anything.
         var strategies = new Func<string, bool>[]
         {
-            l => label.Length > 0 && l.Contains(label, StringComparison.OrdinalIgnoreCase),
+            l => label.Length > 0 && HasLabel(l, label),
             l => expectedMax > 0 && LineMax(l) == expectedMax,
             _ => label.Length == 0 && expectedMax == 0,
         };
@@ -466,7 +504,7 @@ internal sealed partial class TextOcr : IDisposable
             foreach (string label in labels)
             {
                 if (found.ContainsKey(label)) continue;
-                if (!line.Text.Contains(label, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!HasLabel(line.Text, label)) continue;
 
                 double l = double.MaxValue, t = double.MaxValue, r = 0, b = 0;
                 foreach (var w in line.Words)

@@ -405,6 +405,37 @@ static class T
             fails += bad;
         }
 
+        // OCR reads small pale text over a moving background; the label came
+        // back a letter short or a letter wrong often enough that demanding it
+        // exactly threw away good numbers several times a minute.
+        {
+            (string Text, bool Want)[] cases =
+            [
+                ("tife 1,947/1,490", true),
+                ("Li 1,947/1,490", true),
+                ("Li fiv 1,947/1,490", true),
+                ("Life 1,947/1,490", true),
+                ("Shield 2,011/2,011", false),
+                ("Ward 90/90", false),
+                ("Mana 759/759", false),
+                ("Spirit 42/132", false),
+            ];
+
+            bool all = true;
+            foreach (var (text, want) in cases)
+            {
+                bool saw = TextOcr.HasLabel(text, "Life");
+                if (saw != want)
+                {
+                    all = false;
+                    Console.WriteLine($"FAIL  \"{text}\" as Life -> {saw}, wanted {want}");
+                }
+            }
+
+            if (all) Console.WriteLine("PASS  label survives a mis-read letter, "
+                                       + "without matching another stat");
+        }
+
         Console.WriteLine(fails == 0 ? "\nALL PASS" : $"\n{fails} FAILED");
         Environment.Exit(fails == 0 ? 0 : 1);
     }
@@ -418,5 +449,7 @@ static class T
                   && Math.Abs(r.Width - rad * 2) <= 8 && Math.Abs(r.Height - rad * 2) <= 8;
         Console.WriteLine($"{(ok ? "PASS" : "FAIL")}  {name} -> {r}");
         return ok ? 0 : 1;
+
+
     }
 }
