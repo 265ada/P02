@@ -10,6 +10,10 @@ with looking at a screen. It is also by far the most intrusive: reading another
 process is what anti-cheat looks for, where watching the screen is passive. Off
 unless you turn it on, and it asks before it does.
 
+**It needs both maxima, and it will not guess without them.** Put your maximum
+life and mana in the **My max** boxes on each panel - both, even if you only
+watch one globe. Nothing is searched for until they are there.
+
 **Tell it your maximum.** A heap holds thousands of number pairs shaped exactly
 like a health pool - ward at 90/90 is indistinguishable from life at 90/90, and
 that is precisely what it locked onto once. Put your maximum life and mana in the
@@ -18,7 +22,17 @@ is guessing. A memory reading whose maximum does not match what you entered is
 ignored and triggers a fresh search, so a wrong lock corrects itself instead of
 sitting there being confidently wrong.
 
-No offsets are hardcoded. Published ones go stale on the first patch - the set
+It assumes no layout at all, because assuming one is what made it read ward as
+life and a mana pool of 17,750. Given your two maxima it finds them sitting near
+each other in the heap and learns the distance between them from whichever
+distance the candidates agree on, then learns which side of a maximum its
+current value sits on the same way. Two known values in one structure is a much
+stronger signature than one known value at a guessed offset, and the only thing
+it needs to stay true across patches is that life and mana live near each other.
+
+Current above maximum is expected - both pools overstack - so only the maxima
+are required to match, and a reading whose maxima drift away from what you
+entered starts a fresh search rather than being reported. Published ones go stale on the first patch - the set
 this was built from resolved to a null pointer within two months of being
 written. It searches for the *shape* of the structure instead: maximum and
 current life as adjacent integers, mana 0x50 further on, energy shield 0x88

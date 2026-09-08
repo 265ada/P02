@@ -10,22 +10,21 @@ namespace P02;
 /// screen. It is also the most intrusive thing here by a distance, and it is
 /// off unless you turn it on.
 ///
-/// It does not use hardcoded offsets. Published ones go stale on the first
-/// patch - the set this was built from resolved to a null pointer within two
-/// months. Instead it searches for the shape of the structure itself: maximum
-/// and current life as adjacent integers, mana the same 0x50 further on, energy
-/// shield 0x88 further still, each current value within a plausible distance of
-/// its maximum. That survives patches, because the layout of a struct changes
-/// far less often than where a pointer to it happens to live.
+/// It assumes no layout at all. Published offsets go stale on the first patch -
+/// the base pointer this was built from resolved to null within two months, and
+/// assuming the field spacing that came with it made the search match unrelated
+/// pairs of numbers, reporting ward as life.
+///
+/// Instead you tell it your maximum life and mana, and it finds the two of them
+/// sitting near each other, learning the distance between them from whichever
+/// distance the candidates agree on. Which side of a maximum its current value
+/// sits on is learned the same way. Two known values in one structure is a far
+/// stronger signature than one known value at a guessed offset, and nothing
+/// about it needs to survive a patch except that life and mana live near each
+/// other.
 /// </summary>
 internal sealed class GameMemory : IDisposable
 {
-    // Layout taken from sjh001111/poe2-auto-potion: MaxHP +0x1DC, CurHP +0x1E0,
-    // MaxMP +0x22C, MaxES +0x264 - so relative to MaxHP, mana sits 0x50 along
-    // and energy shield 0x88.
-    private const int ManaDelta = 0x50;
-    private const int EsDelta = 0x88;
-
     private const uint PROCESS_QUERY_INFORMATION = 0x0400, PROCESS_VM_READ = 0x0010;
     private const uint MEM_COMMIT = 0x1000, MEM_PRIVATE = 0x20000;
     private const uint PAGE_GUARD = 0x100, PAGE_READWRITE = 0x04;
@@ -72,6 +71,8 @@ internal sealed class GameMemory : IDisposable
     private nint _handle;
     private int _pid;
     private long _address;          // address of MaxHP
+    private int _manaDelta;         // learned, not assumed
+    private int _curOffset = 4;     // learned: which side of maximum current sits
     private int _badReads;
 
     private Stats _latest;
@@ -141,7 +142,7 @@ internal sealed class GameMemory : IDisposable
                     Log.Write($"memory: found player stats at 0x{found:X}");
                 }
 
-                if (ReadStats(_address, out var s) && Plausible(s))
+                if (ReadStats(_address, out var s) && Plausible(s) && Matches(s))
                 {
                     lock (_gate) { _latest = s; _hasLatest = true; }
                     _badReads = 0;
@@ -206,108 +207,145 @@ internal sealed class GameMemory : IDisposable
 
     private bool ReadStats(long addr, out Stats s)
     {
-        var buf = new byte[EsDelta + 8];
-        if (!ReadProcessMemory(_handle, (nint)addr, buf, buf.Length, out var got)
-            || (int)got != buf.Length)
-        {
-            s = default;
-            return false;
-        }
-        s = FromBuffer(buf, 0);
+        s = default;
+        if (!ReadInt(addr, out int maxHp)) return false;
+        if (!ReadInt(addr + _curOffset, out int curHp)) return false;
+        if (!ReadInt(addr + _manaDelta, out int maxMp)) return false;
+        if (!ReadInt(addr + _manaDelta + _curOffset, out int curMp)) return false;
+
+        s = new Stats(curHp, maxHp, curMp, maxMp, 0, 0, _clock.ElapsedMilliseconds);
         return true;
     }
 
-    private Stats FromBuffer(byte[] b, int i) => new(
-        BitConverter.ToInt32(b, i + 4), BitConverter.ToInt32(b, i),
-        BitConverter.ToInt32(b, i + ManaDelta + 4), BitConverter.ToInt32(b, i + ManaDelta),
-        BitConverter.ToInt32(b, i + EsDelta + 4), BitConverter.ToInt32(b, i + EsDelta),
-        _clock.ElapsedMilliseconds);
-
-    // Current may exceed maximum - skills allow it - so the bound is generous
-    // rather than exact. It still has to look like a character sheet.
+    // Current may exceed maximum - life and mana both overstack - so the bound
+    // on current is generous. The maxima are what must hold steady, and they
+    // are checked against what you entered before any reading is believed.
     private static bool Plausible(Stats s) =>
         s.MaxHp is >= 20 and <= 100000 && s.CurHp >= 0 && s.CurHp <= s.MaxHp * 3
-        && s.MaxMp is >= 1 and <= 100000 && s.CurMp >= 0 && s.CurMp <= s.MaxMp * 3
-        && s.MaxEs is >= 0 and <= 200000 && s.CurEs >= 0 && s.CurEs <= Math.Max(1, s.MaxEs) * 3;
+        && s.MaxMp is >= 1 and <= 100000 && s.CurMp >= 0 && s.CurMp <= s.MaxMp * 3;
 
     /// <summary>
-    /// Sweeps the writable heap for the stat structure. Measured at about
-    /// 3 GB/s over roughly 7 GB, so a couple of seconds.
+    /// Finds the character by looking for your two maxima near each other, and
+    /// learns the distance between them rather than assuming it.
+    ///
+    /// The published layout - mana exactly 0x50 past life - is as perishable as
+    /// the base pointer that came with it, and assuming it made this match
+    /// unrelated pairs of adjacent numbers: it reported ward as life, and mana
+    /// as 2. Two known values in one structure is a far stronger signature than
+    /// one known value at a guessed distance, and it needs nothing to stay true
+    /// across patches except that life and mana live near each other.
     /// </summary>
     private long Search()
     {
-        var regions = Regions();
-        var buf = new byte[32 * 1024 * 1024];
-        var hits = new List<(long Addr, Stats S)>();
         int wantHp = HintMaxHp, wantMp = HintMaxMp;
+        if (wantHp <= 0 || wantMp <= 0)
+        {
+            Status = "enter your maximum life and mana - both are needed to find you";
+            return 0;
+        }
 
-        foreach (var (start, size) in regions)
+        var lifeAt = new List<long>();
+        var manaAt = new List<long>();
+        var buf = new byte[32 * 1024 * 1024];
+
+        foreach (var (start, size) in Regions())
         {
             if (_stop.IsCancellationRequested) return 0;
-
-            // Overlap by the struct span so a candidate on a chunk boundary is
-            // not missed.
-            for (long off = 0; off < size; off += buf.Length - (EsDelta + 8))
+            for (long off = 0; off < size; off += buf.Length - 8)
             {
                 int chunk = (int)Math.Min(buf.Length, size - off);
-                if (chunk < EsDelta + 8) break;
+                if (chunk < 8) break;
                 if (!ReadProcessMemory(_handle, (nint)(start + off), buf, chunk, out var got))
                     continue;
 
-                int usable = (int)got - (EsDelta + 8);
+                int usable = (int)got - 4;
                 for (int i = 0; i + 4 <= usable; i += 4)
                 {
-                    int maxHp = BitConverter.ToInt32(buf, i);
-                    if (maxHp < 20 || maxHp > 100000) continue;
-                    if (wantHp > 0 && maxHp != wantHp) continue;
-
-                    var s = FromBuffer(buf, i);
-                    if (!Plausible(s)) continue;
-                    if (wantMp > 0 && s.MaxMp != wantMp) continue;
-
-                    hits.Add((start + off + i, s));
-                    if (hits.Count > 4000) break;
+                    int v = BitConverter.ToInt32(buf, i);
+                    if (v == wantHp) lifeAt.Add(start + off + i);
+                    else if (v == wantMp) manaAt.Add(start + off + i);
                 }
             }
         }
 
-        if (hits.Count == 0) return 0;
-        Log.Write($"memory: {hits.Count} candidate(s) matched the layout"
-                  + (wantHp > 0 ? $" with max life {wantHp}" : ""));
-
-        if (hits.Count == 1) return hits[0].Addr;
-
-        // Several matched. Watch them change: the real one moves with the
-        // fight, while stale copies and unrelated integers sit still.
-        return Narrow(hits);
-    }
-
-    private long Narrow(List<(long Addr, Stats S)> hits)
-    {
-        var live = hits.ToList();
-        for (int round = 0; round < 6 && live.Count > 1; round++)
+        Log.Write($"memory: {lifeAt.Count} places hold {wantHp}, {manaAt.Count} hold {wantMp}");
+        if (lifeAt.Count == 0 || manaAt.Count == 0)
         {
-            _stop.Token.WaitHandle.WaitOne(400);
-            if (_stop.IsCancellationRequested) return 0;
-
-            var next = new List<(long Addr, Stats S)>();
-            foreach (var (addr, before) in live)
-            {
-                if (!ReadStats(addr, out var now) || !Plausible(now)) continue;
-                // The maximum should hold steady even as the current value moves.
-                if (now.MaxHp != before.MaxHp || now.MaxMp != before.MaxMp) continue;
-                next.Add((addr, now));
-            }
-
-            if (next.Count == 0) break;
-            live = next;
-
-            var moved = live.Where(c => c.S.CurHp != hits.First(h => h.Addr == c.Addr).S.CurHp)
-                            .ToList();
-            if (moved.Count > 0) return moved[0].Addr;
+            Status = $"no {wantHp} and {wantMp} found together - are those your maxima?";
+            return 0;
         }
 
-        return live.Count > 0 ? live[0].Addr : 0;
+        manaAt.Sort();
+        var manaArr = manaAt.ToArray();
+
+        // Pair them up: every life candidate with a mana value close by. The
+        // real distance between the two shows up as the one that repeats.
+        var byDelta = new Dictionary<long, List<long>>();
+        foreach (long a in lifeAt)
+        {
+            int idx = Array.BinarySearch(manaArr, a - 0x400);
+            if (idx < 0) idx = ~idx;
+            for (int k = idx; k < manaArr.Length && manaArr[k] <= a + 0x400; k++)
+            {
+                long delta = manaArr[k] - a;
+                if (delta == 0) continue;
+                if (!byDelta.TryGetValue(delta, out var list))
+                    byDelta[delta] = list = [];
+                list.Add(a);
+            }
+        }
+
+        if (byDelta.Count == 0)
+        {
+            Status = $"{wantHp} and {wantMp} never appear near each other";
+            return 0;
+        }
+
+        // Prefer the distance that the most candidates agree on, and among
+        // equals prefer the smaller gap: fields of one structure sit close.
+        var best = byDelta.OrderByDescending(kv => kv.Value.Count)
+                          .ThenBy(kv => Math.Abs(kv.Key))
+                          .First();
+        _manaDelta = (int)best.Key;
+        Log.Write($"memory: mana sits {_manaDelta:+#;-#;0} bytes from life "
+                  + $"in {best.Value.Count} candidate(s)");
+
+        // Current sits beside maximum; which side is not worth assuming either.
+        foreach (long a in best.Value)
+        {
+            foreach (int curOff in new[] { 4, -4 })
+            {
+                if (!ReadInt(a + curOff, out int curHp)) continue;
+                if (curHp < 0 || curHp > wantHp * 3) continue;
+                if (!ReadInt(a + _manaDelta + curOff, out int curMp)) continue;
+                if (curMp < 0 || curMp > wantMp * 3) continue;
+
+                _curOffset = curOff;
+                Log.Write($"memory: current sits {curOff:+#;-#} from maximum; "
+                          + $"life {curHp}/{wantHp}, mana {curMp}/{wantMp}");
+                return a;
+            }
+        }
+
+        Status = "found the maxima but no sensible current value beside them";
+        return 0;
+    }
+
+    /// <summary>The maxima must still be the ones we searched for.</summary>
+    private bool Matches(Stats s) =>
+        (HintMaxHp <= 0 || s.MaxHp == HintMaxHp)
+        && (HintMaxMp <= 0 || s.MaxMp == HintMaxMp);
+
+    private bool ReadInt(long addr, out int value)
+    {
+        var b = new byte[4];
+        if (ReadProcessMemory(_handle, (nint)addr, b, 4, out var got) && (int)got == 4)
+        {
+            value = BitConverter.ToInt32(b);
+            return true;
+        }
+        value = 0;
+        return false;
     }
 
     private List<(long Base, long Size)> Regions()
