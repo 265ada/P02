@@ -222,11 +222,20 @@ low the empty globe counts as full, the reading never falls below the trigger,
 and nothing ever fires. No amount of slider fiddling fixes this reliably,
 because there is no single colour rule that separates them.
 
-**Empty = 0%** fixes it. Spend the globe down, press it, and the app measures
-what drained actually looks like in your box, compares it against what full
-looked like, and puts the thresholds between the two. It then tells you what
-the drained globe reads with the new settings — if that is not low, it says so
-rather than pretending it worked.
+**Empty = 0%** is the attempt at a fix. Spend the globe down, press it, and it
+measures what drained actually looks like in your box, compares it against what
+full looked like, and puts the thresholds between the two. Then it reads the
+drained globe back: if that still comes out high, the tuning did not work, so it
+is **thrown away rather than saved** and it offers to set up the numbers
+instead.
+
+Do it alive, with the globe spent. The death screen washes the whole screen red,
+so a globe calibrated there does not match the one you play with.
+
+Some globes simply cannot be separated by colour at all - full and drained are
+the same hue, differing only in brightness, and the two ranges overlap. That is
+not a setting to find, and no amount of retrying will find it. The numbers have
+neither problem.
 
 Then open **Check**. It is live now: spend the globe and watch the number follow
 it down. If it sits at 100% while the globe empties, that is the bug, and it is

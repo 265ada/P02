@@ -59,10 +59,10 @@ public sealed class MainForm : Form
                                   _engine.ProbeText);
 
         _life = new GlobePanel("Life", cfg.Life, blue: false, Save,
-            () => _cfg.WindowMatch, () => _cfg.Mana.Region, probe, cfg.Shield)
+            () => _cfg.WindowMatch, () => _cfg.Mana.Region, probe, cfg.Shield, FindAllNumbers)
             { Location = new Point(12, 36) };
         _mana = new GlobePanel("Mana", cfg.Mana, blue: true, Save,
-            () => _cfg.WindowMatch, () => _cfg.Life.Region, probe)
+            () => _cfg.WindowMatch, () => _cfg.Life.Region, probe, null, FindAllNumbers)
             { Location = new Point(406, 36) };
         Controls.Add(_life);
         Controls.Add(_mana);

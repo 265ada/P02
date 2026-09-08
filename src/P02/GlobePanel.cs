@@ -8,6 +8,7 @@ public sealed class GlobePanel : GroupBox
     private readonly Action _onChange;
     private readonly Func<string> _windowMatch;
     private readonly Func<Box?> _other;
+    private readonly Action? _findNumbers;
     private readonly TextProbe _probe;
 
     private readonly CheckBox _enabled = new();
@@ -40,8 +41,9 @@ public sealed class GlobePanel : GroupBox
 
     public GlobePanel(string title, WatcherConfig cfg, bool blue, Action onChange,
                       Func<string> windowMatch, Func<Box?> otherRegion, TextProbe probe,
-                      WatcherConfig? shield = null)
+                      WatcherConfig? shield = null, Action? findNumbers = null)
     {
+        _findNumbers = findNumbers;
         _probe = probe;
         _shield = shield;
         _cfg = cfg;
@@ -773,6 +775,12 @@ public sealed class GlobePanel : GroupBox
                             MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
+
+        // Keep what we had: a tuning that does not work must not be left in
+        // place of one that at least was not tuned to nonsense.
+        int wasMargin = _cfg.ColourMargin;
+        int wasValue = _cfg.MinValue;
+        bool wasIgnoreHue = _cfg.IgnoreHue;
 
         _cfg.EmptyDominance = st.DomHigh;
         _cfg.EmptyValue = st.ValHigh;
