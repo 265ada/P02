@@ -306,6 +306,10 @@ public sealed class GlobePanel : Card
         _numbers.ForeColor = SystemColors.GrayText;
         _numbers.Text = "Deciding: not read yet";
         Controls.Add(_numbers);
+
+        // The card was a fixed height, so the last line - which is the one
+        // saying what it is actually reading from - was cut in half.
+        Height = Math.Max(Height, _numbers.Bottom + 14);
     }
 
     /// <summary>

@@ -49,7 +49,14 @@ public static class Theme
                 case CheckBox cb:
                     cb.FlatStyle = FlatStyle.Flat;
                     cb.FlatAppearance.BorderColor = Line;
-                    cb.BackColor = Color.Transparent;
+                    // A flat checkbox fills its box with its own BackColor, so
+                    // a transparent one came out white on a dark card - and a
+                    // white square reads the same whether it is ticked or not.
+                    // Matching the card makes it a box again; the accent fill
+                    // is what says checked, at a glance and from across a room.
+                    cb.BackColor = root.BackColor;
+                    cb.FlatAppearance.CheckedBackColor = Accent;
+                    cb.FlatAppearance.MouseOverBackColor = Field;
                     cb.ForeColor = Text;
                     cb.Font = Ui;
                     cb.Cursor = Cursors.Hand;

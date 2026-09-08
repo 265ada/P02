@@ -1,20 +1,26 @@
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 
 namespace P02;
 
 /// <summary>
 /// The small readout that sits over the game.
 ///
-/// Drawn by hand rather than assembled from labels. Over a moving, brightly lit
-/// game, text needs its own contrast to stay legible, bars need to read at a
-/// glance rather than be studied, and the whole thing has to stay out of the
-/// way - none of which a grid of grey system controls manages.
+/// Composed by hand into a per-pixel alpha window rather than painted into a
+/// normal one. A colour-keyed window can only be fully opaque or fully gone,
+/// which costs the soft edges on everything - and the key colour itself leaks
+/// into anything antialiased against it, which is what turned the whole readout
+/// magenta. Here every pixel carries its own alpha, so text can be haloed
+/// rather than outlined, bars can sit on a bed that is dark without being
+/// black, and there is no colour that must never be drawn.
 /// </summary>
 public sealed class OverlayForm : Form
 {
-    private const int Pad = 10;
-    private const int RowH = 22;
-    private const int BarH = 12;
+    private const int Pad = 11;
+    private const int RowH = 24;
+    private const int BarH = 11;
+    private const int NameW = 34;
+    private const int ValueW = 52;
 
     private readonly System.Windows.Forms.Timer _fade = new();
 
@@ -42,16 +48,10 @@ public sealed class OverlayForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        DoubleBuffered = true;
-        ClientSize = new Size(268, 96);
+        ClientSize = new Size(276, 100);
 
-        // Everything painted in this colour is punched through, so the window
-        // is only ever its own contents - no panel sitting over the game.
-        BackColor = Color.Magenta;
-        TransparencyKey = Color.Magenta;
-
-        _fade.Interval = 220;
-        _fade.Tick += (_, _) => { _fade.Stop(); _firing = false; Invalidate(); };
+        _fade.Interval = 260;
+        _fade.Tick += (_, _) => { _fade.Stop(); _firing = false; Render(); };
 
         MouseDown += (_, e) =>
         {
@@ -77,6 +77,20 @@ public sealed class OverlayForm : Form
         };
     }
 
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            var p = base.CreateParams;
+            p.ExStyle |= Native.WS_EX_LAYERED | Native.WS_EX_TOOLWINDOW
+                         | Native.WS_EX_NOACTIVATE;
+            return p;
+        }
+    }
+
+    /// <summary>Taking focus off the game to show a readout would be its own bug.</summary>
+    protected override bool ShowWithoutActivation => true;
+
     public void Show(GlobeReading life, GlobeReading mana,
                      double lifeTrigger, double manaTrigger)
     {
@@ -92,13 +106,13 @@ public sealed class OverlayForm : Form
                 : "globe pixels";
 
         FitHeight();
-        Invalidate();
+        Render();
     }
 
     public void SetArmed(bool armed)
     {
         _armed = armed;
-        Invalidate();
+        Render();
     }
 
     public void SetFightCount(int fired, bool inCombat)
@@ -106,14 +120,14 @@ public sealed class OverlayForm : Form
         if (fired == _fired && inCombat == _inCombat) return;
         _fired = fired;
         _inCombat = inCombat;
-        Invalidate();
+        Render();
     }
 
     /// <summary>Blinks when a key is actually sent.</summary>
     public void Fired()
     {
         _firing = true;
-        Invalidate();
+        Render();
         _fade.Stop();
         _fade.Start();
     }
@@ -123,15 +137,59 @@ public sealed class OverlayForm : Form
 
     private void FitHeight()
     {
-        int h = Pad + RowH + (ManaShown ? RowH : 0) + 30 + Pad;
+        int h = Pad + RowH + (ManaShown ? RowH : 0) + 26 + Pad;
         if (ClientSize.Height != h) ClientSize = new Size(ClientSize.Width, h);
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    protected override void OnHandleCreated(EventArgs e)
     {
-        var g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        base.OnHandleCreated(e);
+        Native.ExcludeFromCapture(Handle, false);
+        Render();
+    }
+
+    // A layered window never receives WM_PAINT for its contents - everything
+    // arrives through UpdateLayeredWindow instead.
+    protected override void OnPaintBackground(PaintEventArgs e) { }
+
+    protected override void OnPaint(PaintEventArgs e) { }
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        Render();
+    }
+
+    /// <summary>Draws the whole readout and hands it to the window as one image.</summary>
+    private void Render()
+    {
+        if (!IsHandleCreated || ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
+
+        using var frame = new Bitmap(ClientSize.Width, ClientSize.Height,
+                                     PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(frame))
+        {
+            g.Clear(Color.Transparent);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            // Subpixel rendering has no ground to antialias against here and
+            // leaves coloured fringes on the glyphs. Grey keeps the alpha honest.
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+
+            Compose(g);
+        }
+
+        Push(frame);
+    }
+
+    private void Compose(Graphics g)
+    {
+        // Barely there, but not nothing: a fully transparent pixel passes the
+        // mouse through to the game, and the whole thing has to stay draggable.
+        using (var ghost = new SolidBrush(Color.FromArgb(8, 0, 0, 0)))
+        using (var path = Rounded(new Rectangle(0, 0, ClientSize.Width - 1,
+                                                ClientSize.Height - 1), 10))
+            g.FillPath(ghost, path);
 
         int y = Pad;
         Row(g, "Life", _life, _lifeTrigger, y);
@@ -143,45 +201,48 @@ public sealed class OverlayForm : Form
             y += RowH;
         }
 
-        Status(g, y + 6);
+        Status(g, y + 4);
     }
 
     private void Row(Graphics g, string name, GlobeReading r, double trigger, int y)
     {
-        Glyph(g, name, Theme.Dim, Theme.Small, Pad, y + 1);
+        Glyph(g, name, Theme.Dim, Theme.Small, Pad, y + 2);
 
-        int barX = Pad + 34;
-        var bar = new Rectangle(barX, y + 3, ClientSize.Width - barX - 54, BarH);
+        int barX = Pad + NameW;
+        var bar = new Rectangle(barX, y + 4, ClientSize.Width - barX - ValueW - Pad, BarH);
+        int radius = BarH / 2;
 
-        // A dark bed under the bar: an unbacked bar is unreadable over bright
-        // ground, which is most of a game.
-        using (var bed = new SolidBrush(Color.FromArgb(190, 16, 17, 20)))
-        using (var path = Rounded(bar, BarH / 2))
+        // A bed under the bar, so an empty one reads as an empty bar rather
+        // than as nothing at all.
+        using (var bed = new SolidBrush(Color.FromArgb(150, 10, 11, 14)))
+        using (var path = Rounded(bar, radius))
             g.FillPath(bed, path);
 
         bool held = r.Note.Length > 0;
         if (r.Ok && !held)
         {
-            int w = (int)Math.Round((bar.Width - 2) * Math.Clamp(r.Fraction, 0, 1));
-            if (w > 3)
+            var inner = new Rectangle(bar.X + 1, bar.Y + 1, bar.Width - 2, bar.Height - 2);
+            int w = (int)Math.Round(inner.Width * Math.Clamp(r.Fraction, 0, 1));
+            if (w > 2)
             {
                 var fill = r.Fraction < trigger ? Theme.Bad : Theme.Good;
-                var inner = new Rectangle(bar.X + 1, bar.Y + 1, w, bar.Height - 2);
-                using var brush = new LinearGradientBrush(inner,
-                    ControlPaint.Light(fill, 0.2f), fill, LinearGradientMode.Vertical);
-                using var path = Rounded(inner, (bar.Height - 2) / 2);
+                var lit = new Rectangle(inner.X, inner.Y, w, inner.Height);
+                using var brush = new LinearGradientBrush(
+                    new Rectangle(lit.X, lit.Y - 1, lit.Width, lit.Height + 2),
+                    ControlPaint.Light(fill, 0.35f), fill, LinearGradientMode.Vertical);
+                using var path = Rounded(lit, Math.Min(radius, w / 2));
                 g.FillPath(brush, path);
             }
 
             // Where the trigger sits, so a glance says how much room is left
             // rather than only where the level is.
-            int tx = bar.X + 1 + (int)((bar.Width - 2) * Math.Clamp(trigger, 0, 1));
-            using var tick = new Pen(Color.FromArgb(170, 255, 255, 255));
-            g.DrawLine(tick, tx, bar.Y + 1, tx, bar.Bottom - 2);
+            int tx = inner.X + (int)(inner.Width * Math.Clamp(trigger, 0, 1));
+            using var tick = new Pen(Color.FromArgb(200, 255, 255, 255));
+            g.DrawLine(tick, tx, bar.Y - 1, tx, bar.Bottom + 1);
         }
 
-        using (var edge = new Pen(Color.FromArgb(110, 255, 255, 255)))
-        using (var path = Rounded(bar, BarH / 2))
+        using (var edge = new Pen(Color.FromArgb(90, 255, 255, 255)))
+        using (var path = Rounded(bar, radius))
             g.DrawPath(edge, path);
 
         string right = !r.Ok ? (r.Note.Length > 0 ? r.Note : "--")
@@ -190,7 +251,7 @@ public sealed class OverlayForm : Form
         var colour = !r.Ok ? Theme.Dim
                    : held ? Theme.Warn
                    : r.Fraction < trigger ? Theme.Bad : Theme.Text;
-        Glyph(g, right, colour, Theme.UiBold, bar.Right + 7, y + 1);
+        Glyph(g, right, colour, Theme.UiBold, bar.Right + 8, y + 1);
     }
 
     private void Status(Graphics g, int y)
@@ -198,48 +259,96 @@ public sealed class OverlayForm : Form
         Glyph(g, _armed ? "ARMED" : "disarmed",
               _armed ? Theme.Armed : Theme.Dim, Theme.UiBold, Pad, y);
 
-        string detail = _detail.Length > 24 ? _detail[..24] : _detail;
+        string detail = _detail.Length > 22 ? _detail[..22] : _detail;
         var detailColour = _life.Note.Length > 0 || !_life.FromText ? Theme.Warn : Theme.Dim;
-        Glyph(g, detail, detailColour, Theme.Small, Pad + 60, y + 1);
+        Glyph(g, detail, detailColour, Theme.Small, Pad + 62, y + 1);
 
         if (_firing)
-            Glyph(g, "FIRE", Theme.Good, Theme.UiBold, ClientSize.Width - 76, y);
+        {
+            // A dot rather than a word: it is lit for a quarter of a second and
+            // only has to be noticed, not read.
+            using var glow = new SolidBrush(Color.FromArgb(70, Theme.Good));
+            g.FillEllipse(glow, ClientSize.Width - Pad - 44, y + 1, 15, 15);
+            using var dot = new SolidBrush(Theme.Good);
+            g.FillEllipse(dot, ClientSize.Width - Pad - 41, y + 4, 9, 9);
+        }
 
         if (_inCombat || _fired > 0)
             Glyph(g, _fired.ToString(), _inCombat ? Theme.Warn : Theme.Dim,
-                  Theme.UiBold, ClientSize.Width - 28, y);
+                  Theme.UiBold, ClientSize.Width - Pad - 22, y);
     }
 
     /// <summary>
-    /// Text with a dark halo behind it. The ground behind a word changes
+    /// Text with a soft dark halo behind it. The ground behind a word changes
     /// constantly over a game and no single colour stays readable against all
-    /// of it; an outline does.
+    /// of it; with real alpha the halo can be a spread shadow rather than four
+    /// hard copies of the glyph.
     /// </summary>
     private static void Glyph(Graphics g, string s, Color colour, Font font, int x, int y)
     {
         if (s.Length == 0) return;
-        using (var shadow = new SolidBrush(Color.FromArgb(200, 0, 0, 0)))
-            foreach (var (dx, dy) in new[] { (-1, 0), (1, 0), (0, -1), (0, 1) })
-                g.DrawString(s, font, shadow, x + dx, y + dy);
+
+        using (var halo = new SolidBrush(Color.FromArgb(70, 0, 0, 0)))
+            for (int r = 2; r >= 1; r--)
+                foreach (var (dx, dy) in new[] { (-r, 0), (r, 0), (0, -r), (0, r),
+                                                 (-r, -r), (r, -r), (-r, r), (r, r) })
+                    g.DrawString(s, font, halo, x + dx, y + dy);
 
         using var brush = new SolidBrush(colour);
         g.DrawString(s, font, brush, x, y);
+    }
+
+    /// <summary>Hands the finished image to the window, alpha and all.</summary>
+    private void Push(Bitmap frame)
+    {
+        nint screen = Native.GetDC(0);
+        nint mem = Native.CreateCompatibleDC(screen);
+        nint bmp = 0;
+        nint old = 0;
+        try
+        {
+            bmp = frame.GetHbitmap(Color.FromArgb(0));
+            old = Native.SelectObject(mem, bmp);
+
+            var size = new Native.SIZE { Cx = frame.Width, Cy = frame.Height };
+            var src = new Native.POINT { X = 0, Y = 0 };
+            var dst = new Native.POINT { X = Left, Y = Top };
+            var blend = new Native.BLENDFUNCTION
+            {
+                BlendOp = Native.AC_SRC_OVER,
+                BlendFlags = 0,
+                SourceConstantAlpha = 255,
+                AlphaFormat = Native.AC_SRC_ALPHA,
+            };
+
+            Native.UpdateLayeredWindow(Handle, screen, ref dst, ref size, mem, ref src,
+                                       0, ref blend, Native.ULW_ALPHA);
+        }
+        finally
+        {
+            if (old != 0) Native.SelectObject(mem, old);
+            if (bmp != 0) Native.DeleteObject(bmp);
+            Native.DeleteDC(mem);
+            Native.ReleaseDC(0, screen);
+        }
     }
 
     private static GraphicsPath Rounded(Rectangle r, int radius)
     {
         var path = new GraphicsPath();
         int d = Math.Max(2, radius * 2);
-        path.AddArc(r.X, r.Y, d, d, 90, 180);
-        path.AddArc(r.Right - d, r.Y, d, d, 270, 180);
+        if (r.Width <= d || r.Height <= d)
+        {
+            path.AddEllipse(r);
+            return path;
+        }
+
+        path.AddArc(r.X, r.Y, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
         path.CloseFigure();
         return path;
-    }
-
-    protected override void OnHandleCreated(EventArgs e)
-    {
-        base.OnHandleCreated(e);
-        Native.ExcludeFromCapture(Handle, false);
     }
 
     protected override void Dispose(bool disposing)

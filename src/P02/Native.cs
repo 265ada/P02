@@ -262,4 +262,43 @@ internal static class Native
 
     [DllImport("user32.dll")]
     public static extern uint MapVirtualKeyW(uint code, uint mapType);
+
+    // --- per-pixel alpha windows ----------------------------------------
+
+    public const int WS_EX_LAYERED = 0x00080000;
+    public const int WS_EX_TOOLWINDOW = 0x00000080;
+    public const int WS_EX_NOACTIVATE = 0x08000000;
+
+    public const byte AC_SRC_OVER = 0;
+    public const byte AC_SRC_ALPHA = 1;
+    public const int ULW_ALPHA = 2;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SIZE
+    {
+        public int Cx;
+        public int Cy;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    public struct BLENDFUNCTION
+    {
+        public byte BlendOp;
+        public byte BlendFlags;
+        public byte SourceConstantAlpha;
+        public byte AlphaFormat;
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool UpdateLayeredWindow(nint hwnd, nint hdcDst, ref POINT dst,
+                                                  ref SIZE size, nint hdcSrc, ref POINT src,
+                                                  int colorKey, ref BLENDFUNCTION blend,
+                                                  int flags);
 }
