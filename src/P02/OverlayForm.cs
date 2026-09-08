@@ -164,14 +164,18 @@ public sealed class OverlayForm : Form
 
         // The actual numbers, not just a percentage: seeing 1,465/1,465 next to
         // the armed state is what tells you it is reading the right thing.
-        string detail = life.TextRaw.Length > 0
-            ? life.TextRaw.Replace("memory, life ", "").Replace("numbers, ", "")
-            : life.Ok ? "globe pixels" : life.Note;
+        string detail = life.Note.Length > 0
+            ? life.Note
+            : life.TextRaw.Length > 0
+                ? life.TextRaw.Replace("memory, life ", "").Replace("numbers, ", "")
+                : "globe pixels";
         if (detail.Length > 22) detail = detail[..22];
         _detail.Text = detail;
-        _detail.ForeColor = life.FromText
-            ? Color.FromArgb(190, 190, 195)
-            : Color.FromArgb(230, 180, 90);
+        _detail.ForeColor = life.Note.Length > 0
+            ? Color.FromArgb(235, 110, 90)
+            : life.FromText
+                ? Color.FromArgb(190, 190, 195)
+                : Color.FromArgb(230, 180, 90);
     }
 
     private static void Apply(LevelBar bar, Label pct, GlobeReading r, double trigger)
@@ -184,6 +188,19 @@ public sealed class OverlayForm : Form
             pct.ForeColor = Color.FromArgb(140, 140, 145);
             return;
         }
+
+        // A note on a reading that is otherwise fine means nothing is being
+        // sent. Showing the percentage alone made that look like a live
+        // reading, when it is the opposite: a number it does not believe.
+        if (r.Note.Length > 0)
+        {
+            bar.Value = 0;
+            bar.Below = false;
+            pct.Text = "held";
+            pct.ForeColor = Color.FromArgb(235, 110, 90);
+            return;
+        }
+
         bar.Value = r.Fraction;
         bar.Below = r.Fraction < trigger;
         pct.Text = $"{r.Fraction * 100:0} %";

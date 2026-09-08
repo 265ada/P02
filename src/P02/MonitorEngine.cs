@@ -510,8 +510,8 @@ public sealed class MonitorEngine : IDisposable
         {
             st.Below = 0;
             string why = textLost ? "numbers not on screen"
-                       : sourceLost ? "exact reading unavailable - holding fire"
-                       : "";
+                       : sourceLost ? "no exact reading yet"
+                       : "cannot read the globe";
             return new GlobeReading(name, frac, true, why, fromText, textRaw);
         }
 

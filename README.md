@@ -387,6 +387,22 @@ the scale mean anything:
 - Anything in between is reported as exactly that - a small rise that could be
   regen or leech.
 
+## It is armed and not firing
+
+Check what the readout says next to the armed state. **held** means it is
+deliberately not acting, and the reason is beside it:
+
+| It says | What it means |
+|---|---|
+| `cannot read the globe` | The globe reads nothing at all. Usually the box is not on it - but also what happens when the globe is recoloured by poison, since a green globe has no red to find. |
+| `no exact reading yet` | Memory or the numbers were asked for and have never produced a reading. The pixels are not allowed to stand in for them. |
+| `numbers not on screen` | An inventory, the passive tree or a vendor is up. Nothing to do. |
+
+None of those are a timing problem, and none are fixed by making panic faster:
+it is not firing late, it is declining to act on a reading it does not trust.
+The fix is always to give it a reading it does trust - **Numbers...** is the
+quickest.
+
 ## A globe reading 0% forever
 
 This is the failure that hides the best, because it looks like nothing at all:
