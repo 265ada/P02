@@ -538,6 +538,21 @@ public sealed class AppConfig
     }
 
     /// <summary>Writes immediately. Called on exit so nothing pending is lost.</summary>
+    /// <summary>
+    /// Takes every value from another config, in place.
+    ///
+    /// Everything holds a reference to this object - the engine, every panel -
+    /// so importing cannot replace it, only refill it.
+    /// </summary>
+    public void CopyFrom(AppConfig other)
+    {
+        foreach (var p in typeof(AppConfig).GetProperties())
+        {
+            if (!p.CanRead || !p.CanWrite) continue;
+            p.SetValue(this, p.GetValue(other));
+        }
+    }
+
     public void SaveNow()
     {
         try

@@ -520,4 +520,30 @@ internal static class Tips
         "",
         "0 turns it off.",
     ];
+
+    public static readonly string[] ShareSettings =
+    [
+        "Writes this whole setup out as text - onto the clipboard, and to a file",
+        "beside the log - so it can be handed to someone else or to another",
+        "machine.",
+        "",
+        "Every setting travels except the screen regions and your own maxima.",
+        "Two machines rarely share a resolution or a monitor layout, and a region",
+        "copied from someone else's screen is worse than none at all: it points",
+        "confidently at nothing. Those are found again wherever it is loaded, and",
+        "the maxima read themselves back in seconds.",
+    ];
+
+    public static readonly string[] ApplyShared =
+    [
+        "Applies exported settings from the clipboard.",
+        "",
+        "It only loads a block written by this same version. Settings gain",
+        "meanings between releases - a hold time that was a rate limit, a maximum",
+        "that was a rule and is now a reading - so a block from another version",
+        "cannot be trusted to mean the same thing here.",
+        "",
+        "Your regions and maxima are left exactly as they are. It restarts",
+        "afterwards, and comes back disarmed.",
+    ];
 }

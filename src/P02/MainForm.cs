@@ -239,6 +239,24 @@ public sealed class MainForm : Form
         };
         diagBtn.Click += (_, _) => ExportDiagnostics();
         Controls.Add(diagBtn);
+
+        var shareBtn = new Button
+        {
+            Text = "Share settings",
+            Bounds = new Rectangle(diagBtn.Right + 8, diagBtn.Top, 116, 26),
+        };
+        shareBtn.Click += (_, _) => ShareSettings();
+        Controls.Add(shareBtn);
+        Tips.On(shareBtn, Tips.ShareSettings);
+
+        var applyBtn = new Button
+        {
+            Text = "Apply shared",
+            Bounds = new Rectangle(diagBtn.Right + 130, diagBtn.Top, 110, 26),
+        };
+        applyBtn.Click += (_, _) => ApplyShared();
+        Controls.Add(applyBtn);
+        Tips.On(applyBtn, Tips.ApplyShared);
         Tips.On(diagBtn, Tips.Diagnostics);
 
         var sound = new CheckBox
@@ -493,6 +511,72 @@ public sealed class MainForm : Form
     {
         Tips.On(l, tip);
         return l;
+    }
+
+    /// <summary>Puts this setup on the clipboard, and in a file beside the log.</summary>
+    private void ShareSettings()
+    {
+        string text = SettingsShare.Export(_cfg, Version);
+        string path = Path.Combine(AppConfig.Dir, $"P02-settings-{Version}.txt");
+
+        try
+        {
+            Directory.CreateDirectory(AppConfig.Dir);
+            File.WriteAllText(path, text);
+            Clipboard.SetText(text);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Could not write the settings out: {ex.Message}",
+                            "Share settings", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        Log.Write($"settings exported to {path}");
+        MessageBox.Show(this,
+            "Copied to the clipboard, and saved as:" + Environment.NewLine
+            + path + Environment.NewLine + Environment.NewLine
+            + "It carries every setting except the screen regions and your own "
+            + "maxima - those belong to this machine and this character, and are "
+            + "found again wherever it is loaded."
+            + Environment.NewLine + Environment.NewLine
+            + $"It only loads into v{Version}.",
+            "Share settings", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    /// <summary>Reads a shared block off the clipboard and applies it.</summary>
+    private void ApplyShared()
+    {
+        string text = "";
+        try { text = Clipboard.GetText(); } catch { /* nothing on it */ }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            MessageBox.Show(this,
+                "Copy the exported settings text first - all of it, including the "
+                + "first line.",
+                "Apply shared settings", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        string? why = SettingsShare.Import(text, _cfg, Version);
+        if (why is not null)
+        {
+            MessageBox.Show(this, why, "Apply shared settings",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        _cfg.SaveNow();
+        Log.Write("settings imported from the clipboard");
+
+        MessageBox.Show(this,
+            "Settings applied. P02 will restart to pick them up - it comes back "
+            + "disarmed, so arm it when you are ready.",
+            "Apply shared settings", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+        Application.Restart();
+        Environment.Exit(0);
     }
 
     private static string Version =>
@@ -950,11 +1034,18 @@ public sealed class MainForm : Form
             + Environment.NewLine + Environment.NewLine
             + Updater.CriticalWhy
             + Environment.NewLine + Environment.NewLine
-            + "Your game has been paused. Update before carrying on.",
+            + "Your game has been paused. It will update itself now and be back "
+            + "in a moment, still armed if it was armed.",
             "Critical update", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
         TopMost = wasTop;
-        _ = Updater.CheckAsync(this, silent: false, beforeExit: _cfg.SaveNow);
+
+        // It installs itself from here. A release that fixes a way to die
+        // quietly is the one that most needs installing, not the one that most
+        // needs a second dialog - and the previous one was leaving people
+        // paused, warned, and still on the broken version.
+        _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow,
+                               ui: false, install: true);
     }
 
     /// <summary>
