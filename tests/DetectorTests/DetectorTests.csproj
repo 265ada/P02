@@ -19,5 +19,6 @@
     <Compile Include="..\..\src\P02\KeyPresser.cs" />
     <Compile Include="..\..\src\P02\Chime.cs" />
     <Compile Include="..\..\src\P02\TextOcr.cs" />
+    <Compile Include="..\..\src\P02\GameMemory.cs" />
   </ItemGroup>
 </Project>
