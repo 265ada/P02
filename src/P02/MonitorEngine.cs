@@ -477,6 +477,12 @@ public sealed class MonitorEngine : IDisposable
         bool fromText = false;
         string textRaw = "";
         bool textConfigured = c.UseText && c.TextRegion.IsValid && _ocr.Available;
+
+        // Kept so memory can be checked against it below. Two sources that
+        // both claim to be exact and disagree cannot both be right, and the
+        // one printed on your screen is the one that is.
+        bool haveOcr = false;
+        double ocrFrac = 0;
         bool textLostOverride = true;
 
         // Asking for memory or for the numbers is asking for the globe pixels
@@ -499,6 +505,8 @@ public sealed class MonitorEngine : IDisposable
             {
                 frac = tr.Fraction;
                 fromText = true;
+                haveOcr = true;
+                ocrFrac = tr.Fraction;
                 textRaw = $"numbers, {tr.Current:N0}/{tr.Max:N0}";
             }
             else if (textAge < 1200)
@@ -523,7 +531,29 @@ public sealed class MonitorEngine : IDisposable
             int cur = name == "Life" ? ms.CurHp : ms.CurMp;
             int max = name == "Life" ? ms.MaxHp : ms.MaxMp;
 
-            bool trusted = max > 0 && (expectedMax == 0 || max == expectedMax);
+            double memFrac = name == "Life" ? ms.LifeFraction : ms.ManaFraction;
+
+            // Agreeing with the configured maximum is not enough on its own:
+            // if that maximum was itself adopted from a misread, the search was
+            // pointed at the wrong number to begin with and will happily find
+            // something that matches it. The numbers printed on screen are the
+            // only independent witness, so when they are readable they get the
+            // final say.
+            bool matchesOcr = !haveOcr || Math.Abs(memFrac - ocrFrac) <= 0.15;
+            bool trusted = max > 0 && (expectedMax == 0 || max == expectedMax) && matchesOcr;
+
+            if (!matchesOcr && max > 0)
+            {
+                textRaw = $"memory says {memFrac:P0}, the numbers say {ocrFrac:P0} - ignored";
+                if (now - st.LastMemBadMs > 10000)
+                {
+                    st.LastMemBadMs = now;
+                    Log.Write($"{name}: memory reads {memFrac:P0} ({cur:N0}/{max:N0}) but the "
+                              + $"numbers on screen read {ocrFrac:P0} - wrong address, "
+                              + "searching again");
+                    _mem.Rescan();
+                }
+            }
 
             if (trusted)
             {
@@ -532,7 +562,7 @@ public sealed class MonitorEngine : IDisposable
                 textRaw = $"memory, life {cur:N0}/{max:N0}";
                 textLostOverride = false;
             }
-            else if (max > 0 && expectedMax > 0)
+            else if (max > 0 && expectedMax > 0 && matchesOcr)
             {
                 textRaw = $"memory says max {max:N0}, yours is {expectedMax:N0} - ignored";
                 if (now - st.LastMemBadMs > 10000)

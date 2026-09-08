@@ -42,6 +42,7 @@ internal sealed partial class TextOcr : IDisposable
         public int StableMax;
         public int PendingMax;
         public int PendingCount;
+        public long PendingSinceMs;
         public long LastComplaintMs = long.MinValue / 2;
         public int DisagreeMax;
         public int DisagreeCount;
@@ -244,15 +245,32 @@ internal sealed partial class TextOcr : IDisposable
         // almost always a digit that was not there, so make it prove itself.
         if (max != slot.StableMax)
         {
+            bool first = slot.StableMax == 0;
             bool big = slot.StableMax > 0
                        && Math.Abs(max - slot.StableMax) > slot.StableMax / 5;
 
+            long nowMs = _clock.ElapsedMilliseconds;
             if (max == slot.PendingMax) slot.PendingCount++;
-            else { slot.PendingMax = max; slot.PendingCount = 1; }
+            else { slot.PendingMax = max; slot.PendingCount = 1; slot.PendingSinceMs = nowMs; }
 
-            if (slot.PendingCount < (big ? 5 : 2)) return;
-            if (big)
-                Log.Write($"{name}: maximum changed from {slot.StableMax} to {max}");
+            // The first maximum was the cheapest to accept and is by far the
+            // most expensive to get wrong: everything downstream is built on
+            // it, including the memory search, which then locks onto whatever
+            // address happens to hold that number and reads its neighbour as
+            // your life. Two readings was not proof of anything - OCR misreads
+            // the same pixels the same way every time, so a misread repeats as
+            // readily as the truth. Only time separates them: 1,490 stays 1,490
+            // across seconds of frames, while a misread comes and goes.
+            int need = first ? 8 : big ? 5 : 2;
+            int span = first || big ? 2000 : 0;
+
+            if (slot.PendingCount < need || nowMs - slot.PendingSinceMs < span) return;
+
+            Log.Write(first
+                ? $"{name}: maximum settled on {max} after {slot.PendingCount} readings "
+                  + $"over {(nowMs - slot.PendingSinceMs) / 1000.0:0.0}s"
+                : big ? $"{name}: maximum changed from {slot.StableMax} to {max}"
+                : $"{name}: maximum {slot.StableMax} -> {max}");
             slot.StableMax = max;
         }
 
