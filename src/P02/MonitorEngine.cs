@@ -114,6 +114,46 @@ public sealed class MonitorEngine : IDisposable
     /// for long enough to rule out a misread, take it: update the setting,
     /// point the search at the new value and say so.
     /// </summary>
+    private long _refoundAtMs = long.MinValue / 2;
+    private long _textOkAtMs;
+
+    /// <summary>
+    /// Puts the numbers boxes back when they have stopped landing on anything.
+    ///
+    /// A box is a rectangle on a screen, and screens change: a resolution, a
+    /// HUD scale, a different monitor. When it stops covering the numbers it
+    /// does not fail loudly - it simply never reads again, and everything
+    /// downstream quietly goes back to the globe pixels, which cannot tell a
+    /// dead character from a full one. That is what a box sitting 150 pixels
+    /// above the life line did, and it sat there through a death.
+    ///
+    /// Nothing here is a guess: the same label search that set the box in the
+    /// first place is run again, and it either finds the words or changes
+    /// nothing.
+    /// </summary>
+    private void RefindLostNumbers(long now, bool focused)
+    {
+        if (!focused || !_ocr.Available) return;
+
+        bool configured = (_cfg.Life.UseText && _cfg.Life.TextRegion.IsValid)
+                          || (_cfg.Mana.UseText && _cfg.Mana.TextRegion.IsValid);
+        if (!configured) return;
+
+        bool reading = (_ocr.TryGet("Life", out var l) && _ocr.NowMs - l.AtMs < 5000)
+                       || (_ocr.TryGet("Mana", out var m) && _ocr.NowMs - m.AtMs < 5000);
+        if (reading) { _textOkAtMs = now; return; }
+
+        if (_textOkAtMs == 0) { _textOkAtMs = now; return; }
+        if (now - _textOkAtMs < 20000) return;
+        if (now - _refoundAtMs < 60000) return;
+
+        _refoundAtMs = now;
+        Log.Write("numbers: nothing read for 20 seconds - looking for the lines again");
+        string what = FindAllNumbers();
+        Log.Write($"numbers: {what.Replace(Environment.NewLine, " / ")}");
+        _textOkAtMs = now;
+    }
+
     private void AdoptChangedMax(string name, WatcherConfig c)
     {
         if (!c.UseText || !c.TextRegion.IsValid) return;
@@ -375,6 +415,8 @@ public sealed class MonitorEngine : IDisposable
                     if (_ocr.TryGet("Mana", out var mh) && _ocr.NowMs - mh.AtMs < 20000)
                         _mem.HintCurMp = mh.Current;
                 }
+
+                RefindLostNumbers(t0, focused);
 
                 AdoptChangedMax("Life", _cfg.Life);
                 AdoptChangedMax("Mana", _cfg.Mana);
