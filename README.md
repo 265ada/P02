@@ -102,6 +102,12 @@ whenever it is the pixels. The pixel path produces a
 - **Pin** in the top right corner puts a small always-on-top readout over the
   game: both globes, whether it is armed, and a light that blinks when a key
   actually goes out. Drag it anywhere; it remembers where you left it.
+- **Energy shield**, off by default. Nothing recovers shield from a flask
+  unless you have taken something that says so, so firing at it is waste for
+  most characters and the whole point for a few. It shares the life flask's key
+  and timing, because that is the flask that recovers it, and it needs its own
+  Numbers box since the shield is drawn over the life globe and pixels cannot
+  separate them.
 - Runs to the system tray.
 
 ## Setting it up

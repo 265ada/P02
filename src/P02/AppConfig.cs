@@ -201,6 +201,17 @@ public sealed class AppConfig
 
     /// <summary>Screen samples per second. 5-250; the loop reports what it
     /// actually achieved next to this in the UI.</summary>
+    /// <summary>
+    /// Energy shield, off by default. Nothing recovers it from a flask unless
+    /// you have taken something that says so - Eternal Youth and its kin - so
+    /// firing at it is waste for most characters and the point for a few.
+    ///
+    /// It shares the life flask's key and timing, because that is the flask
+    /// that recovers it.
+    /// </summary>
+    public WatcherConfig Shield { get; set; } = new()
+        { Hue = "red", Key = "1", Threshold = 0.50, TextLabel = "Shield" };
+
     public int PollHz { get; set; } = 60;
 
     /// <summary>Only act while the focused window title contains this. Blank = any.</summary>
@@ -284,7 +295,7 @@ public sealed class AppConfig
                         + "screenshots and screen sharing.");
         }
 
-        foreach (var (name, w) in new[] { ("Life", Life), ("Mana", Mana) })
+        foreach (var (name, w) in new[] { ("Life", Life), ("Mana", Mana), ("Shield", Shield) })
         {
             if (w.GlareIsLiquid)
             {

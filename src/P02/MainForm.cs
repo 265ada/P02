@@ -33,7 +33,7 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(800, 758);
+        ClientSize = new Size(800, 778);
 
         _pin.SetBounds(764, 6, 24, 22);
         _pin.Text = "P";
@@ -56,7 +56,7 @@ public sealed class MainForm : Form
                                   _engine.ProbeText);
 
         _life = new GlobePanel("Life", cfg.Life, blue: false, Save,
-            () => _cfg.WindowMatch, () => _cfg.Mana.Region, probe)
+            () => _cfg.WindowMatch, () => _cfg.Mana.Region, probe, cfg.Shield)
             { Location = new Point(12, 36) };
         _mana = new GlobePanel("Mana", cfg.Mana, blue: true, Save,
             () => _cfg.WindowMatch, () => _cfg.Life.Region, probe)
@@ -64,7 +64,7 @@ public sealed class MainForm : Form
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 524;
+        int y = 544;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -379,6 +379,17 @@ public sealed class MainForm : Form
 
     private void Save()
     {
+        // The life flask is what recovers energy shield, so the shield watcher
+        // uses the same key and the same timing rather than a second set of
+        // settings that could quietly disagree with it.
+        _cfg.Shield.Key = _cfg.Life.Key;
+        _cfg.Shield.HoldMs = _cfg.Life.HoldMs;
+        _cfg.Shield.CooldownMs = _cfg.Life.CooldownMs;
+        _cfg.Shield.PanicCooldownMs = _cfg.Life.PanicCooldownMs;
+        _cfg.Shield.BurstCount = _cfg.Life.BurstCount;
+        _cfg.Shield.BurstGapMs = _cfg.Life.BurstGapMs;
+        _cfg.Shield.PanicBelow = Math.Min(_cfg.Shield.Threshold, _cfg.Life.PanicBelow);
+
         _cfg.Save();
         _engine.SyncTextRegions();
 
@@ -435,7 +446,8 @@ public sealed class MainForm : Form
         Save();
     }
 
-    private void OnSampled(GlobeReading life, GlobeReading mana, bool focused)
+    private void OnSampled(GlobeReading life, GlobeReading mana, GlobeReading shield,
+                           bool focused)
     {
         if (IsDisposed || !IsHandleCreated) return;
         try
@@ -447,6 +459,7 @@ public sealed class MainForm : Form
 
                 _life.Update(life);
                 _mana.Update(mana);
+                _life.UpdateShield(shield);
                 _focus.Text = focused
                     ? "game window focused — firing allowed"
                     : "not firing: focused window does not match";

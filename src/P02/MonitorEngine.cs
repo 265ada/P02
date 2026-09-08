@@ -30,7 +30,7 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>Title of whatever window currently has focus, for the UI.</summary>
     public string ForegroundTitle { get; private set; } = "";
 
-    public event Action<GlobeReading, GlobeReading, bool>? Sampled;
+    public event Action<GlobeReading, GlobeReading, GlobeReading, bool>? Sampled;
     public event Action<string, double>? Fired;
 
     /// <summary>Globe name, whether the last press moved the globe, and how
@@ -85,6 +85,10 @@ public sealed class MonitorEngine : IDisposable
                                && _cfg.Life.TextRegion.IsValid
             ? _cfg.Life.TextRegion.ToRect() : null,
             _cfg.Life.TextLabel, _cfg.Life.KnownMax);
+        _ocr.Configure("Shield", _cfg.Shield.UseText && _cfg.Shield.Enabled
+                                 && _cfg.Shield.TextRegion.IsValid
+            ? _cfg.Shield.TextRegion.ToRect() : null,
+            _cfg.Shield.TextLabel, _cfg.Shield.KnownMax);
         _ocr.Configure("Mana", _cfg.Mana.UseText && _cfg.Mana.Enabled
                                && _cfg.Mana.TextRegion.IsValid
             ? _cfg.Mana.TextRegion.ToRect() : null,
@@ -197,6 +201,7 @@ public sealed class MonitorEngine : IDisposable
     {
         var life = new State();
         var mana = new State();
+        var shield = new State();
         var clock = Stopwatch.StartNew();
 
         long lastUiMs = 0, hzWindowMs = 0, lastLogMs = 0;
@@ -224,6 +229,7 @@ public sealed class MonitorEngine : IDisposable
 
                 var lr = Sample(life, _cfg.Life, "Life", focused, clock);
                 var mr = Sample(mana, _cfg.Mana, "Mana", focused, clock);
+                var sr = Sample(shield, _cfg.Shield, "Shield", focused, clock);
 
                 LastPollMs = clock.Elapsed.TotalMilliseconds - t0;
 
@@ -243,6 +249,7 @@ public sealed class MonitorEngine : IDisposable
                     lastLogMs = t0;
                     Log.Write($"watch  life {lr.Fraction:P1}{(_cfg.Life.Enabled ? "" : " (off)")}" +
                               $"  mana {mr.Fraction:P1}{(_cfg.Mana.Enabled ? "" : " (off)")}" +
+                              (_cfg.Shield.Enabled ? $"  shield {sr.Fraction:P1}" : "") +
                               $"  focused={focused}  hz={ActualHz}  " +
                               $"skipped={_keys.Skipped}  poll={LastPollMs:0.0}ms");
                 }
@@ -252,7 +259,7 @@ public sealed class MonitorEngine : IDisposable
                 if (t0 - lastUiMs >= 60)
                 {
                     lastUiMs = t0;
-                    Sampled?.Invoke(lr, mr, focused);
+                    Sampled?.Invoke(lr, mr, sr, focused);
                 }
 
                 int period = 1000 / Math.Clamp(_cfg.PollHz, 5, 250);
@@ -269,6 +276,7 @@ public sealed class MonitorEngine : IDisposable
             Native.timeEndPeriod(1);
             life.Cap.Dispose();
             mana.Cap.Dispose();
+            shield.Cap.Dispose();
         }
     }
 

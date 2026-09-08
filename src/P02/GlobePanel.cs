@@ -23,6 +23,14 @@ public sealed class GlobePanel : GroupBox
     private readonly Label _effect = new();
     private bool _blind;
     private readonly Label _numbers = new();
+
+    // Only the life panel carries these: energy shield is recovered by the life
+    // flask, when it is recovered at all.
+    private readonly WatcherConfig? _shield;
+    private readonly CheckBox _shieldOn = new();
+    private readonly NumericUpDown _shieldBelow = new();
+    private readonly NumericUpDown _shieldMax = new();
+    private readonly Label _shieldRead = new();
     private readonly Label _tuned = new();
     private readonly Label _warn = new();
     private readonly KeyBindBox _key = new();
@@ -30,9 +38,11 @@ public sealed class GlobePanel : GroupBox
     private readonly Label _pct = new();
 
     public GlobePanel(string title, WatcherConfig cfg, bool blue, Action onChange,
-                      Func<string> windowMatch, Func<Box?> otherRegion, TextProbe probe)
+                      Func<string> windowMatch, Func<Box?> otherRegion, TextProbe probe,
+                      WatcherConfig? shield = null)
     {
         _probe = probe;
+        _shield = shield;
         _cfg = cfg;
         _blue = blue;
         _onChange = onChange;
@@ -41,7 +51,7 @@ public sealed class GlobePanel : GroupBox
 
         Text = title;
         Width = 382;
-        Height = 472;
+        Height = 492;
         Padding = new Padding(10);
 
         int y = 24;
@@ -204,6 +214,8 @@ public sealed class GlobePanel : GroupBox
         });
         y += 26;
 
+        if (_shield is not null) y = AddShield(y);
+
         // Hold time and press count multiply out into how long a trigger takes
         // to send, and nothing else can go out during it. Worth seeing.
         _burstTime.SetBounds(14, y, 340, 18);
@@ -258,6 +270,114 @@ public sealed class GlobePanel : GroupBox
                        + "press Empty = 0% while drained.";
         else
             _warn.Text = "";
+    }
+
+    /// <summary>
+    /// Energy shield, sharing this globe's key and timing because the life
+    /// flask is what recovers it - and only for characters who have taken
+    /// something that makes it do so.
+    /// </summary>
+    private int AddShield(int y)
+    {
+        Controls.Add(new Label
+        {
+            Bounds = new Rectangle(14, y, 352, 2),
+            BorderStyle = BorderStyle.Fixed3D,
+        });
+        y += 10;
+
+        _shieldOn.Text = "Also fire for energy shield";
+        _shieldOn.Checked = _shield!.Enabled;
+        _shieldOn.SetBounds(14, y, 190, 22);
+        _shieldOn.CheckedChanged += (_, _) =>
+        { _shield.Enabled = _shieldOn.Checked; _onChange(); };
+        Controls.Add(_shieldOn);
+
+        Controls.Add(Lab("below", 208, y + 3));
+        _shieldBelow.SetBounds(250, y, 54, 24);
+        _shieldBelow.Minimum = 1;
+        _shieldBelow.Maximum = 99;
+        _shieldBelow.Value = (decimal)Math.Clamp(_shield.Threshold * 100, 1, 99);
+        _shieldBelow.ValueChanged += (_, _) =>
+        { _shield.Threshold = (double)_shieldBelow.Value / 100.0; _onChange(); };
+        Controls.Add(_shieldBelow);
+        Controls.Add(Lab("%", 308, y + 3));
+        y += 28;
+
+        var numBtn = new Button { Text = "Numbers...", Bounds = new Rectangle(14, y, 80, 24) };
+        numBtn.Click += (_, _) => PickShieldNumbers();
+        Controls.Add(numBtn);
+
+        Controls.Add(Lab("My max", 102, y + 3));
+        _shieldMax.SetBounds(160, y, 72, 24);
+        _shieldMax.Minimum = 0;
+        _shieldMax.Maximum = 1_000_000;
+        _shieldMax.Value = Math.Clamp(_shield.KnownMax, 0, 1_000_000);
+        _shieldMax.ValueChanged += (_, _) =>
+        { _shield.KnownMax = (int)_shieldMax.Value; _onChange(); };
+        Controls.Add(_shieldMax);
+        y += 26;
+
+        _shieldRead.SetBounds(14, y, 352, 18);
+        _shieldRead.ForeColor = SystemColors.GrayText;
+        _shieldRead.Text = "Shield: not set - needs its own Numbers box";
+        Controls.Add(_shieldRead);
+        return y + 22;
+    }
+
+    private void PickShieldNumbers()
+    {
+        if (!_probe.Available)
+        {
+            MessageBox.Show(this, "Windows OCR is not available, so the shield numbers "
+                            + "cannot be read.", "Energy shield",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var owner = FindForm();
+        owner?.Hide();
+        Thread.Sleep(180);
+        var r = RegionPickerForm.Pick(
+            "Drag a box around the Shield numbers - include the word \"Shield\"");
+        owner?.Show();
+        if (r is null) return;
+
+        string got = _probe.Probe(r.Value);
+        if (got.Length == 0)
+        {
+            MessageBox.Show(this, "Nothing readable in that box.", "Energy shield",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        _shield!.TextRegion = Box.From(r.Value);
+        _shield.UseText = true;
+        _onChange();
+        MessageBox.Show(this, $"Read: \"{got}\"", "Energy shield",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    /// <summary>Latest energy shield reading, shown under the life controls.</summary>
+    public void UpdateShield(GlobeReading r)
+    {
+        if (_shield is null) return;
+        if (!_shield.Enabled)
+        {
+            _shieldRead.Text = "Shield: not watched";
+            _shieldRead.ForeColor = SystemColors.GrayText;
+            return;
+        }
+        if (!r.Ok || !r.FromText)
+        {
+            _shieldRead.Text = "Shield: no reading - set its Numbers box";
+            _shieldRead.ForeColor = Color.FromArgb(190, 60, 0);
+            return;
+        }
+        _shieldRead.Text = $"Shield: {r.TextRaw}  ({r.Fraction * 100:0} %)";
+        _shieldRead.ForeColor = r.Fraction < _shield.Threshold
+            ? Color.FromArgb(190, 60, 0)
+            : Color.FromArgb(0, 100, 0);
     }
 
     private static Label Lab(string text, int x, int y) =>
