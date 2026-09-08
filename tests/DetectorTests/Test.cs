@@ -171,6 +171,38 @@ static class T
             if (!sweptRight) fails++;
         }
 
+        // Refusing to act on a globe we cannot see must not also refuse to act
+        // on one that is nearly empty. Both look like "almost zero" in a single
+        // frame; only the history tells them apart.
+        {
+            var wc = new WatcherConfig { IgnoreBelow = 0.02, BlindGraceMs = 1200 };
+            int bad = 0;
+
+            void Case(string what, double frac, long now, long lastGood, bool wantRefuse)
+            {
+                bool refused = MonitorEngine.Unreadable(frac, now, lastGood, wc);
+                bool ok = refused == wantRefuse;
+                Console.WriteLine((ok ? "PASS" : "FAIL") + $"  {what} -> "
+                    + (refused ? "refuse" : "fire") + $" (wanted {(wantRefuse ? "refuse" : "fire")})");
+                if (!ok) bad++;
+            }
+
+            // Dying: read 60% a moment ago, 1% now. Must still fire.
+            Case("1% life, healthy 200ms ago", 0.01, 10_000, 9_800, false);
+            Case("0% life, healthy 900ms ago", 0.00, 10_000, 9_100, false);
+
+            // Loading or death screen: nothing readable for a while.
+            Case("0% for 1.3s", 0.00, 10_000, 8_700, true);
+            Case("0% for 30s", 0.00, 40_000, 10_000, true);
+            Case("0% since launch", 0.00, 5_000, long.MinValue / 2, true);
+
+            // Ordinary low life is never refused.
+            Case("15% life", 0.15, 10_000, 10_000, false);
+            Case("3% life, just crossed", 0.03, 10_000, 10_000, false);
+
+            fails += bad;
+        }
+
         // Every key the bind box can capture must be sendable. Numpad keys
         // share scancodes with the navigation cluster and differ only by the
         // extended flag, so this guards a genuinely easy mistake.

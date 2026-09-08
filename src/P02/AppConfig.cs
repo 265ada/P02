@@ -60,11 +60,25 @@ public sealed class WatcherConfig
     // --- emergency response ---------------------------------------------
 
     /// <summary>
-    /// What counts as "no reading" when deciding a globe has gone blind. A
-    /// single reading this low is NOT treated as unreadable - that refused to
-    /// fire at 1% life - only one that stays there for several seconds.
+    /// What counts as "no reading". A globe sitting at or under this for longer
+    /// than <see cref="BlindGraceMs"/> is one we cannot see - a loading screen,
+    /// a death screen, something covering the corner - and nothing is sent into
+    /// it.
     /// </summary>
     public double IgnoreBelow { get; set; } = 0.02;
+
+    /// <summary>
+    /// How long a globe may read nothing before it counts as unreadable rather
+    /// than nearly empty.
+    ///
+    /// This exists because both mistakes are bad and they look identical in a
+    /// single frame. Refuse too eagerly and it will not fire at 1% life, which
+    /// is the moment it matters most. Refuse too late and it fires into every
+    /// loading screen. A globe that read 60% a second ago and reads 1% now is
+    /// nearly dead; one that has read nothing for over a second is not being
+    /// seen at all.
+    /// </summary>
+    public int BlindGraceMs { get; set; } = 1200;
 
     /// <summary>Below this fraction, switch to the short gap and fire on sight.</summary>
     public double PanicBelow { get; set; } = 0.30;

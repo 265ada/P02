@@ -145,6 +145,7 @@ public sealed class MonitorEngine : IDisposable
         public int NoEffect;
         public long LastWouldFireMs = long.MinValue / 2;
         public long BlindSinceMs;
+        public long LastGoodMs = long.MinValue / 2;
         public bool Blind;
     }
 
@@ -252,6 +253,10 @@ public sealed class MonitorEngine : IDisposable
             textRaw = $"{tr.Current:N0}/{tr.Max:N0}";
         }
 
+        // Anything above the floor is a real reading, and the moment it happens
+        // is what separates "nearly dead" from "cannot see it".
+        if (frac > c.IgnoreBelow) st.LastGoodMs = now;
+
         // A watched globe stuck at nothing is the single most common broken
         // setup, and it looks identical to a globe that is simply full: no
         // firing, no complaint. Say it out loud.
@@ -327,7 +332,8 @@ public sealed class MonitorEngine : IDisposable
             // there is nothing to announce. Chirping about an unreadable globe
             // while the firing path silently refuses to act on it made the
             // sound look like proof that keys were being sent.
-            if (!Armed && frac > c.IgnoreBelow && frac < c.Threshold && c.Enabled)
+            if (!Armed && c.Enabled && frac < c.Threshold
+                && !Unreadable(frac, now, st.LastGoodMs, c))
             {
                 if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
                 if (now - st.LastWouldFireMs > _cfg.SoundGapMs)
@@ -345,12 +351,11 @@ public sealed class MonitorEngine : IDisposable
             return new GlobeReading(name, frac, true, "", fromText, textRaw);
         }
 
-        // Only refuse when the globe has been unreadable for a while. Judging
-        // a single low reading as "cannot see it" also refused to fire at 1%
-        // life - the exact moment it is needed most. A globe that was reading
-        // 60% a second ago and now reads 1% is not unreadable, it is nearly
-        // dead.
-        if (st.Blind)
+        // Nothing goes into a globe we cannot see. The grace period is what
+        // makes this safe: a globe that read 60% a second ago and reads 1% now
+        // is nearly dead and gets its flask, while one that has read nothing
+        // for over a second is a loading screen and gets silence.
+        if (Unreadable(frac, now, st.LastGoodMs, c))
         {
             st.Below = 0;
             return new GlobeReading(name, frac, true, "", fromText, textRaw);
@@ -397,6 +402,19 @@ public sealed class MonitorEngine : IDisposable
 
         return new GlobeReading(name, frac, true, "", fromText, textRaw);
     }
+
+    /// <summary>
+    /// Is this a globe we cannot see, rather than one that is nearly empty?
+    ///
+    /// Both mistakes are bad and they look identical in a single frame. Refuse
+    /// too eagerly and it will not fire at 1% life, the moment it matters most.
+    /// Refuse too late and it fires into every loading screen. What separates
+    /// them is history: a globe that read normally a moment ago and reads
+    /// nothing now has just crashed; one that has read nothing for over a
+    /// second is not being seen.
+    /// </summary>
+    internal static bool Unreadable(double frac, long nowMs, long lastGoodMs, WatcherConfig c)
+        => frac <= c.IgnoreBelow && nowMs - lastGoodMs > c.BlindGraceMs;
 
     private bool WindowFocused()
     {
