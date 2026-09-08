@@ -351,66 +351,87 @@ public sealed class AppConfig
     /// </summary>
     public void Repair()
     {
-        // Each repair carries its own version, because a settings file stamped
-        // by an earlier release must still receive later fixes. A single gate
-        // meant the label repair below never ran on any config that had already
-        // been through the previous one - which left the numbers being picked
-        // by position, and reading ward as life.
+        // Each fix has its own version gate. A single gate meant a settings
+        // file already stamped by an earlier release skipped every later fix -
+        // which is how the label repair never ran, leaving the numbers picked
+        // by position and reading ward as life.
+        const int Current = 6;
         int was = SettingsVersion;
-        if (was >= 5) return;
+        if (was >= Current) return;
 
-        foreach (var (name, w) in new[] { ("Life", Life), ("Mana", Mana), ("Shield", Shield) })
+        var globes = new[] { ("Life", Life), ("Mana", Mana), ("Shield", Shield) };
+
+        if (was < 4)
         {
-            if (w.TextLabel.Length == 0)
+            if (HideFromCapture)
             {
+                HideFromCapture = false;
+                Repairs.Add("Turned off hiding from screen capture - it also hid the window "
+                            + "from screenshots and screen sharing.");
+            }
+
+            foreach (var (name, w) in globes)
+            {
+                if (w.GlareIsLiquid)
+                {
+                    w.GlareIsLiquid = false;
+                    Repairs.Add($"{name}: stopped counting bright pixels as liquid - the rune "
+                                + "on the globe is near-white and read as full.");
+                }
+
+                // A margin this low accepts the drained globe, which is the
+                // same hue as the liquid and only darker.
+                if (w.ColourMargin < 10 && w.EmptyDominance < 0)
+                {
+                    Repairs.Add($"{name}: colour margin was {w.ColourMargin}, low enough that "
+                                + "an empty globe read as full. Reset to 30.");
+                    w.ColourMargin = 30;
+                }
+
+                if (w.HoldMs < 40)
+                {
+                    Repairs.Add($"{name}: key was held for {w.HoldMs} ms, short enough for the "
+                                + "game to miss it between frames. Raised to 70 ms.");
+                    w.HoldMs = 70;
+                }
+            }
+        }
+
+        if (was < 5)
+        {
+            foreach (var (name, w) in globes)
+            {
+                if (w.TextLabel.Length != 0) continue;
                 w.TextLabel = name;
                 Repairs.Add($"{name}: the numbers had no label to look for, so whichever line "
                             + $"came first was used - ward included. Now anchored on \"{name}\".");
             }
         }
 
-        if (was >= 4)
+        if (was < 6)
         {
-            SettingsVersion = 5;
-            foreach (string r in Repairs) Log.Write($"repair: {r}");
-            if (Repairs.Count > 0) SaveNow();
-            return;
-        }
-
-        if (HideFromCapture)
-        {
-            HideFromCapture = false;
-            Repairs.Add("Turned off hiding from screen capture - it also hid the window from "
-                        + "screenshots and screen sharing.");
-        }
-
-        foreach (var (name, w) in new[] { ("Life", Life), ("Mana", Mana), ("Shield", Shield) })
-        {
-            if (w.GlareIsLiquid)
+            // Two settings that were reasonable guesses and turned out to cost
+            // more than they gave.
+            foreach (var (name, w) in globes)
             {
-                w.GlareIsLiquid = false;
-                Repairs.Add($"{name}: turned off counting bright pixels as liquid - the rune "
-                            + "on the globe is near-white and was reading as full.");
-            }
-
-            // A margin this low accepts the drained globe, which is the same
-            // hue as the liquid and only darker.
-            if (w.ColourMargin < 10 && w.EmptyDominance < 0)
-            {
-                Repairs.Add($"{name}: colour margin was {w.ColourMargin}, low enough that an "
-                            + "empty globe read as full. Reset to 30.");
-                w.ColourMargin = 30;
-            }
-
-            if (w.HoldMs < 40)
-            {
-                Repairs.Add($"{name}: key was held for {w.HoldMs} ms, short enough for the "
-                            + "game to miss it between frames. Raised to 70 ms.");
+                if (w.HoldMs <= 150) continue;
+                Repairs.Add($"{name}: key was held for {w.HoldMs} ms. That does throttle "
+                            + "firing, but only because each press takes that long to leave - "
+                            + "and it slowed the emergency press down with it. Set to 70 ms; "
+                            + "Cooldown is the rate limit.");
                 w.HoldMs = 70;
             }
+
+            if (PollHz < 40)
+            {
+                Repairs.Add($"Polls per second was {PollHz}, which is "
+                            + $"{1000 / Math.Max(1, PollHz)} ms of delay before a change is "
+                            + "even looked at. Raised to 60.");
+                PollHz = 60;
+            }
         }
 
-        SettingsVersion = 5;
+        SettingsVersion = Current;
         foreach (string r in Repairs) Log.Write($"repair: {r}");
         if (Repairs.Count > 0) SaveNow();
     }

@@ -437,6 +437,16 @@ public sealed class MainForm : Form
 
         SetupTray();
         if (cfg.OverlayOn) ToggleOverlay(true);
+
+        // Changing someone's settings behind their back is only acceptable if
+        // they are told which ones and why.
+        if (cfg.Repairs.Count > 0)
+            BeginInvoke(() => MessageBox.Show(this,
+                "Some settings were changed by this update:"
+                + Environment.NewLine + Environment.NewLine
+                + " - " + string.Join(Environment.NewLine + Environment.NewLine + " - ",
+                                      cfg.Repairs),
+                "Settings updated", MessageBoxButtons.OK, MessageBoxIcon.Information));
         RefreshArmUi();
         _engine.Start();
     }
@@ -698,9 +708,38 @@ public sealed class MainForm : Form
         base.WndProc(ref m);
     }
 
+    /// <summary>
+    /// Sets the numbers up on its own the first time, if they are not set and
+    /// the game is there to look at. It is one button, but it is also the one
+    /// step everything else depends on, and leaving it to be discovered means
+    /// running on the globe pixels - which cannot tell life from shield and
+    /// read a poisoned globe as empty.
+    /// </summary>
+    private void FirstRunSetup()
+    {
+        if (!_engine.TextAvailable) return;
+        if (_cfg.Life.TextRegion.IsValid || _cfg.Mana.TextRegion.IsValid) return;
+        if (Native.FindWindowRect(_cfg.WindowMatch) is null) return;
+
+        Log.Write("first run: no numbers set and the game is up - finding them");
+        string result = _engine.FindAllNumbers();
+        Save();
+        _life.RefreshFromConfig();
+        _mana.RefreshFromConfig();
+
+        MessageBox.Show(this,
+            "The numbers were not set up yet, so they have been found for you:"
+            + Environment.NewLine + Environment.NewLine + result
+            + Environment.NewLine + Environment.NewLine
+            + "These are exact, need no calibration, and stop it acting on menu "
+            + "screens. Your maximums fill in from them on their own.",
+            "Set up", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     protected override void OnShown(EventArgs e)
     {
         base.OnShown(e);
+        FirstRunSetup();
         if (_cfg.CheckUpdatesOnStart)
             _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow);
         if (_cfg.StartMinimised) Hide();
