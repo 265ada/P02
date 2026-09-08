@@ -45,13 +45,13 @@ public sealed class MainForm : Form
         _pin.Click += (_, _) => ToggleOverlay(!(_overlay?.Visible ?? false));
         Controls.Add(_pin);
 
-        Controls.Add(new Label
+        Controls.Add(Cap(new Label
         {
             Text = "pin a small readout over the game",
             Bounds = new Rectangle(620, 10, 240, 18),
             TextAlign = ContentAlignment.MiddleRight,
             ForeColor = SystemColors.GrayText,
-        });
+        }, Tips.Pin));
 
         var probe = new TextProbe(_engine.TextAvailable, _engine.TextUnavailable,
                                   _engine.ProbeText);
@@ -77,13 +77,15 @@ public sealed class MainForm : Form
         _status.SetBounds(224, y + 6, 460, 22);
         _status.Font = new Font("Segoe UI", 10);
         Controls.Add(_status);
+        Tips.On(_status, Tips.Status);
 
         _focus.SetBounds(224, y + 30, 460, 20);
         _focus.ForeColor = SystemColors.GrayText;
         Controls.Add(_focus);
+        Tips.On(_focus, Tips.Focus);
 
         y += 66;
-        Controls.Add(new Label { Text = "Only fire while window title contains", Bounds = new Rectangle(12, y + 4, 220, 20) });
+        Controls.Add(Cap(new Label { Text = "Only fire while window title contains", Bounds = new Rectangle(12, y + 4, 220, 20) }, Tips.WindowMatch));
         _window.SetBounds(236, y, 190, 24);
         _window.Text = cfg.WindowMatch;
         _window.TextChanged += (_, _) => { _cfg.WindowMatch = _window.Text; Save(); };
@@ -93,12 +95,13 @@ public sealed class MainForm : Form
         var clearBtn = new Button { Text = "Any window", Bounds = new Rectangle(430, y, 86, 24) };
         clearBtn.Click += (_, _) => _window.Text = "";
         Controls.Add(clearBtn);
+        Tips.On(clearBtn, Tips.AnyWindow);
 
-        Controls.Add(new Label
+        Controls.Add(Cap(new Label
         {
             Text = "Polls/sec",
             Bounds = new Rectangle(524, y + 4, 60, 20),
-        });
+        }, Tips.PollHz));
         _pollHz.SetBounds(586, y, 64, 24);
         _pollHz.Minimum = 5;
         _pollHz.Maximum = 250;
@@ -108,7 +111,7 @@ public sealed class MainForm : Form
         Controls.Add(_pollHz);
         Tips.On(_pollHz, Tips.PollHz);
 
-        Controls.Add(new Label { Text = "Arm key", Bounds = new Rectangle(658, y + 4, 50, 20) });
+        Controls.Add(Cap(new Label { Text = "Arm key", Bounds = new Rectangle(658, y + 4, 50, 20) }, Tips.ArmKey));
         _hotkey.SetBounds(708, y, 52, 24);
         _hotkey.DropDownStyle = ComboBoxStyle.DropDownList;
         _hotkey.Items.AddRange(Enumerable.Range(1, 12).Select(i => (object)$"F{i}").ToArray());
@@ -131,11 +134,13 @@ public sealed class MainForm : Form
             System.Diagnostics.Process.Start("explorer.exe", AppConfig.Dir);
         };
         Controls.Add(logBtn);
+        Tips.On(logBtn, Tips.OpenLog);
 
         var updBtn = new Button { Text = "Check for updates", Bounds = new Rectangle(150, y, 140, 26) };
         updBtn.Click += async (_, _) =>
             await Updater.CheckAsync(this, silent: false, beforeExit: _cfg.SaveNow);
         Controls.Add(updBtn);
+        Tips.On(updBtn, Tips.CheckUpdates);
 
         var findAll = new Button
         {
@@ -145,17 +150,7 @@ public sealed class MainForm : Form
         findAll.Click += (_, _) => FindAllNumbers();
         Controls.Add(findAll);
 
-        var findTip = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
-        findTip.SetToolTip(findAll,
-            "Finds every stat line at once - life, mana and shield - by looking for those"
-            + Environment.NewLine
-            + "words in the corners of the game. Nothing to drag, and it reads each one"
-            + Environment.NewLine
-            + "back and tells you what it will be watching."
-            + Environment.NewLine + Environment.NewLine
-            + "Run it with the game on screen and the numbers showing. This is the whole"
-            + Environment.NewLine
-            + "setup; the Numbers... buttons on the panels are only for what it misses.");
+        Tips.On(findAll, Tips.FindNumbers);
 
 
         var upd = new CheckBox
@@ -167,6 +162,7 @@ public sealed class MainForm : Form
         upd.CheckedChanged += (_, _) =>
         { _cfg.CheckUpdatesOnStart = upd.Checked; Save(); };
         Controls.Add(upd);
+        Tips.On(upd, Tips.UpdateAtLaunch);
 
         var hide = new CheckBox
         {
@@ -216,11 +212,11 @@ public sealed class MainForm : Form
         Controls.Add(sound);
         Tips.On(sound, Tips.Ding);
 
-        Controls.Add(new Label
+        Controls.Add(Cap(new Label
         {
             Text = "no more often than",
             Bounds = new Rectangle(232, y + 38, 108, 20),
-        });
+        }, Tips.DingGap));
         var gap = new NumericUpDown { Bounds = new Rectangle(342, y + 34, 62, 24) };
         gap.Minimum = 0;
         gap.Maximum = 120000;
@@ -229,11 +225,11 @@ public sealed class MainForm : Form
         gap.ValueChanged += (_, _) => { _cfg.SoundGapMs = (int)gap.Value; Save(); };
         Controls.Add(gap);
         Tips.On(gap, Tips.DingGap);
-        Controls.Add(new Label
+        Controls.Add(Cap(new Label
         {
             Text = "ms",
             Bounds = new Rectangle(408, y + 38, 26, 20),
-        });
+        }, Tips.DingGap));
 
         var disarmedDing = new CheckBox
         {
@@ -244,12 +240,13 @@ public sealed class MainForm : Form
         disarmedDing.CheckedChanged += (_, _) =>
         { _cfg.SoundWhenDisarmed = disarmedDing.Checked; Save(); };
         Controls.Add(disarmedDing);
+        Tips.On(disarmedDing, Tips.DingDisarmed);
 
-        Controls.Add(new Label
+        Controls.Add(Cap(new Label
         {
             Text = "volume",
             Bounds = new Rectangle(440, y + 38, 48, 20),
-        });
+        }, Tips.Volume));
         var vol = new NumericUpDown { Bounds = new Rectangle(490, y + 34, 56, 24) };
         vol.Minimum = -24;
         vol.Maximum = MonitorEngine.MaxGainDb;
@@ -263,11 +260,11 @@ public sealed class MainForm : Form
         };
         Controls.Add(vol);
         Tips.On(vol, Tips.Volume);
-        Controls.Add(new Label
+        Controls.Add(Cap(new Label
         {
             Text = $"dB (max +{MonitorEngine.MaxGainDb})",
             Bounds = new Rectangle(550, y + 38, 110, 20),
-        });
+        }, Tips.Volume));
 
         y += 32;
         var rescan = new Button
@@ -285,7 +282,7 @@ public sealed class MainForm : Form
         Tips.On(testBtn, Tips.TestKeys);
 
         y += 32;
-        Controls.Add(new Label { Text = "Send by", Bounds = new Rectangle(12, y + 4, 50, 20) });
+        Controls.Add(Cap(new Label { Text = "Send by", Bounds = new Rectangle(12, y + 4, 50, 20) }, Tips.SendBy));
         var method = new ComboBox
         {
             Bounds = new Rectangle(64, y, 150, 24),
@@ -302,12 +299,12 @@ public sealed class MainForm : Form
         Controls.Add(method);
         Tips.On(method, Tips.SendBy);
 
-        Controls.Add(new Label
+        Controls.Add(Cap(new Label
         {
             Text = "posted reaches an unfocused window; try it if injected is ignored",
             Bounds = new Rectangle(220, y + 4, 380, 20),
             ForeColor = SystemColors.GrayText,
-        });
+        }, Tips.SendBy));
 
         var mem = new CheckBox
         {
@@ -344,6 +341,7 @@ public sealed class MainForm : Form
         _live.SetBounds(12, y, 876, 20);
         _live.ForeColor = SystemColors.GrayText;
         Controls.Add(_live);
+        Tips.On(_live, Tips.Live);
 
         _engine.Sampled += OnSampled;
         _engine.ArmedChanged += _ => BeginInvoke(RefreshArmUi);
@@ -440,6 +438,17 @@ public sealed class MainForm : Form
 
         RefreshArmUi();
         _engine.Start();
+    }
+
+    /// <summary>
+    /// A caption carrying the same explanation as the field it names. The
+    /// caption is the part you read, so it is the part the pointer lands on,
+    /// and finding nothing there reads as nothing to find.
+    /// </summary>
+    private static Label Cap(Label l, params string[] tip)
+    {
+        Tips.On(l, tip);
+        return l;
     }
 
     private static string Version =>

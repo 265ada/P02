@@ -71,12 +71,14 @@ public sealed class GlobePanel : Card
 
         _bar.SetBounds(14, y, 200, 18);
         Controls.Add(_bar);
+        Tips.On(_bar, "This pool as it is right now, with your trigger marked.");
         _pct.SetBounds(222, y, 90, 18);
         _pct.Text = "--";
         Controls.Add(_pct);
+        Tips.On(_pct, "The fraction being compared against your trigger.");
         y += 28;
 
-        Controls.Add(Lab("Region", 14, y + 4));
+        Controls.Add(Lab("Region", 14, y + 4, Tips.Region));
         _region.SetBounds(70, y + 4, 150, 18);
         _region.Text = cfg.Region.ToString();
         Controls.Add(_region);
@@ -123,18 +125,23 @@ public sealed class GlobePanel : Card
         var emptyBtn = new Button { Text = "Tune colours", Bounds = new Rectangle(206, y, 86, 26) };
         emptyBtn.Click += (_, _) => CalibrateEmpty();
         Controls.Add(emptyBtn);
+        Tips.On(emptyBtn, Tips.TuneColours);
 
         _tuned.SetBounds(14, y + 5, 188, 18);
         _tuned.ForeColor = SystemColors.GrayText;
         Controls.Add(_tuned);
+        Tips.On(_tuned, "What the colour tuning worked out, and whether it can "
+            + "separate a full globe from an empty one at all.");
         y += 34;
 
         _warn.SetBounds(14, y, 338, 32);
         _warn.ForeColor = Color.FromArgb(190, 60, 0);
         Controls.Add(_warn);
+        Tips.On(_warn, "Anything about this setup that could let a drained globe read "
+            + "as full - the failure that looks like nothing at all.");
         y += 34;
 
-        Controls.Add(Lab("Fire below", 14, y + 4));
+        Controls.Add(Lab("Fire below", 14, y + 4, Tips.FireBelow));
         _threshold.SetBounds(90, y, 62, 24);
         _threshold.Minimum = 1;
         _threshold.Maximum = 99;
@@ -150,9 +157,10 @@ public sealed class GlobePanel : Card
         _key.Key = cfg.Key;
         _key.KeyBound += k => { _cfg.Key = k; _onChange(); };
         Controls.Add(_key);
+        Tips.On(_key, Tips.Key);
         y += 32;
 
-        Controls.Add(Lab("Cooldown", 14, y + 4));
+        Controls.Add(Lab("Cooldown", 14, y + 4, Tips.Cooldown));
         _cooldown.SetBounds(90, y, 76, 24);
         _cooldown.Minimum = 20;
         _cooldown.Maximum = 60000;
@@ -165,7 +173,7 @@ public sealed class GlobePanel : Card
         Controls.Add(Lab("ms", 170, y + 4));
         y += 32;
 
-        Controls.Add(Lab("Panic below", 14, y + 4));
+        Controls.Add(Lab("Panic below", 14, y + 4, Tips.PanicBelow));
         _panicBelow.SetBounds(90, y, 62, 24);
         _panicBelow.Minimum = 0;
         _panicBelow.Maximum = 99;
@@ -176,7 +184,7 @@ public sealed class GlobePanel : Card
         Tips.On(_panicBelow, Tips.PanicBelow);
         Controls.Add(Lab("%", 156, y + 4));
 
-        Controls.Add(Lab("gap", 190, y + 4));
+        Controls.Add(Lab("gap", 190, y + 4, Tips.PanicGap));
         _panicGap.SetBounds(222, y, 84, 24);
         _panicGap.Minimum = 10;
         _panicGap.Maximum = 5000;
@@ -188,7 +196,7 @@ public sealed class GlobePanel : Card
         Tips.On(_panicGap, Tips.PanicGap);
         y += 30;
 
-        Controls.Add(Lab("Emergency below", 14, y + 4));
+        Controls.Add(Lab("Emergency below", 14, y + 4, Tips.Uber));
         _uber.SetBounds(140, y, 56, 24);
         _uber.Minimum = 0;
         _uber.Maximum = 30;
@@ -196,6 +204,7 @@ public sealed class GlobePanel : Card
         _uber.ValueChanged += (_, _) =>
         { _cfg.UberBelow = (double)_uber.Value / 100.0; _onChange(); };
         Controls.Add(_uber);
+        Tips.On(_uber, Tips.Uber);
         Controls.Add(Lab("%", 200, y + 4));
 
         Controls.Add(new Label
@@ -226,7 +235,7 @@ public sealed class GlobePanel : Card
             + "nothing for the hit that actually matters.");
         y += 30;
 
-        Controls.Add(Lab("Presses per trigger", 14, y + 4));
+        Controls.Add(Lab("Presses per trigger", 14, y + 4, Tips.Presses));
         _burst.SetBounds(140, y, 50, 24);
         _burst.Minimum = 1;
         _burst.Maximum = 5;
@@ -244,7 +253,7 @@ public sealed class GlobePanel : Card
         });
         y += 32;
 
-        Controls.Add(Lab("Hold each press", 14, y + 4));
+        Controls.Add(Lab("Hold each press", 14, y + 4, Tips.Hold));
         _hold.SetBounds(140, y, 60, 24);
         _hold.Minimum = 10;
         _hold.Maximum = 400;
@@ -264,7 +273,7 @@ public sealed class GlobePanel : Card
         });
         y += 30;
 
-        Controls.Add(Lab($"My max {title.ToLowerInvariant()}", 14, y + 4));
+        Controls.Add(Lab($"My max {title.ToLowerInvariant()}", 14, y + 4, Tips.KnownMax));
         _knownMax.SetBounds(140, y, 72, 24);
         _knownMax.Minimum = 0;
         _knownMax.Maximum = 1_000_000;
@@ -294,18 +303,29 @@ public sealed class GlobePanel : Card
         _burstTime.SetBounds(14, y, 340, 18);
         _burstTime.ForeColor = SystemColors.GrayText;
         Controls.Add(_burstTime);
+        Tips.On(_burstTime, "How long one trigger takes to send, worked out from the "
+            + "presses and the hold.", "",
+            "Nothing can fire faster than this, so a cooldown below it does nothing.");
         RefreshBurstTime();
         y += 22;
 
         _effect.SetBounds(14, y, 340, 18);
         _effect.ForeColor = SystemColors.GrayText;
         Controls.Add(_effect);
+        Tips.On(_effect, "Whether the last press actually did anything.", "",
+            "A pool that does not move after a press means the key, the binding or "
+            + "the charges - not detection. Presses that keep doing nothing stop "
+            + "for a few seconds rather than spending what is left.");
         y += 20;
 
         _numbers.SetBounds(14, y, 340, 18);
         _numbers.ForeColor = SystemColors.GrayText;
         _numbers.Text = "Deciding: not read yet";
         Controls.Add(_numbers);
+        Tips.On(_numbers, "Which reading is deciding right now: memory, the printed "
+            + "numbers, or the globe pixels.", "",
+            "Memory and numbers are exact. Globe pixels are the fallback - they "
+            + "follow energy shield too, and read a poisoned globe as empty.");
 
         // The card was a fixed height, so the last line - which is the one
         // saying what it is actually reading from - was cut in half.
@@ -394,6 +414,7 @@ public sealed class GlobePanel : Card
         _shieldOn.CheckedChanged += (_, _) =>
         { _shield.Enabled = _shieldOn.Checked; _onChange(); };
         Controls.Add(_shieldOn);
+        Tips.On(_shieldOn, Tips.ShieldOn);
 
         var tip = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
         tip.SetToolTip(_shieldOn,
@@ -419,7 +440,7 @@ public sealed class GlobePanel : Card
             + Environment.NewLine
             + "would make this read your life.");
 
-        Controls.Add(Lab("below", 208, y + 3));
+        Controls.Add(Lab("below", 208, y + 3, Tips.ShieldBelow));
         _shieldBelow.SetBounds(250, y, 54, 24);
         _shieldBelow.Minimum = 1;
         _shieldBelow.Maximum = 99;
@@ -427,6 +448,7 @@ public sealed class GlobePanel : Card
         _shieldBelow.ValueChanged += (_, _) =>
         { _shield.Threshold = (double)_shieldBelow.Value / 100.0; _onChange(); };
         Controls.Add(_shieldBelow);
+        Tips.On(_shieldBelow, Tips.ShieldBelow);
         Controls.Add(Lab("%", 308, y + 3));
         y += 28;
 
@@ -444,7 +466,7 @@ public sealed class GlobePanel : Card
             + Environment.NewLine
             + "Find numbers could not locate it.");
 
-        Controls.Add(Lab("My max shield", 102, y + 3));
+        Controls.Add(Lab("My max shield", 102, y + 3, Tips.ShieldMax));
         _shieldMax.SetBounds(190, y, 72, 24);
         _shieldMax.Minimum = 0;
         _shieldMax.Maximum = 1_000_000;
@@ -462,6 +484,8 @@ public sealed class GlobePanel : Card
         _shieldRead.ForeColor = SystemColors.GrayText;
         _shieldRead.Text = "Shield: not set - needs its own Numbers box";
         Controls.Add(_shieldRead);
+        Tips.On(_shieldRead, "What the shield line reads right now, and whether it is "
+            + "set up at all.");
         RefreshShieldWarning();
         return y + 22;
     }
@@ -545,8 +569,17 @@ public sealed class GlobePanel : Card
             : Color.FromArgb(0, 100, 0);
     }
 
-    private static Label Lab(string text, int x, int y) =>
-        new() { Text = text, Bounds = new Rectangle(x, y, 76, 18), AutoSize = true };
+    /// <summary>
+    /// A caption. It takes the same explanation as the field it names: the
+    /// caption is the part you read, so it is the part the pointer lands on,
+    /// and finding nothing there reads as nothing to find.
+    /// </summary>
+    private static Label Lab(string text, int x, int y, string[]? tip = null)
+    {
+        var l = new Label { Text = text, Bounds = new Rectangle(x, y, 76, 18), AutoSize = true };
+        if (tip is not null) Tips.On(l, tip);
+        return l;
+    }
 
     /// <summary>
     /// Both maxima sat under the word "My max", one above the other, and the

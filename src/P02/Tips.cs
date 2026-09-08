@@ -314,4 +314,158 @@ internal static class Tips
         "system - screenshots, the Snipping Tool, Discord and OBS all see",
         "nothing. Moving the window is usually the better answer.",
     ];
+
+    public static readonly string[] TuneColours =
+    [
+        "Works out which colours count as liquid, from this globe as it is now.",
+        "",
+        "It samples the globe drained and full and picks the threshold that",
+        "separates them, instead of you guessing at the sliders. Use it if the",
+        "reading does not follow the globe down, or after recolouring the",
+        "interface.",
+        "",
+        "It says so plainly when colour alone cannot tell full from empty here -",
+        "which happens with a poisoned globe, and is the reason to use the",
+        "numbers instead.",
+    ];
+
+    public static readonly string[] Numbers =
+    [
+        "The numbers printed above the globe - 1,490/1,490 and so on.",
+        "",
+        "This is the reading worth having. It is exact, needs no calibration, it",
+        "cannot confuse life with energy shield, and it does not care what colour",
+        "the globe has turned. It also tells it there are no numbers on screen at",
+        "all, which is how it stays quiet in menus and loading screens.",
+        "",
+        "It finds the box for you; drag one by hand only if it picks badly.",
+    ];
+
+    public static readonly string[] Key =
+    [
+        "The key pressed for this pool. Click and press it.",
+        "",
+        "It has to be the key your flask is actually bound to in game - the slot",
+        "number, not the flask. Test keys is the way to check without dying to",
+        "find out.",
+    ];
+
+    public static readonly string[] Uber =
+    [
+        "A last-resort press, one only, when everything else has missed.",
+        "",
+        "The cooldown and the hold both mean there are moments where nothing can",
+        "be sent, and a hit landing in one of those is how you die at what looks",
+        "like a safe fraction. Under this line it sends one press regardless.",
+        "",
+        "One press, not a stream - it re-arms only after you have recovered, so",
+        "it cannot drain your charges. Capped at 30%; set it well under your",
+        "trigger, around 15-20%.",
+    ];
+
+    public static readonly string[] ShieldOn =
+    [
+        "Fire this pool's flask for energy shield as well as for life.",
+        "",
+        "Off by default because it is wrong for most characters: shield already",
+        "recharges on its own, and a flask does nothing for it. Tick it only if",
+        "you have the passive or the item that makes flasks recover shield.",
+        "",
+        "Left off, shield is not just ignored - it is kept out of the life",
+        "reading, which is otherwise a real source of misfires, because the",
+        "shield is drawn over the same globe.",
+    ];
+
+    public static readonly string[] ShieldBelow =
+    [
+        "The fraction of your shield that fires the flask.",
+        "",
+        "Uses the same panic and emergency rules as life.",
+    ];
+
+    public static readonly string[] ShieldMax =
+    [
+        "Your maximum energy shield, or 0 to read it from its own numbers box.",
+        "",
+        "It has to be the shield maximum, not the life one - typing life here",
+        "makes the shield reading follow your life, which fires at the wrong",
+        "time in both directions.",
+    ];
+
+    public static readonly string[] AnyWindow =
+    [
+        "Clears the window filter, so it fires into whatever has focus.",
+        "",
+        "Only useful for testing against something that is not the game. Put the",
+        "title back before playing.",
+    ];
+
+    public static readonly string[] OpenLog =
+    [
+        "Opens the folder holding the log and your settings file.",
+        "",
+        "The log says what it read and why it did or did not fire, every poll",
+        "that mattered. Export diagnostics is the better thing to send, but this",
+        "is where to look if you want to read it yourself.",
+    ];
+
+    public static readonly string[] CheckUpdates =
+    [
+        "Asks GitHub whether there is a newer build.",
+        "",
+        "It lists everything that changed since the version you are on, not just",
+        "the newest release, and says how many you are behind. It also checks on",
+        "its own at launch unless you turn that off.",
+    ];
+
+    public static readonly string[] UpdateAtLaunch =
+    [
+        "Checks for a new version each time it starts.",
+        "",
+        "One request, and nothing installs without you saying so.",
+    ];
+
+    public static readonly string[] FindNumbers =
+    [
+        "Finds the printed numbers for both pools at once.",
+        "",
+        "This is the single step everything else depends on: it sets both boxes,",
+        "fills in both maxima, keeps them up to date as you level, and gives the",
+        "memory search the two maxima it needs to find anything. One number",
+        "matches thousands of places in a heap; two pin it down.",
+        "",
+        "Have the game up with the numbers visible, then press it.",
+    ];
+
+    public static readonly string[] DingDisarmed =
+    [
+        "Ding for presses that were only decided on, while disarmed.",
+        "",
+        "Nothing is sent either way. It is for hearing whether it would have",
+        "fired at the right moments before trusting it with your flasks - which",
+        "is worth an evening.",
+    ];
+
+    public static readonly string[] Status =
+    [
+        "What it is doing right now: polls a second actually achieved, how long",
+        "each poll takes, and where the readings are coming from.",
+        "",
+        "This is the line that says whether memory has locked on, and what it is",
+        "still missing if it has not.",
+    ];
+
+    public static readonly string[] Focus =
+    [
+        "Why it is or is not firing at this moment.",
+        "",
+        "Disarmed, the focused window not matching, and nothing being readable",
+        "all look identical from the outside. This says which one it is.",
+    ];
+
+    public static readonly string[] Live =
+    [
+        "The last thing that happened, as it happens: what was read, what was",
+        "decided, and whether a key went out.",
+    ];
 }
