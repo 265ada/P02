@@ -198,13 +198,18 @@ public sealed class GlobePanel : GroupBox
         });
         y += 30;
 
-        Controls.Add(Lab("My max", 14, y + 4));
+        Controls.Add(Lab($"My max {title.ToLowerInvariant()}", 14, y + 4));
         _knownMax.SetBounds(140, y, 72, 24);
         _knownMax.Minimum = 0;
         _knownMax.Maximum = 1_000_000;
         _knownMax.Increment = 1;
         _knownMax.Value = Math.Clamp(cfg.KnownMax, 0, 1_000_000);
-        _knownMax.ValueChanged += (_, _) => { _cfg.KnownMax = (int)_knownMax.Value; _onChange(); };
+        _knownMax.ValueChanged += (_, _) =>
+        {
+            _cfg.KnownMax = (int)_knownMax.Value;
+            RefreshShieldWarning();
+            _onChange();
+        };
         Controls.Add(_knownMax);
         Controls.Add(new Label
         {
@@ -332,8 +337,8 @@ public sealed class GlobePanel : GroupBox
         numBtn.Click += (_, _) => PickShieldNumbers();
         Controls.Add(numBtn);
 
-        Controls.Add(Lab("My max", 102, y + 3));
-        _shieldMax.SetBounds(160, y, 72, 24);
+        Controls.Add(Lab("My max shield", 102, y + 3));
+        _shieldMax.SetBounds(190, y, 72, 24);
         _shieldMax.Minimum = 0;
         _shieldMax.Maximum = 1_000_000;
         _shieldMax.Value = Math.Clamp(_shield.KnownMax, 0, 1_000_000);
@@ -366,7 +371,9 @@ public sealed class GlobePanel : GroupBox
             _shieldRead.Text = "That is your LIFE maximum - shield will read life. Use your "
                              + "shield maximum, or 0.";
             _shieldRead.ForeColor = Color.FromArgb(200, 30, 30);
+            return;
         }
+        GuardMaxima();
     }
 
     private void PickShieldNumbers()
@@ -406,7 +413,8 @@ public sealed class GlobePanel : GroupBox
     public void UpdateShield(GlobeReading r)
     {
         if (_shield is null) return;
-        if (_shield.KnownMax > 0 && _shield.KnownMax == _cfg.KnownMax)
+        if ((_shield.KnownMax > 0 && _shield.KnownMax == _cfg.KnownMax)
+            || (_cfg.KnownMax == 0 && _shield.KnownMax > 0))
         {
             RefreshShieldWarning();
             return;
@@ -431,6 +439,22 @@ public sealed class GlobePanel : GroupBox
 
     private static Label Lab(string text, int x, int y) =>
         new() { Text = text, Bounds = new Rectangle(x, y, 76, 18), AutoSize = true };
+
+    /// <summary>
+    /// Both maxima sat under the word "My max", one above the other, and the
+    /// life value ended up in the shield box - which then makes the shield
+    /// watcher read life. Naming each one for the pool it holds costs nothing.
+    /// </summary>
+    private void GuardMaxima()
+    {
+        if (_shield is null) return;
+        if (_cfg.KnownMax == 0 && _shield.KnownMax > 0)
+        {
+            _shieldRead.Text = "Life has no maximum but shield does - are these the right way "
+                             + "round?";
+            _shieldRead.ForeColor = Color.FromArgb(200, 30, 30);
+        }
+    }
 
     /// <summary>
     /// The numbers beside the globe are an exact reading, so this is the most
