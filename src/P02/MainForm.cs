@@ -63,18 +63,13 @@ public sealed class MainForm : Form
         _pin.Click += (_, _) => ToggleOverlay(!(_overlay?.Visible ?? false));
         Controls.Add(_pin);
 
-        Controls.Add(Cap(new Label
-        {
-            Text = "pin a small readout over the game",
-            Bounds = new Rectangle(620, 10, 240, 18),
-            TextAlign = ContentAlignment.MiddleRight,
-            ForeColor = SystemColors.GrayText,
-        }, Tips.Pin));
+        // The hint that used to sit here said what the P button's own tooltip
+        // says, and it was the thing the third checkbox was clipped against.
 
         var snap = new CheckBox
         {
-            Text = "Snap to the game's numbers",
-            Bounds = new Rectangle(392, 8, 190, 22),
+            Text = "Snap to the numbers",
+            AutoSize = true,
             Checked = cfg.OverlaySnap,
         };
         Controls.Add(snap);
@@ -83,7 +78,7 @@ public sealed class MainForm : Form
         var follow = new CheckBox
         {
             Text = "Follow my character's bar",
-            Bounds = new Rectangle(588, 8, 176, 22),
+            AutoSize = true,
             Checked = cfg.OverlayFollowBar,
         };
         follow.CheckedChanged += (_, _) =>
@@ -98,6 +93,8 @@ public sealed class MainForm : Form
         Controls.Add(follow);
         Tips.On(follow, Tips.FollowBar);
 
+
+
         // Two ways to be anchored, and they cannot both be it.
         snap.CheckedChanged += (_, _) =>
         {
@@ -111,13 +108,24 @@ public sealed class MainForm : Form
 
         var autoHide = new CheckBox
         {
-            Text = "Hide it when they are covered",
-            Bounds = new Rectangle(190, 8, 200, 22),
+            Text = "Hide when covered",
+            AutoSize = true,
             Checked = cfg.OverlayAutoHide,
         };
         autoHide.CheckedChanged += (_, _) => { _cfg.OverlayAutoHide = autoHide.Checked; Save(); };
         Controls.Add(autoHide);
         Tips.On(autoHide, Tips.OverlayAutoHide);
+
+        // Laid out from their own measured widths, right to left off the pin,
+        // so a longer label cannot clip the one beside it.
+        int right = _pin.Left - 14;
+        foreach (var box in new[] { follow, snap, autoHide })
+        {
+            box.PerformLayout();
+            right -= box.Width;
+            box.Location = new Point(right, 9);
+            right -= 18;
+        }
 
         var probe = new TextProbe(_engine.TextAvailable, _engine.TextUnavailable,
                                   _engine.ProbeText);

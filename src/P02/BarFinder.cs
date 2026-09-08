@@ -57,14 +57,15 @@ internal sealed class BarFinder : IDisposable
             if (near.Width > 40 && near.Height > 20 && Scan(near)) return;
         }
 
-        // Otherwise a box around the middle, because the camera keeps the
-        // character there - it is very nearly as fixed a spot as the globes.
-        // Kept small on purpose: a small capture is a cheap one, and the edges
-        // of the screen are HUD, which is full of bars.
+        // A tight box on the centre. The camera keeps the character there, and
+        // everything that went wrong with a wide search went wrong the same
+        // way: a totem, a minion and a rare monster all have a green bar, and
+        // the only thing that reliably separates yours from theirs is that
+        // yours is the one in the middle of the screen.
         var middle = new Rectangle(
-            window.X + window.Width * 3 / 10,
-            window.Y + window.Height / 5,
-            window.Width * 2 / 5,
+            window.X + window.Width * 2 / 5,
+            window.Y + window.Height * 3 / 10,
+            window.Width / 5,
             window.Height * 2 / 5);
 
         if (!Scan(middle)) Lost(now);
@@ -75,7 +76,7 @@ internal sealed class BarFinder : IDisposable
         // A frame or two without it is a flicker, not a disappearance - the bar
         // fades as a character stands still, and blinking the readout in and out
         // would be worse than leaving it.
-        if (now - _lastSeenMs > 600) Visible = false;
+        if (now - _lastSeenMs > 1500) Visible = false;
     }
 
     private bool Scan(Rectangle area)
@@ -85,39 +86,40 @@ internal sealed class BarFinder : IDisposable
         byte[] px = _cap.Buffer;
         int w = _cap.Width, h = _cap.Height, stride = w * ScreenCapture.Bpp;
 
+        // Everything on screen with hit points has a green bar. Taking the
+        // first one found meant taking a totem, or a minion, or whatever was
+        // scanned soonest. The character is the one in the middle, so all the
+        // candidates are collected and the most central wins.
+        int cx = w / 2, cy = h / 2;
+        Rectangle best = Rectangle.Empty;
+        long bestCost = long.MaxValue;
+
         for (int y = 2; y < h - 2; y++)
         {
             int run = 0;
-            for (int x = 0; x < w; x++)
+            for (int x = 0; x <= w; x++)
             {
-                int i = y * stride + x * ScreenCapture.Bpp;
-                if (IsLife(px[i + 2], px[i + 1], px[i]))
-                {
-                    run++;
-                    continue;
-                }
+                bool life = x < w && IsLife(At(px, stride, x, y));
+                if (life) { run++; continue; }
 
-                if (run >= MinRun && Confirm(px, stride, w, h, x - run, y, run, area, out var hit))
+                if (run >= MinRun
+                    && Confirm(px, stride, w, h, x - run, y, run, area, out var hit))
                 {
-                    _last = hit;
-                    Visible = true;
-                    _lastSeenMs = _clock.ElapsedMilliseconds;
-                    return true;
+                    int mx = x - run / 2, my = hit.Y - area.Y;
+                    long cost = (long)(mx - cx) * (mx - cx) + (long)(my - cy) * (my - cy);
+                    if (cost < bestCost) { bestCost = cost; best = hit; }
                 }
 
                 run = 0;
             }
-
-            if (run >= MinRun && Confirm(px, stride, w, h, w - run, y, run, area, out var edge))
-            {
-                _last = edge;
-                Visible = true;
-                _lastSeenMs = _clock.ElapsedMilliseconds;
-                return true;
-            }
         }
 
-        return false;
+        if (best.IsEmpty) return false;
+
+        _last = best;
+        Visible = true;
+        _lastSeenMs = _clock.ElapsedMilliseconds;
+        return true;
     }
 
     /// <summary>
@@ -142,10 +144,9 @@ internal sealed class BarFinder : IDisposable
         for (int dy = 1; dy <= 8 && top - dy >= 0; dy++)
             if (IsShield(At(px, stride, mid, top - dy))) { shield = true; break; }
 
-        bool framed = top - 1 >= 0 && IsDark(At(px, stride, mid, top - 1))
-                      && bottom + 1 < h && IsDark(At(px, stride, mid, bottom + 1));
-
-        if (!shield && !framed) return false;
+        // A dark frame used to be accepted as proof on its own. Every bar in
+        // the game has one, so that proved nothing and let a totem win.
+        if (!shield) return false;
 
         bar = new Rectangle(area.X + x0, area.Y + top, run, bottom - top + 1);
         return true;
