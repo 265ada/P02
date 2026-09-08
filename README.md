@@ -164,6 +164,12 @@ the fight. Firing can repeat several times a second, so the gap setting
 next to it is the minimum time between dings - 6 seconds by default. Set it to 0
 for one per press, or untick it entirely.
 
+While **disarmed**, the ding still sounds when a globe crosses its trigger, and
+the panel says what would have happened. Nothing is sent - disarmed means no key
+ever leaves P02 - so this is the safe way to confirm a trigger point by ear
+before arming. It only does this while disarmed, not merely while another window
+has focus, so alt-tabbing at low health stays quiet.
+
 Volume is in dB over the original level, so 0 is exactly what it always was. Up
 to **+16 dB** that is pure level. Past that the peak is already at full scale -
 there is nowhere higher to go in a 16-bit sound - so the extra comes from

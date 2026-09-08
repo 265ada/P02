@@ -557,6 +557,13 @@ public sealed class GlobePanel : GroupBox
         }
     }
 
+    /// <summary>Shown while disarmed, when the trigger point is crossed.</summary>
+    public void ShowWouldFire(double frac)
+    {
+        _effect.Text = $"Disarmed: would have fired at {frac:P0}. Arm it to actually send.";
+        _effect.ForeColor = Color.FromArgb(0, 90, 160);
+    }
+
     /// <summary>Called from the UI thread with the latest reading.</summary>
     public void Update(GlobeReading r)
     {

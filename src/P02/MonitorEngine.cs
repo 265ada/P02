@@ -32,6 +32,9 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>Globe name, whether the last press moved the globe, and how
     /// many in a row have not.</summary>
     public event Action<string, bool, int>? EffectChecked;
+
+    /// <summary>The trigger was crossed while disarmed - what would have happened.</summary>
+    public event Action<string, double>? WouldFire;
     public event Action<bool>? ArmedChanged;
 
     public MonitorEngine(AppConfig cfg)
@@ -114,6 +117,7 @@ public sealed class MonitorEngine : IDisposable
         public double MaxSinceFire;
         public int NoEffect;
         public long RecoveringUntilMs;
+        public long LastWouldFireMs = long.MinValue / 2;
     }
 
     private void Loop(CancellationToken ct)
@@ -236,6 +240,20 @@ public sealed class MonitorEngine : IDisposable
         if (!Armed || !focused)
         {
             st.Below = 0;
+
+            // Disarmed is the safe way to check a setup: the trigger point can
+            // be confirmed by ear without a single key being sent. Only while
+            // disarmed, not merely unfocused, so alt-tabbing at low health does
+            // not chirp at you.
+            if (!Armed && frac < c.Threshold && c.Enabled)
+            {
+                if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
+                if (now - st.LastWouldFireMs > _cfg.SoundGapMs)
+                {
+                    st.LastWouldFireMs = now;
+                    WouldFire?.Invoke(name, frac);
+                }
+            }
             return new GlobeReading(name, frac, true);
         }
 
