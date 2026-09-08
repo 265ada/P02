@@ -224,7 +224,11 @@ internal sealed partial class TextOcr : IDisposable
             if (max == slot.DisagreeMax) slot.DisagreeCount++;
             else { slot.DisagreeMax = max; slot.DisagreeCount = 1; }
 
-            if (slot.DisagreeCount >= 15)
+            // Fifteen readings was far too patient. A stated maximum that has
+            // gone stale refuses every reading in the meantime, and refusing
+            // every reading means holding fire - so the cost of waiting is
+            // being unprotected, not merely being wrong.
+            if (slot.DisagreeCount >= 5)
             {
                 lock (_gate) slot.Suggested = max;
                 if (_clock.ElapsedMilliseconds - slot.LastComplaintMs > 30000)

@@ -503,6 +503,7 @@ public sealed class MonitorEngine : IDisposable
         // one printed on your screen is the one that is.
         bool haveOcr = false;
         double ocrFrac = 0;
+        int ocrMax = 0;
         bool textLostOverride = true;
 
         // Asking for memory or for the numbers is asking for the globe pixels
@@ -535,6 +536,8 @@ public sealed class MonitorEngine : IDisposable
             // anything, and only then are the pixels asked for one.
             bool pixelsMayObject = c.KnownMax <= 0;
             bool agrees = !pixelsMayObject || Math.Abs(tr.Fraction - frac) <= 0.40;
+
+            if (textAge < 1200) ocrMax = tr.Max;
 
             if (textAge < 1200 && agrees)
             {
@@ -597,6 +600,24 @@ public sealed class MonitorEngine : IDisposable
             // so the address stays unconfirmed, so the misreads keep winning.
             // That is precisely the state where memory is the only thing still
             // telling the truth, and it was the one state where it had no say.
+            // Two independent sources agreeing on a maximum that is not the one
+            // configured settles it outright. A stale maximum is not a small
+            // problem: every reading is measured against it, the numbers refuse
+            // anything that disagrees, and memory will not confirm an address
+            // whose maximum is "wrong" - so the whole thing goes blind at
+            // exactly the moment a level or a gear swap changed it. That is
+            // what 1,490 becoming 1,503 did.
+            if (max > 0 && ocrMax > 0 && max == ocrMax && expectedMax > 0
+                && max != expectedMax)
+            {
+                Log.Write($"{name}: memory and the numbers both read a maximum of {max:N0}, "
+                          + $"not {expectedMax:N0} - adopting it at once");
+                c.KnownMax = max;
+                _cfg.Save();
+                expectedMax = max;
+                MaxAdopted?.Invoke(name, expectedMax, max);
+            }
+
             if (!_memConfirmed && max > 0 && expectedMax > 0 && max == expectedMax)
             {
                 _memConfirmed = true;
@@ -659,7 +680,12 @@ public sealed class MonitorEngine : IDisposable
                 textRaw = $"memory, life {cur:N0}/{max:N0}";
                 textLostOverride = false;
             }
-            else if (max > 0 && expectedMax > 0 && matchesOcr)
+            // Only when the maxima genuinely differ. This used to fire whenever
+            // the address was merely unconfirmed, and logged "memory found max
+            // 1490 but the max is 1490 - wrong structure", then threw the
+            // address away and found the same one again ten seconds later,
+            // forever. Memory was never once used.
+            else if (max > 0 && expectedMax > 0 && max != expectedMax && matchesOcr)
             {
                 textRaw = $"memory says max {max:N0}, yours is {expectedMax:N0} - ignored";
                 if (now - st.LastMemBadMs > 10000)
