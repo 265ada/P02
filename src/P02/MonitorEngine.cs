@@ -27,6 +27,12 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>Milliseconds of work in the last poll, excluding the sleep.</summary>
     public double LastPollMs { get; private set; }
 
+    /// <summary>Keys sent since this fight started.</summary>
+    public int FiresThisFight { get; private set; }
+
+    /// <summary>Life has dropped recently enough to still count as fighting.</summary>
+    public bool InCombat { get; private set; }
+
     /// <summary>Title of whatever window currently has focus, for the UI.</summary>
     public string ForegroundTitle { get; private set; } = "";
 
@@ -284,6 +290,9 @@ public sealed class MonitorEngine : IDisposable
         long lastUiMs = 0, hzWindowMs = 0, lastLogMs = 0;
         int polls = 0;
 
+        double lastLife = -1;
+        long lastDropMs = long.MinValue / 2;
+
         // Without this the scheduler rounds every sleep up to ~15 ms, which
         // caps the loop near 60 Hz no matter what poll rate is asked for.
         Native.timeBeginPeriod(1);
@@ -311,6 +320,27 @@ public sealed class MonitorEngine : IDisposable
                 var lr = Sample(life, _cfg.Life, "Life", focused, clock);
                 var mr = Sample(mana, _cfg.Mana, "Mana", focused, clock);
                 var sr = Sample(shield, _cfg.Shield, "Shield", focused, clock);
+
+                // A fight is life going down. Regeneration and leech send it up
+                // constantly, so a rise says nothing was hitting you - only a
+                // drop does.
+                if (lr.Ok && lr.Note.Length == 0)
+                {
+                    if (lastLife >= 0 && lr.Fraction < lastLife - 0.01) lastDropMs = t0;
+                    lastLife = lr.Fraction;
+                }
+
+                bool fighting = t0 - lastDropMs < _cfg.CombatGraceMs;
+                if (fighting != InCombat)
+                {
+                    InCombat = fighting;
+                    if (!fighting)
+                    {
+                        if (FiresThisFight > 0)
+                            Log.Write($"fight over: {FiresThisFight} press(es) sent");
+                        FiresThisFight = 0;
+                    }
+                }
 
                 LastPollMs = clock.Elapsed.TotalMilliseconds - t0;
 
@@ -617,6 +647,7 @@ public sealed class MonitorEngine : IDisposable
 
         st.LastFireMs = now;
         st.Below = 0;
+        FiresThisFight++;
 
         if (c.VerifyEffect)
         {

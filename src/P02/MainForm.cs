@@ -203,16 +203,17 @@ public sealed class MainForm : Form
             Text = "no more often than",
             Bounds = new Rectangle(232, y + 38, 108, 20),
         });
-        var gap = new NumericUpDown { Bounds = new Rectangle(342, y + 34, 56, 24) };
+        var gap = new NumericUpDown { Bounds = new Rectangle(342, y + 34, 62, 24) };
         gap.Minimum = 0;
-        gap.Maximum = 120;
-        gap.Value = Math.Clamp(cfg.SoundGapMs / 1000, 0, 120);
-        gap.ValueChanged += (_, _) => { _cfg.SoundGapMs = (int)gap.Value * 1000; Save(); };
+        gap.Maximum = 120000;
+        gap.Increment = 100;
+        gap.Value = Math.Clamp(cfg.SoundGapMs, 0, 120000);
+        gap.ValueChanged += (_, _) => { _cfg.SoundGapMs = (int)gap.Value; Save(); };
         Controls.Add(gap);
         Controls.Add(new Label
         {
-            Text = "seconds",
-            Bounds = new Rectangle(402, y + 38, 60, 20),
+            Text = "ms",
+            Bounds = new Rectangle(408, y + 38, 26, 20),
         });
 
         var disarmedDing = new CheckBox
@@ -228,9 +229,9 @@ public sealed class MainForm : Form
         Controls.Add(new Label
         {
             Text = "volume",
-            Bounds = new Rectangle(466, y + 38, 48, 20),
+            Bounds = new Rectangle(440, y + 38, 48, 20),
         });
-        var vol = new NumericUpDown { Bounds = new Rectangle(516, y + 34, 56, 24) };
+        var vol = new NumericUpDown { Bounds = new Rectangle(490, y + 34, 56, 24) };
         vol.Minimum = -24;
         vol.Maximum = MonitorEngine.MaxGainDb;
         vol.Value = Math.Clamp(cfg.SoundGainDb, -24, MonitorEngine.MaxGainDb);
@@ -245,7 +246,7 @@ public sealed class MainForm : Form
         Controls.Add(new Label
         {
             Text = $"dB (max +{MonitorEngine.MaxGainDb})",
-            Bounds = new Rectangle(576, y + 38, 110, 20),
+            Bounds = new Rectangle(550, y + 38, 110, 20),
         });
 
         y += 32;
@@ -542,7 +543,10 @@ public sealed class MainForm : Form
             BeginInvoke(() =>
             {
                 if (_overlay is { IsDisposed: false, Visible: true })
+                {
                     _overlay.Show(life, mana, _cfg.Life.Threshold, _cfg.Mana.Threshold);
+                    _overlay.SetFightCount(_engine.FiresThisFight, _engine.InCombat);
+                }
 
                 _life.Update(life);
                 _mana.Update(mana);

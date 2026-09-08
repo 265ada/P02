@@ -133,7 +133,11 @@ whenever it is the pixels. The pixel path produces a
 - **Self-updating** from GitHub Releases.
 - **Pin** in the top right corner puts a small readout over the game: the globes
   you are actually watching, the numbers being read, whether it is armed, and a
-  light that blinks when a key goes out. It has no background or border - only
+  light that blinks when a key goes out, and a count of presses sent in the
+  current fight on the far right. A fight is life going down: rises mean nothing
+  is hitting you, since every class regenerates. The count clears once life has
+  not dropped for eight seconds, so it tells you what a fight cost rather than
+  what the session did. It has no background or border - only
   the readouts show - so drag it by any part of it; the position is saved as
   soon as you let go. If it ever goes missing, right-click the pin or use
   **Bring overlay back** on the tray icon. A globe that is switched off is
@@ -309,7 +313,8 @@ matter what the cooldown says.
 
 A short ding when a key fires, so you know it acted without looking away from
 the fight. Firing can repeat several times a second, so the gap setting
-next to it is the minimum time between dings - 6 seconds by default. Set it to 0
+next to it is the minimum time between dings, in milliseconds - 6000 by
+default. Set it to 0
 for one per press, or untick it entirely.
 
 The ding sounds when a key is actually sent. It can also sound while

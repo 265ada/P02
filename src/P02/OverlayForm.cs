@@ -16,6 +16,7 @@ public sealed class OverlayForm : Form
     private readonly Label _armed = new();
     private readonly Label _fire = new();
     private readonly Label _detail = new();
+    private readonly Label _count = new();
     private readonly System.Windows.Forms.Timer _fade = new();
 
     /// <summary>Raised when a drag finishes, so the position can be saved.</summary>
@@ -34,7 +35,7 @@ public sealed class OverlayForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        ClientSize = new Size(292, 84);
+        ClientSize = new Size(344, 84);
 
         // Only the readouts should be visible over the game. Everything painted
         // in this exact colour is punched through, so the window has no
@@ -56,13 +57,20 @@ public sealed class OverlayForm : Form
         _detail.BackColor = Color.Transparent;
         Controls.Add(_detail);
 
-        _fire.SetBounds(224, 52, 60, 22);
+        _fire.SetBounds(214, 52, 60, 22);
         _fire.TextAlign = ContentAlignment.MiddleRight;
         _fire.Font = new Font("Segoe UI", 9, FontStyle.Bold);
         _fire.ForeColor = Color.FromArgb(90, 90, 95);
         _fire.BackColor = Color.Transparent;
         _fire.Text = "";
         Controls.Add(_fire);
+
+        _count.SetBounds(280, 52, 56, 22);
+        _count.TextAlign = ContentAlignment.MiddleRight;
+        _count.Font = new Font("Segoe UI", 9, FontStyle.Bold);
+        _count.ForeColor = Color.FromArgb(200, 200, 205);
+        _count.BackColor = Color.Transparent;
+        Controls.Add(_count);
 
         _fade.Interval = 260;
         _fade.Tick += (_, _) =>
@@ -82,6 +90,7 @@ public sealed class OverlayForm : Form
         MakeDraggable(_armed);
         MakeDraggable(_detail);
         MakeDraggable(_fire);
+        MakeDraggable(_count);
 
         SetArmed(false);
     }
@@ -123,10 +132,10 @@ public sealed class OverlayForm : Form
             BackColor = Color.Transparent,
         };
         Controls.Add(caption);
-        bar.SetBounds(48, y + 1, 186, 15);
+        bar.SetBounds(48, y + 1, 238, 15);
         Controls.Add(bar);
         bar.BackColor = Color.Transparent;
-        pct.SetBounds(238, y, 46, 18);
+        pct.SetBounds(290, y, 46, 18);
         pct.ForeColor = Color.FromArgb(220, 220, 225);
         pct.BackColor = Color.Transparent;
         Controls.Add(pct);
@@ -153,6 +162,21 @@ public sealed class OverlayForm : Form
         _detail.Top = top;
         _fire.Top = top;
         ClientSize = new Size(ClientSize.Width, top + 32);
+    }
+
+    /// <summary>
+    /// Presses sent in this fight, cleared once nothing has hit you for a
+    /// while. A count per fight is what says whether it is behaving; a running
+    /// total since launch says nothing.
+    /// </summary>
+    public void SetFightCount(int fired, bool inCombat)
+    {
+        string text = inCombat || fired > 0 ? fired.ToString() : "";
+        if (_count.Text == text) return;
+        _count.Text = text;
+        _count.ForeColor = inCombat
+            ? Color.FromArgb(235, 200, 110)
+            : Color.FromArgb(140, 140, 145);
     }
 
     public void Show(GlobeReading life, GlobeReading mana, double lifeTrigger, double manaTrigger)

@@ -226,6 +226,13 @@ public sealed class AppConfig
     public WatcherConfig Shield { get; set; } = new()
         { Hue = "red", Key = "1", Threshold = 0.50, TextLabel = "Shield" };
 
+    /// <summary>
+    /// How long life must go without dropping before a fight counts as over.
+    /// Only drops count as fighting: every class regenerates, so a rise means
+    /// nothing is hitting you.
+    /// </summary>
+    public int CombatGraceMs { get; set; } = 8000;
+
     public int PollHz { get; set; } = 60;
 
     /// <summary>Only act while the focused window title contains this. Blank = any.</summary>
