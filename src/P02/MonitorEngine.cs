@@ -322,6 +322,7 @@ public sealed class MonitorEngine : IDisposable
         public bool HadGoodSource;
         public double LastGoodFrac;
         public bool UberUsed;
+        public bool LastDitchUsed;
         public long BackoffUntilMs;
         public bool Blind;
     }
@@ -586,11 +587,21 @@ public sealed class MonitorEngine : IDisposable
             // only independent witness, so when they are readable they get the
             // final say.
             bool matchesOcr = !haveOcr || Math.Abs(memFrac - ocrFrac) <= 0.15;
-            if (haveOcr && matchesOcr && !_memConfirmed)
+
+            // An address is taken as good once its maximum is the one we asked
+            // the search to find - which is also what the search matched on, and
+            // what it re-checks every read.
+            //
+            // It used to need the numbers to agree with it first, and that
+            // deadlocked: while the numbers are misreading, they never agree,
+            // so the address stays unconfirmed, so the misreads keep winning.
+            // That is precisely the state where memory is the only thing still
+            // telling the truth, and it was the one state where it had no say.
+            if (!_memConfirmed && max > 0 && expectedMax > 0 && max == expectedMax)
             {
                 _memConfirmed = true;
-                Log.Write($"{name}: memory agrees with the numbers ({memFrac:P0}) - "
-                          + "this address is confirmed");
+                Log.Write($"{name}: memory has the right maximum ({max:N0}) - using this "
+                          + "address until the numbers disagree with it for two seconds");
             }
 
             // Once the numbers have vouched for an address, they stop being the
@@ -605,6 +616,10 @@ public sealed class MonitorEngine : IDisposable
             // A wrong address disagrees forever; a misread disagrees for a
             // frame. So disagreement is timed rather than acted on, and only a
             // steady one costs the lock.
+            // A wrong address disagrees forever and loses the lock; a misread
+            // disagrees for a frame or two and is ridden out. This is the only
+            // thing that can take an address away, so it is also what protects
+            // against the search having found the wrong one.
             if (_memConfirmed && haveOcr && !matchesOcr)
             {
                 if (_memDisagreeSinceMs == 0) _memDisagreeSinceMs = now;
@@ -636,18 +651,6 @@ public sealed class MonitorEngine : IDisposable
             bool trusted = max > 0 && (expectedMax == 0 || max == expectedMax)
                            && matchesOcr && _memConfirmed;
 
-            if (!matchesOcr && max > 0 && !_memConfirmed)
-            {
-                textRaw = $"memory says {memFrac:P0}, the numbers say {ocrFrac:P0} - ignored";
-                if (now - st.LastMemBadMs > 10000)
-                {
-                    st.LastMemBadMs = now;
-                    Log.Write($"{name}: memory reads {memFrac:P0} ({cur:N0}/{max:N0}) but the "
-                              + $"numbers on screen read {ocrFrac:P0} and this address was "
-                              + "never confirmed - searching again");
-                    _mem.Rescan();
-                }
-            }
 
             if (trusted)
             {
@@ -851,32 +854,44 @@ public sealed class MonitorEngine : IDisposable
         // not repeat: it fires a single press and then stays quiet until you
         // have climbed back out, so it is a net rather than a second trigger
         // spending charges alongside the first.
-        if (c.UberBelow > 0 && frac > 0)
+        if (frac > 0)
         {
-            if (frac > c.UberBelow + 0.05) st.UberUsed = false;
-
-            if (frac <= c.UberBelow && !st.UberUsed && !_keys.Busy
-                && _keys.Send(c.Key, c.HoldMs, 1, 40, PostingKeys, GameWindow))
-            {
-                st.UberUsed = true;
-                st.LastFireMs = now;
-                st.Below = 0;
-                FiresThisFight++;
-                if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
-                Log.Write($"{name}: '{c.Key}' x1 at {frac:P1} EMERGENCY - one press, "
-                          + "will not repeat until recovered");
-                _trail.Dump($"{name} emergency press at {frac:P1}, under the "
-                            + $"{c.UberBelow:P0} floor, reading from "
-                            + $"{(fromText ? textRaw : "globe pixels")}");
-                Fired?.Invoke(name, frac);
+            if (Net(c.UberBelow, ref st.UberUsed, "EMERGENCY")) 
                 return new GlobeReading(name, frac, true, "", fromText, textRaw);
-            }
+
+            // A second line further down. Each net is a single press, so the
+            // first one having gone does not help if it landed in a cooldown or
+            // on a flask with nothing left - and by then there is no other
+            // chance coming.
+            if (Net(c.LastDitchBelow, ref st.LastDitchUsed, "LAST DITCH"))
+                return new GlobeReading(name, frac, true, "", fromText, textRaw);
         }
 
         if (frac >= c.Threshold)
         {
             st.Below = 0;
             return new GlobeReading(name, frac, true, "", fromText, textRaw);
+        }
+
+        bool Net(double floor, ref bool used, string what)
+        {
+            if (floor <= 0) return false;
+            if (frac > floor + 0.05) used = false;
+            if (frac > floor || used || _keys.Busy) return false;
+            if (!_keys.Send(c.Key, c.HoldMs, 1, 40, PostingKeys, GameWindow)) return false;
+
+            used = true;
+            st.LastFireMs = now;
+            st.Below = 0;
+            FiresThisFight++;
+            if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
+            Log.Write($"{name}: '{c.Key}' x1 at {frac:P1} {what} - one press, "
+                      + "will not repeat until recovered");
+            _trail.Dump($"{name} {what.ToLowerInvariant()} press at {frac:P1}, under the "
+                        + $"{floor:P0} floor, reading from "
+                        + $"{(fromText ? textRaw : "globe pixels")}");
+            Fired?.Invoke(name, frac);
+            return true;
         }
 
         // Deep in the red, or dropping fast enough that waiting a full cooldown

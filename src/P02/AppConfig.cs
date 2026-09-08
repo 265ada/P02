@@ -151,6 +151,17 @@ public sealed class WatcherConfig
     /// </summary>
     public double UberBelow { get; set; } = 0.15;
 
+    /// <summary>
+    /// A second net, below the first.
+    ///
+    /// Each net fires once and then waits until you have climbed back out, so
+    /// one net is one press - and a press that lands during someone else's
+    /// cooldown, or that the flask cannot use, leaves nothing behind it. A
+    /// second line further down costs nothing while things are going well and
+    /// is the last thing between a bad moment and a death.
+    /// </summary>
+    public double LastDitchBelow { get; set; } = 0.08;
+
     /// <summary>Gap between presses while panicking. Charges allow this.</summary>
     public int PanicCooldownMs { get; set; } = 60;
 

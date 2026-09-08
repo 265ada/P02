@@ -503,4 +503,19 @@ internal static class Tips
         "It is also exactly when nothing can fire, so the readout disappearing",
         "is information rather than a gap: gone means not watching.",
     ];
+
+    public static readonly string[] LastDitch =
+    [
+        "A second net, below the emergency one.",
+        "",
+        "Each net fires once and then stays quiet until you have climbed back",
+        "out, so one net is one press - and a single press can be wasted: it can",
+        "land while a burst is still going out, or on a flask with no charges",
+        "left. By the time that is apparent there is no second chance coming.",
+        "",
+        "A line further down costs nothing while things are going well. Set it",
+        "well under the emergency threshold - around half of it.",
+        "",
+        "0 turns it off.",
+    ];
 }

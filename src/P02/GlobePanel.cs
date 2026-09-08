@@ -21,6 +21,7 @@ public sealed class GlobePanel : Card
     private readonly NumericUpDown _hold = new();
     private readonly NumericUpDown _knownMax = new();
     private readonly NumericUpDown _uber = new();
+    private readonly NumericUpDown _lastDitch = new();
     private readonly Label _burstTime = new();
     private readonly Label _effect = new();
     private bool _blind;
@@ -213,6 +214,25 @@ public sealed class GlobePanel : Card
             ForeColor = SystemColors.GrayText,
             Text = "one press, as a last resort",
         });
+        y += 30;
+
+        Controls.Add(Lab("Last ditch below", 14, y + 4, Tips.LastDitch));
+        _lastDitch.SetBounds(140, y, 56, 24);
+        _lastDitch.Minimum = 0;
+        _lastDitch.Maximum = 30;
+        _lastDitch.Value = (decimal)Math.Clamp(cfg.LastDitchBelow * 100, 0, 30);
+        _lastDitch.ValueChanged += (_, _) =>
+        { _cfg.LastDitchBelow = (double)_lastDitch.Value / 100.0; _onChange(); };
+        Controls.Add(_lastDitch);
+        Tips.On(_lastDitch, Tips.LastDitch);
+        Controls.Add(Lab("%", 200, y + 4));
+
+        Controls.Add(Cap2(new Label
+        {
+            Bounds = new Rectangle(220, y + 4, 160, 18),
+            ForeColor = SystemColors.GrayText,
+            Text = "a second one, further down",
+        }, Tips.LastDitch));
 
         var uberTip = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
         uberTip.SetToolTip(_uber,
@@ -574,6 +594,13 @@ public sealed class GlobePanel : Card
     /// caption is the part you read, so it is the part the pointer lands on,
     /// and finding nothing there reads as nothing to find.
     /// </summary>
+    /// <summary>A ready-made label given the same explanation as its field.</summary>
+    private static Label Cap2(Label l, string[] tip)
+    {
+        Tips.On(l, tip);
+        return l;
+    }
+
     private static Label Lab(string text, int x, int y, string[]? tip = null)
     {
         var l = new Label { Text = text, Bounds = new Rectangle(x, y, 76, 18), AutoSize = true };

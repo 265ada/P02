@@ -47,6 +47,9 @@ public sealed class OverlayForm : Form
     /// Set while the readout is anchored to something in the game, so a drag
     /// cannot quietly fight the thing that keeps putting it back.
     /// </summary>
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(
+        System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool Locked { get; set; }
 
     public OverlayForm()
