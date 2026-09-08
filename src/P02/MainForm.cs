@@ -156,6 +156,29 @@ public sealed class MainForm : Form
             Bounds = new Rectangle(402, y + 38, 60, 20),
         });
 
+        Controls.Add(new Label
+        {
+            Text = "volume",
+            Bounds = new Rectangle(466, y + 38, 48, 20),
+        });
+        var vol = new NumericUpDown { Bounds = new Rectangle(516, y + 34, 56, 24) };
+        vol.Minimum = -24;
+        vol.Maximum = MonitorEngine.MaxGainDb;
+        vol.Value = Math.Clamp(cfg.SoundGainDb, -24, MonitorEngine.MaxGainDb);
+        vol.ValueChanged += (_, _) =>
+        {
+            _cfg.SoundGainDb = (int)vol.Value;
+            Save();
+            // Play at the new level so it can be judged by ear.
+            if (_cfg.SoundOnFire) _engine.SetSoundGain(_cfg.SoundGainDb);
+        };
+        Controls.Add(vol);
+        Controls.Add(new Label
+        {
+            Text = $"dB (max +{MonitorEngine.MaxGainDb})",
+            Bounds = new Rectangle(576, y + 38, 110, 20),
+        });
+
         y += 32;
         var testBtn = new Button { Text = "Test keys (3s)", Bounds = new Rectangle(12, y, 110, 26) };
         testBtn.Click += (_, _) => TestKeys();

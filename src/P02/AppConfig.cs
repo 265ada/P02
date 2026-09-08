@@ -139,6 +139,9 @@ public sealed class AppConfig
     /// </summary>
     public int SoundGapMs { get; set; } = 6000;
 
+    /// <summary>Boost over the original ding level, in dB. 0 is unchanged.</summary>
+    public int SoundGainDb { get; set; }
+
     /// <summary>Where the window was last time, so it comes back as you left it.</summary>
     public int WindowX { get; set; } = -1;
 

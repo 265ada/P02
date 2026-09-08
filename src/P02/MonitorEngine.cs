@@ -10,7 +10,7 @@ public sealed class MonitorEngine : IDisposable
 {
     private readonly AppConfig _cfg;
     private readonly KeyPresser _keys = new();
-    private readonly Chime _chime = new();
+    private readonly Chime _chime;
     private CancellationTokenSource? _cts;
     private Task? _task;
 
@@ -30,7 +30,21 @@ public sealed class MonitorEngine : IDisposable
     public event Action<string, double>? Fired;
     public event Action<bool>? ArmedChanged;
 
-    public MonitorEngine(AppConfig cfg) => _cfg = cfg;
+    public MonitorEngine(AppConfig cfg)
+    {
+        _cfg = cfg;
+        _chime = new Chime(cfg.SoundGainDb);
+    }
+
+    /// <summary>Loudest boost the ding can take without clipping, in dB.</summary>
+    public static int MaxGainDb => Chime.MaxGainDb;
+
+    /// <summary>Rebuilds the ding at a new level and plays it once.</summary>
+    public void SetSoundGain(int db)
+    {
+        _chime.GainDb = db;
+        _chime.Play(0);
+    }
 
     public void SetArmed(bool value)
     {

@@ -151,10 +151,19 @@ matter what the cooldown says.
 
 ## Sound
 
-A short, quiet ding when a key fires, so you know it acted without looking away
-from the fight. Firing can repeat several times a second, so the gap setting
+A short ding when a key fires, so you know it acted without looking away from
+the fight. Firing can repeat several times a second, so the gap setting
 next to it is the minimum time between dings - 6 seconds by default. Set it to 0
 for one per press, or untick it entirely.
+
+Volume is in dB over the original level, so 0 is exactly what it always was. Up
+to **+16 dB** that is pure level. Past that the peak is already at full scale -
+there is nowhere higher to go in a 16-bit sound - so the extra comes from
+filling in the gap between the sharp peak and its quiet tail with a soft curve.
+The maximum, **+26**, measures **+22.7 dB** louder than the original with **no
+clipped samples at all**; it does sound a little harder-edged, which is the
+trade. Everything is normalised to an exact peak after being built, so clipping
+is impossible by construction rather than by picking a cautious multiplier.
 
 ## Safety rails
 

@@ -13,8 +13,36 @@ internal sealed class Chime : IDisposable
 {
     private const int SampleRate = 44100;
 
-    private readonly SoundPlayer _player;
-    private readonly MemoryStream _wav;
+    /// <summary>
+    /// Peak of the original sound as a fraction of full scale. This is the 0 dB
+    /// reference, so existing settings sound exactly as they did.
+    /// </summary>
+    private const double BasePeak = 0.1532;
+
+    /// <summary>
+    /// Never synthesise above this. Full scale is where clipping starts, and a
+    /// clipped sine buzzes; a little under it stays clean.
+    /// </summary>
+    private const double CleanCeiling = 0.97;
+
+    /// <summary>Boost available from level alone, before the ceiling is hit.</summary>
+    public static int CleanGainDb { get; } =
+        (int)Math.Floor(20 * Math.Log10(CleanCeiling / BasePeak));
+
+    /// <summary>
+    /// Loudest setting offered. Past <see cref="CleanGainDb"/> the peak cannot
+    /// go any higher - full scale is full scale - so extra loudness comes from
+    /// filling in the gap between the peak and the average instead. A ding is a
+    /// sharp spike with a fast decay, so most of its length sits well below its
+    /// own peak, and rounding that off with a soft curve is a large gain in how
+    /// loud it sounds for a small, short-lived change in tone.
+    /// </summary>
+    public static int MaxGainDb => CleanGainDb + 10;
+
+    private SoundPlayer _player;
+    private MemoryStream _wav;
+    private readonly object _swap = new();
+    private int _gainDb;
     private long _lastMs;
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
@@ -26,14 +54,50 @@ internal sealed class Chime : IDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly Thread _thread;
 
-    public Chime()
+    public Chime(int gainDb = 0)
     {
-        _wav = new MemoryStream(BuildWav(frequency: 1180, milliseconds: 55, amplitude: 0.18));
-        _player = new SoundPlayer(_wav);
-        try { _player.Load(); } catch { /* no audio device; play becomes a no-op */ }
+        _gainDb = Math.Clamp(gainDb, -24, MaxGainDb);
+        (_wav, _player) = Build(_gainDb);
 
         _thread = new Thread(Run) { IsBackground = true, Name = "P02 chime" };
         _thread.Start();
+    }
+
+    /// <summary>
+    /// Boost over the original level, in dB. 0 is what it always was; the
+    /// maximum is whatever fits under the clipping ceiling.
+    /// </summary>
+    public int GainDb
+    {
+        get => _gainDb;
+        set
+        {
+            int g = Math.Clamp(value, -24, MaxGainDb);
+            if (g == _gainDb) return;
+            lock (_swap)
+            {
+                _gainDb = g;
+                var old = (_wav, _player);
+                (_wav, _player) = Build(g);
+                old._player.Dispose();
+                old._wav.Dispose();
+            }
+        }
+    }
+
+    private static (MemoryStream, SoundPlayer) Build(int gainDb)
+    {
+        double wanted = BasePeak * Math.Pow(10, gainDb / 20.0);
+        double peak = Math.Min(wanted, CleanCeiling);
+
+        // Whatever was asked for beyond the ceiling becomes drive instead.
+        double drive = wanted > CleanCeiling ? wanted / CleanCeiling : 1.0;
+
+        var wav = new MemoryStream(
+            BuildWav(frequency: 1180, milliseconds: 55, peak: peak, drive: drive));
+        var player = new SoundPlayer(wav);
+        try { player.Load(); } catch { /* no audio device; play becomes a no-op */ }
+        return (wav, player);
     }
 
     private void Run()
@@ -43,7 +107,11 @@ internal sealed class Chime : IDisposable
             while (!_stop.IsCancellationRequested)
             {
                 _pending.Wait(_stop.Token);
-                try { _player.Play(); } catch { /* never let a sound matter */ }
+                try
+                {
+                    lock (_swap) _player.Play();
+                }
+                catch { /* never let a sound matter */ }
             }
         }
         catch (OperationCanceledException) { /* shutting down */ }
@@ -70,10 +138,18 @@ internal sealed class Chime : IDisposable
     /// pitch: a fast attack and a smooth decay reads as a soft "ding" rather
     /// than a click or a beep.
     /// </summary>
-    private static byte[] BuildWav(double frequency, int milliseconds, double amplitude)
+    /// <summary>
+    /// <paramref name="peak"/> is the loudest sample as a fraction of full
+    /// scale. The waveform is built first and then scaled to exactly that, so
+    /// the level is precise and clipping is impossible by construction rather
+    /// than by choosing a cautious multiplier.
+    /// </summary>
+    private static byte[] BuildWav(double frequency, int milliseconds,
+                                   double peak, double drive = 1.0)
     {
         int samples = SampleRate * milliseconds / 1000;
-        var pcm = new byte[samples * 2];
+        var raw = new double[samples];
+        double loudest = 0;
 
         int attack = Math.Max(1, samples / 12);
         for (int i = 0; i < samples; i++)
@@ -90,7 +166,27 @@ internal sealed class Chime : IDisposable
             double wave = Math.Sin(2 * Math.PI * frequency * t)
                         + 0.25 * Math.Sin(4 * Math.PI * frequency * t);
 
-            short v = (short)(wave / 1.25 * env * amplitude * short.MaxValue);
+            raw[i] = wave * env;
+            loudest = Math.Max(loudest, Math.Abs(raw[i]));
+        }
+
+        // Normalise, shape, then set the level. Soft saturation lifts the
+        // quiet tail towards the peak without ever exceeding it, so this adds
+        // loudness rather than clipping.
+        if (drive > 1.0 && loudest > 0)
+        {
+            double k = Math.Clamp((drive - 1.0) * 2.0 + 0.75, 0.75, 5.0);
+            double norm = Math.Tanh(k);
+            for (int i = 0; i < samples; i++)
+                raw[i] = Math.Tanh(k * raw[i] / loudest) / norm;
+            loudest = 1.0;
+        }
+
+        var pcm = new byte[samples * 2];
+        double scale = loudest > 0 ? peak * short.MaxValue / loudest : 0;
+        for (int i = 0; i < samples; i++)
+        {
+            short v = (short)Math.Round(raw[i] * scale);
             pcm[i * 2] = (byte)(v & 0xFF);
             pcm[i * 2 + 1] = (byte)((v >> 8) & 0xFF);
         }
@@ -121,7 +217,10 @@ internal sealed class Chime : IDisposable
         _thread.Join(300);
         _stop.Dispose();
         _pending.Dispose();
-        _player.Dispose();
-        _wav.Dispose();
+        lock (_swap)
+        {
+            _player.Dispose();
+            _wav.Dispose();
+        }
     }
 }
