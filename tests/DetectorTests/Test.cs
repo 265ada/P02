@@ -291,6 +291,36 @@ static class T
             fails += bad;
         }
 
+        // A stray leading digit turns 1,465 into 11,465. Current 1,465 against
+        // that reads as 13%, which is under any trigger - so it fires at full
+        // health. The label finds the right line; only the maximum catches it.
+        {
+            int bad = 0;
+            string strayDigit = "Life 1,465/11,465\nShield 2,005/2,005";
+
+            bool taken = TextOcr.TryParse(strayDigit, out int c, out int m, "Life", 1465);
+            Console.WriteLine((!taken ? "PASS" : "FAIL")
+                + "  stray digit in the maximum -> "
+                + (taken ? $"{c}/{m} = {100.0 * c / m:0}%" : "refused") + "  (wanted refused)");
+            if (taken) bad++;
+
+            // The same line is fine once the maximum agrees.
+            bool ok = TextOcr.TryParse("Life 1,465/1,465", out int c2, out int m2, "Life", 1465);
+            Console.WriteLine((ok && c2 == 1465 && m2 == 1465 ? "PASS" : "FAIL")
+                + "  correct maximum still accepted -> "
+                + (ok ? $"{c2}/{m2}" : "refused"));
+            if (!(ok && c2 == 1465 && m2 == 1465)) bad++;
+
+            // With no maximum stated there is nothing to check it against, so
+            // it parses - the repeat rule in the reader is what guards that.
+            bool loose = TextOcr.TryParse(strayDigit, out _, out int m3, "Life", 0);
+            Console.WriteLine((loose && m3 == 11465 ? "PASS" : "FAIL")
+                + $"  no stated maximum, nothing to compare -> {m3}");
+            if (!(loose && m3 == 11465)) bad++;
+
+            fails += bad;
+        }
+
         // Every key the bind box can capture must be sendable. Numpad keys
         // share scancodes with the navigation cluster and differ only by the
         // extended flag, so this guards a genuinely easy mistake.

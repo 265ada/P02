@@ -181,14 +181,35 @@ internal sealed partial class TextOcr : IDisposable
             return;
         }
 
-        // A maximum changes rarely, and a misread one is the difference between
-        // 40% and 4%. Accept a new maximum only once it has repeated.
+        // If you have told us the maximum, anything else is a misread. This is
+        // the one that matters: a stray leading digit turns 1,465 into 11,465,
+        // and a current of 1,465 against that reads as 13% - well under any
+        // trigger, so it fires while you are at full health.
+        if (expected > 0 && max != expected)
+        {
+            if (_clock.ElapsedMilliseconds - slot.LastComplaintMs > 10000)
+            {
+                slot.LastComplaintMs = _clock.ElapsedMilliseconds;
+                Log.Write($"{name}: read a maximum of {max} but yours is {expected}"
+                          + " - ignoring that reading");
+            }
+            return;
+        }
+
+        // Without a stated maximum, lean on the fact that a real one barely
+        // ever changes. A small change might be a gear swap; a large one is
+        // almost always a digit that was not there, so make it prove itself.
         if (max != slot.StableMax)
         {
+            bool big = slot.StableMax > 0
+                       && Math.Abs(max - slot.StableMax) > slot.StableMax / 5;
+
             if (max == slot.PendingMax) slot.PendingCount++;
             else { slot.PendingMax = max; slot.PendingCount = 1; }
 
-            if (slot.PendingCount < 2) return;
+            if (slot.PendingCount < (big ? 5 : 2)) return;
+            if (big)
+                Log.Write($"{name}: maximum changed from {slot.StableMax} to {max}");
             slot.StableMax = max;
         }
 
@@ -241,7 +262,11 @@ internal sealed partial class TextOcr : IDisposable
                 if (!m.Success) continue;
                 if (TryNumber(m.Groups[1].Value, out cur)
                     && TryNumber(m.Groups[2].Value, out max)
-                    && Sane(cur, max))
+                    && Sane(cur, max)
+                    // A label can find the right line and still carry a misread
+                    // maximum. If you have said what yours is, anything else is
+                    // wrong however convincing the line looked.
+                    && (expectedMax <= 0 || max == expectedMax))
                     return true;
             }
         }

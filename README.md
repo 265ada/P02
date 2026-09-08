@@ -57,7 +57,13 @@ so firing at it is pure waste.
 what decides. It is an exact ratio, needs no calibration and no colour tuning,
 and because the maximum is read too, gear and buffs that move your pool change
 nothing. Windows does the reading, so there is nothing extra to install. Every
-reading is checked before it is believed. The maximum has to look like a
+reading is checked before it is believed, and **filling in My max is what makes
+that check exact**. A stray leading digit turns 1,465 into 11,465; a current of
+1,465 against that reads as 13%, which is under any trigger, so it fires while
+you are at full health. Told what your maximum is, a reading that disagrees is
+simply dropped. Without one, a maximum that changes by more than a fifth has to
+repeat five times before it is believed, since a real maximum barely ever
+changes and a misread one changes constantly. The maximum has to look like a
 character's pool and has to repeat before a change to it is accepted, since a
 misread maximum is the difference between 40% and 4%. Numbers are only read
 within a line, never across one - a box that also catches the shield line turned
