@@ -293,6 +293,30 @@ public sealed class GlobePanel : GroupBox
         { _shield.Enabled = _shieldOn.Checked; _onChange(); };
         Controls.Add(_shieldOn);
 
+        var tip = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
+        tip.SetToolTip(_shieldOn,
+            "Only useful if something in your build makes a life flask recover energy"
+            + Environment.NewLine
+            + "shield. Without that a flask does nothing for shield, and firing at a"
+            + Environment.NewLine
+            + "draining shield only spends charges."
+            + Environment.NewLine + Environment.NewLine
+            + "It uses the life flask's key and all of its timing - cooldown, panic gap,"
+            + Environment.NewLine
+            + "presses per trigger and hold. Only the trigger below, its own Numbers box"
+            + Environment.NewLine
+            + "and its own maximum are separate."
+            + Environment.NewLine + Environment.NewLine
+            + "My max here is your maximum SHIELD, not life. Leave it at 0 if unsure -"
+            + Environment.NewLine
+            + "the word \"Shield\" in the Numbers box is the better anchor anyway.");
+        tip.SetToolTip(_shieldMax,
+            "Your maximum energy shield, or 0. Do not put your life maximum here:"
+            + Environment.NewLine
+            + "it is used to pick which line of the HUD to read, so a life value"
+            + Environment.NewLine
+            + "would make this read your life.");
+
         Controls.Add(Lab("below", 208, y + 3));
         _shieldBelow.SetBounds(250, y, 54, 24);
         _shieldBelow.Minimum = 1;
@@ -314,7 +338,11 @@ public sealed class GlobePanel : GroupBox
         _shieldMax.Maximum = 1_000_000;
         _shieldMax.Value = Math.Clamp(_shield.KnownMax, 0, 1_000_000);
         _shieldMax.ValueChanged += (_, _) =>
-        { _shield.KnownMax = (int)_shieldMax.Value; _onChange(); };
+        {
+            _shield.KnownMax = (int)_shieldMax.Value;
+            RefreshShieldWarning();
+            _onChange();
+        };
         Controls.Add(_shieldMax);
         y += 26;
 
@@ -322,7 +350,23 @@ public sealed class GlobePanel : GroupBox
         _shieldRead.ForeColor = SystemColors.GrayText;
         _shieldRead.Text = "Shield: not set - needs its own Numbers box";
         Controls.Add(_shieldRead);
+        RefreshShieldWarning();
         return y + 22;
+    }
+
+    /// <summary>
+    /// The shield maximum is used to choose which line of the HUD to read, so
+    /// putting the life maximum in it makes the shield read life.
+    /// </summary>
+    private void RefreshShieldWarning()
+    {
+        if (_shield is null) return;
+        if (_shield.KnownMax > 0 && _shield.KnownMax == _cfg.KnownMax)
+        {
+            _shieldRead.Text = "That is your LIFE maximum - shield will read life. Use your "
+                             + "shield maximum, or 0.";
+            _shieldRead.ForeColor = Color.FromArgb(200, 30, 30);
+        }
     }
 
     private void PickShieldNumbers()
@@ -362,6 +406,11 @@ public sealed class GlobePanel : GroupBox
     public void UpdateShield(GlobeReading r)
     {
         if (_shield is null) return;
+        if (_shield.KnownMax > 0 && _shield.KnownMax == _cfg.KnownMax)
+        {
+            RefreshShieldWarning();
+            return;
+        }
         if (!_shield.Enabled)
         {
             _shieldRead.Text = "Shield: not watched";

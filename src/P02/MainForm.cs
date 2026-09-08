@@ -398,7 +398,14 @@ public sealed class MainForm : Form
         _cfg.Shield.PanicCooldownMs = _cfg.Life.PanicCooldownMs;
         _cfg.Shield.BurstCount = _cfg.Life.BurstCount;
         _cfg.Shield.BurstGapMs = _cfg.Life.BurstGapMs;
-        _cfg.Shield.PanicBelow = Math.Min(_cfg.Shield.Threshold, _cfg.Life.PanicBelow);
+        // Panic is a rule about how hard you are being hit, not about which
+        // pool is being hit, so the shield uses the same one as life.
+        _cfg.Shield.PanicBelow = _cfg.Life.PanicBelow;
+        _cfg.Shield.FastDropPctPerSec = _cfg.Life.FastDropPctPerSec;
+        _cfg.Shield.ConfirmFrames = _cfg.Life.ConfirmFrames;
+        _cfg.Shield.IgnoreBelow = _cfg.Life.IgnoreBelow;
+        _cfg.Shield.BlindGraceMs = _cfg.Life.BlindGraceMs;
+        _cfg.Shield.RequireTextMs = _cfg.Life.RequireTextMs;
 
         _cfg.Save();
         _engine.SyncTextRegions();

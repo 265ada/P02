@@ -118,11 +118,17 @@ whenever it is the pixels. The pixel path produces a
   the readouts show - so drag it by the text. A globe that is switched off is
   left out entirely rather than sitting there saying "off".
 - **Energy shield**, off by default. Nothing recovers shield from a flask
-  unless you have taken something that says so, so firing at it is waste for
+  unless something in your build makes it do so, so firing at it is waste for
   most characters and the whole point for a few. It shares the life flask's key
-  and timing, because that is the flask that recovers it, and it needs its own
-  Numbers box since the shield is drawn over the life globe and pixels cannot
-  separate them.
+  and *all* of its timing - cooldown, panic gap, presses, hold - because panic
+  is a rule about how hard you are being hit, not about which pool is taking it.
+  Only the trigger, its own Numbers box and its own maximum are separate. It
+  needs that Numbers box: shield is drawn over the life globe, so no colour
+  reading can separate them.
+
+  Its **My max** is your maximum *shield*. Putting your life maximum there makes
+  it read your life, since the maximum is one of the things used to pick which
+  line of the HUD to read - so it says so if you do.
 - Runs to the system tray.
 
 ## Setting it up
