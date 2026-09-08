@@ -338,7 +338,7 @@ internal static class OrbDetector
         var best = ranked[0];
         LastLocateNote =
             $"largest region was {best.W}x{best.H}, {best.Density:P0} filled — too small, " +
-            "too oblong or too square to be a globe. Try lowering Colour margin.";
+            "too oblong or too square to be a globe. Use Set... and drag the box instead.";
         return null;
     }
 

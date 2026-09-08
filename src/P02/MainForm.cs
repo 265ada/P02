@@ -31,7 +31,7 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(772, 548);
+        ClientSize = new Size(772, 624);
 
         _life = new GlobePanel("Life", cfg.Life, blue: false, Save,
             () => _cfg.WindowMatch, () => _cfg.Mana.Region) { Location = new Point(12, 12) };
@@ -40,7 +40,7 @@ public sealed class MainForm : Form
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 392;
+        int y = 428;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -79,8 +79,8 @@ public sealed class MainForm : Form
         _pollHz.ValueChanged += (_, _) => { _cfg.PollHz = (int)_pollHz.Value; Save(); };
         Controls.Add(_pollHz);
 
-        Controls.Add(new Label { Text = "Arm hotkey", Bounds = new Rectangle(444, y + 4, 70, 20) });
-        _hotkey.SetBounds(518, y, 80, 24);
+        Controls.Add(new Label { Text = "Arm key", Bounds = new Rectangle(658, y + 4, 50, 20) });
+        _hotkey.SetBounds(708, y, 52, 24);
         _hotkey.DropDownStyle = ComboBoxStyle.DropDownList;
         _hotkey.Items.AddRange(Enumerable.Range(1, 12).Select(i => (object)$"F{i}").ToArray());
         _hotkey.SelectedItem = cfg.ArmHotkey;
@@ -110,7 +110,7 @@ public sealed class MainForm : Form
         var upd = new CheckBox
         {
             Text = "Check at launch",
-            Bounds = new Rectangle(554, y + 3, 118, 22),
+            Bounds = new Rectangle(436, y + 3, 118, 22),
             Checked = cfg.CheckUpdatesOnStart,
         };
         upd.CheckedChanged += (_, _) =>
@@ -125,16 +125,41 @@ public sealed class MainForm : Form
         diagBtn.Click += (_, _) => ExportDiagnostics();
         Controls.Add(diagBtn);
 
-        var testBtn = new Button { Text = "Test keys (3s)", Bounds = new Rectangle(436, y, 110, 26) };
-        testBtn.Click += (_, _) => TestKeys();
-        Controls.Add(testBtn);
+        var sound = new CheckBox
+        {
+            Text = "Ding on fire",
+            Bounds = new Rectangle(130, y + 35, 96, 22),
+            Checked = cfg.SoundOnFire,
+        };
+        sound.CheckedChanged += (_, _) =>
+        {
+            _cfg.SoundOnFire = sound.Checked;
+            Save();
+            if (sound.Checked) _engine.TestSound();
+        };
+        Controls.Add(sound);
 
         Controls.Add(new Label
         {
-            Bounds = new Rectangle(678, y + 6, 90, 20),
-            ForeColor = SystemColors.GrayText,
-            Text = "Hides to tray.",
+            Text = "no more often than",
+            Bounds = new Rectangle(232, y + 38, 108, 20),
         });
+        var gap = new NumericUpDown { Bounds = new Rectangle(342, y + 34, 56, 24) };
+        gap.Minimum = 0;
+        gap.Maximum = 120;
+        gap.Value = Math.Clamp(cfg.SoundGapMs / 1000, 0, 120);
+        gap.ValueChanged += (_, _) => { _cfg.SoundGapMs = (int)gap.Value * 1000; Save(); };
+        Controls.Add(gap);
+        Controls.Add(new Label
+        {
+            Text = "seconds",
+            Bounds = new Rectangle(402, y + 38, 60, 20),
+        });
+
+        y += 32;
+        var testBtn = new Button { Text = "Test keys (3s)", Bounds = new Rectangle(12, y, 110, 26) };
+        testBtn.Click += (_, _) => TestKeys();
+        Controls.Add(testBtn);
 
         y += 32;
         _live.SetBounds(12, y, 748, 20);

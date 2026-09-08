@@ -105,10 +105,12 @@ public sealed class WatcherConfig
     /// <summary>Brightness of the hue channel, high end of the drained globe.</summary>
     public int EmptyValue { get; set; } = -1;
 
-    /// <summary>Count near-white pixels as liquid. The globes carry a specular
+    /// <summary>Count near-white pixels as liquid.
+    /// Off by default: the life globe has a bright rune drawn across it that is
+    /// near-white, so this made an empty globe read almost full. The globes carry a specular
     /// highlight that is not blue or red at all, and it would otherwise punch a
     /// hole in the middle of the mask.</summary>
-    public bool GlareIsLiquid { get; set; } = true;
+    public bool GlareIsLiquid { get; set; }
 }
 
 public sealed class AppConfig
@@ -128,12 +130,61 @@ public sealed class AppConfig
 
     public string ArmHotkey { get; set; } = "F8";
 
+    /// <summary>Short ding when a key is fired.</summary>
+    public bool SoundOnFire { get; set; } = true;
+
+    /// <summary>
+    /// Minimum gap between dings. Firing can repeat several times a second, so
+    /// this is what keeps it a signal rather than a machine gun.
+    /// </summary>
+    public int SoundGapMs { get; set; } = 6000;
+
     /// <summary>Where the window was last time, so it comes back as you left it.</summary>
     public int WindowX { get; set; } = -1;
 
     public int WindowY { get; set; } = -1;
     public bool StartMinimised { get; set; }
     public bool CheckUpdatesOnStart { get; set; } = true;
+
+    /// <summary>Bumped when a stored setting needs repairing on load.</summary>
+    public int SettingsVersion { get; set; }
+
+    /// <summary>What Repair() changed, for the UI to show once.</summary>
+    [JsonIgnore]
+    public List<string> Repairs { get; } = [];
+
+    /// <summary>
+    /// Fixes settings that cannot work, rather than leaving them to fail
+    /// silently in a fight. Both of these shipped as defaults or as advice from
+    /// the app itself, so they are not the user's doing.
+    /// </summary>
+    public void Repair()
+    {
+        if (SettingsVersion >= 2) return;
+
+        foreach (var (name, w) in new[] { ("Life", Life), ("Mana", Mana) })
+        {
+            if (w.GlareIsLiquid)
+            {
+                w.GlareIsLiquid = false;
+                Repairs.Add($"{name}: turned off counting bright pixels as liquid - the rune "
+                            + "on the globe is near-white and was reading as full.");
+            }
+
+            // A margin this low accepts the drained globe, which is the same
+            // hue as the liquid and only darker.
+            if (w.ColourMargin < 10 && w.EmptyDominance < 0)
+            {
+                Repairs.Add($"{name}: colour margin was {w.ColourMargin}, low enough that an "
+                            + "empty globe read as full. Reset to 30.");
+                w.ColourMargin = 30;
+            }
+        }
+
+        SettingsVersion = 2;
+        foreach (string r in Repairs) Log.Write($"repair: {r}");
+        if (Repairs.Count > 0) SaveNow();
+    }
 
     // ------------------------------------------------------------------
 
@@ -153,8 +204,12 @@ public sealed class AppConfig
         try
         {
             if (File.Exists(Path_))
-                return JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(Path_), Opts)
-                       ?? new AppConfig();
+            {
+                var loaded = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(Path_), Opts)
+                             ?? new AppConfig();
+                loaded.Repair();
+                return loaded;
+            }
         }
         catch (Exception ex)
         {

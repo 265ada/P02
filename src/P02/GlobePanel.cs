@@ -17,6 +17,7 @@ public sealed class GlobePanel : GroupBox
     private readonly NumericUpDown _panicGap = new();
     private readonly NumericUpDown _burst = new();
     private readonly Label _tuned = new();
+    private readonly Label _warn = new();
     private readonly KeyBindBox _key = new();
     private readonly ProgressBar _bar = new();
     private readonly Label _pct = new();
@@ -32,7 +33,7 @@ public sealed class GlobePanel : GroupBox
 
         Text = title;
         Width = 366;
-        Height = 364;
+        Height = 398;
         Padding = new Padding(10);
 
         int y = 24;
@@ -83,6 +84,11 @@ public sealed class GlobePanel : GroupBox
         _tuned.SetBounds(14, y + 5, 188, 18);
         _tuned.ForeColor = SystemColors.GrayText;
         Controls.Add(_tuned);
+        y += 34;
+
+        _warn.SetBounds(14, y, 338, 32);
+        _warn.ForeColor = Color.FromArgb(190, 60, 0);
+        Controls.Add(_warn);
         y += 34;
 
         Controls.Add(Lab("Fire below", 14, y + 4));
@@ -152,6 +158,24 @@ public sealed class GlobePanel : GroupBox
         });
     }
 
+    /// <summary>
+    /// Flags settings that let a drained globe read as full - the failure that
+    /// looks like nothing at all until it costs you a character.
+    /// </summary>
+    private void RefreshWarning()
+    {
+        if (!_cfg.Region.IsValid) { _warn.Text = ""; return; }
+
+        if (_cfg.ColourMargin < 10 && _cfg.EmptyDominance < 0)
+            _warn.Text = "Colour margin is very low. An empty globe may read as full. "
+                       + "Press Empty = 0% while drained.";
+        else if (_cfg.EmptyDominance < 0)
+            _warn.Text = "Not calibrated against an empty globe. If it never fires, "
+                       + "press Empty = 0% while drained.";
+        else
+            _warn.Text = "";
+    }
+
     private static Label Lab(string text, int x, int y) =>
         new() { Text = text, Bounds = new Rectangle(x, y, 76, 18), AutoSize = true };
 
@@ -192,7 +216,10 @@ public sealed class GlobePanel : GroupBox
             ? new Rectangle(area.Right - w, area.Bottom - h, w, h)
             : new Rectangle(area.Left, area.Bottom - h, w, h);
 
-        var found = OrbDetector.AutoLocate(search, _blue, _cfg.ColourMargin, _cfg.MinValue);
+        // Deliberately not the detection settings: auto-find has shape checks
+        // to fall back on, and coupling the two led to advice that lowered the
+        // detection margin until an empty globe read as full.
+        var found = OrbDetector.AutoLocate(search, _blue, margin: 18, minV: 45);
         owner?.Show();
 
         if (found is null)
@@ -283,6 +310,7 @@ public sealed class GlobePanel : GroupBox
 
         _cfg.FullRow = full;
         _cfg.EmptyRow = empty;
+        RefreshWarning();
 
         // Remember what liquid looks like, so Empty = 0% has something to
         // compare against.
@@ -362,6 +390,7 @@ public sealed class GlobePanel : GroupBox
 
         _cfg.EmptyDominance = st.DomHigh;
         _cfg.EmptyValue = st.ValHigh;
+        RefreshWarning();
 
         if (!OrbDetector.AutoTune(_cfg, out string note))
         {
@@ -397,6 +426,8 @@ public sealed class GlobePanel : GroupBox
     /// <summary>Called from the UI thread with the latest reading.</summary>
     public void Update(GlobeReading r)
     {
+        if (_warn.Text.Length == 0 && _cfg.EmptyDominance < 0) RefreshWarning();
+
         if (!r.Ok || !_cfg.Region.IsValid)
         {
             _pct.Text = "no region";

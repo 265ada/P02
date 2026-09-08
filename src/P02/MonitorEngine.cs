@@ -8,6 +8,7 @@ public sealed class MonitorEngine : IDisposable
 {
     private readonly AppConfig _cfg;
     private readonly KeyPresser _keys = new();
+    private readonly Chime _chime = new();
     private CancellationTokenSource? _cts;
     private Task? _task;
 
@@ -212,6 +213,8 @@ public sealed class MonitorEngine : IDisposable
         // The globe has not refilled yet, so old samples would read as a
         // continuing crash and inflate the drop rate.
         st.Reset();
+        if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
+
         Log.Write($"{name}: '{c.Key}' x{shots} at {frac:P1}" +
                   (panic ? $" PANIC (drop {dropRate:0}%/s)" : ""));
         Fired?.Invoke(name, frac);
@@ -229,9 +232,13 @@ public sealed class MonitorEngine : IDisposable
         return title.Contains(match, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Plays the ding once, ignoring the gap, so it can be auditioned.</summary>
+    public void TestSound() => _chime.Play(0);
+
     public void Dispose()
     {
         Stop();
         _keys.Dispose();
+        _chime.Dispose();
     }
 }

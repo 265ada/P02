@@ -133,6 +133,13 @@ Cooldowns go down to 20 ms and the panic gap to 10 ms. The real floor is the
 hold time — at 20 ms hold, presses cannot leave faster than about 50 a second no
 matter what the cooldown says.
 
+## Sound
+
+A short, quiet ding when a key fires, so you know it acted without looking away
+from the fight. Firing can repeat several times a second, so the gap setting
+next to it is the minimum time between dings - 6 seconds by default. Set it to 0
+for one per press, or untick it entirely.
+
 ## Safety rails
 
 | Rail | What it does |
