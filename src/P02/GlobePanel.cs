@@ -563,8 +563,22 @@ public sealed class GlobePanel : Card
 
         _shield!.TextRegion = Box.From(r.Value);
         _shield.UseText = true;
+
+        string filled = "";
+        if (TextOcr.TryParse(got, out _, out int smax, "Shield") && smax > 0
+            && smax != _shield.KnownMax)
+        {
+            _shield.KnownMax = smax;
+            _settingMax = true;
+            _shieldMax.Value = Math.Clamp(smax, 0, 1_000_000);
+            _settingMax = false;
+            filled = Environment.NewLine + Environment.NewLine
+                     + $"Maximum filled in as {smax:N0}.";
+        }
+
+        RefreshShieldWarning();
         _onChange();
-        MessageBox.Show(this, $"Read: \"{got}\"", "Energy shield",
+        MessageBox.Show(this, $"Read: \"{got}\"" + filled, "Energy shield",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
@@ -671,10 +685,28 @@ public sealed class GlobePanel : Card
         _cfg.TextRegion = Box.From(r.Value);
         _cfg.UseText = true;
         _numbers.Text = $"Numbers: read \"{got}\"";
+
+        // It has just read the maximum out loud. Reporting it in a dialog and
+        // then leaving the box showing the old one is the app disagreeing with
+        // itself in two places on the same screen.
+        string filled = "";
+        if (TextOcr.TryParse(got, out _, out int max, Text) && max > 0 && max != _cfg.KnownMax)
+        {
+            int was = _cfg.KnownMax;
+            _cfg.KnownMax = max;
+            _settingMax = true;
+            _knownMax.Value = Math.Clamp(max, 0, 1_000_000);
+            _settingMax = false;
+            filled = Environment.NewLine + Environment.NewLine
+                     + (was == 0 ? $"Maximum filled in as {max:N0}."
+                                 : $"Maximum updated from {was:N0} to {max:N0}.");
+        }
+
+        RefreshWarning();
         _onChange();
 
         MessageBox.Show(this,
-            $"Read: \"{got}\"" + Environment.NewLine + Environment.NewLine
+            $"Read: \"{got}\"" + filled + Environment.NewLine + Environment.NewLine
             + "This is now what decides when to fire, and it needs no calibration. "
             + "The globe pixels stay as the fallback.",
             "Numbers", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1144,6 +1176,15 @@ public sealed class GlobePanel : Card
     public void RefreshFromConfig()
     {
         _region.Text = _cfg.Region.ToString();
+
+        // Find numbers fills the maxima in as it goes, and the boxes were left
+        // showing whatever was in them before.
+        _settingMax = true;
+        _knownMax.Value = Math.Clamp(_cfg.KnownMax, 0, 1_000_000);
+        if (_shield is not null)
+            _shieldMax.Value = Math.Clamp(_shield.KnownMax, 0, 1_000_000);
+        _settingMax = false;
+
         _numbers.Text = _cfg.TextRegion.IsValid
             ? "Numbers: set - waiting for a reading"
             : "Deciding: globe pixels - these follow energy shield too";
