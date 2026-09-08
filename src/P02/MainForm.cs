@@ -106,10 +106,17 @@ public sealed class MainForm : Form
         _mana = new GlobePanel("Mana", cfg.Mana, blue: true, Save,
             () => _cfg.WindowMatch, () => _cfg.Life.Region, probe, null, FindAllNumbers)
             { Location = new Point(406, 36) };
+        int cardH = Math.Max(_life.MinimumHeight, _mana.MinimumHeight);
+        _life.Height = cardH;
+        _mana.Height = cardH;
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 622;
+        // Driven by how tall the cards actually came out, not by a number typed
+        // when they were shorter. Adding one row to a panel used to push its
+        // contents underneath the arm button, which is a fault that arrives
+        // silently and only in the release where the row was added.
+        int y = Math.Max(_life.Bottom, _mana.Bottom) + 16;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -497,6 +504,11 @@ public sealed class MainForm : Form
 
         SetupTray();
         if (cfg.OverlayOn) ToggleOverlay(true);
+
+        // Same again for the window itself: fit the contents rather than
+        // assume them.
+        int deepest = Controls.Cast<Control>().Max(c => c.Bottom);
+        ClientSize = new Size(ClientSize.Width, deepest + 12);
 
         RefreshArmUi();
         _engine.Start();

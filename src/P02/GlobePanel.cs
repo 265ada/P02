@@ -41,6 +41,9 @@ public sealed class GlobePanel : Card
     private readonly LevelBar _bar = new();
     private readonly Label _pct = new();
 
+    /// <summary>How tall this card needs to be for its own contents.</summary>
+    public int MinimumHeight { get; private set; }
+
     public GlobePanel(string title, WatcherConfig cfg, bool blue, Action onChange,
                       Func<string> windowMatch, Func<Box?> otherRegion, TextProbe probe,
                       WatcherConfig? shield = null, Action? findNumbers = null)
@@ -349,7 +352,11 @@ public sealed class GlobePanel : Card
 
         // The card was a fixed height, so the last line - which is the one
         // saying what it is actually reading from - was cut in half.
+        // Both cards end up the same height whatever each one holds - the life
+        // card carries the shield settings and the mana card does not, and a
+        // pair of unequal cards reads as one of them being broken.
         Height = Math.Max(Height, _numbers.Bottom + 14);
+        MinimumHeight = Height;
     }
 
     /// <summary>
