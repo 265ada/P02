@@ -20,6 +20,8 @@ public sealed class MainForm : Form
     private readonly NotifyIcon _tray = new();
     private readonly Label _live = new();
     private readonly NumericUpDown _pollHz = new();
+    private readonly Button _pin = new();
+    private OverlayForm? _overlay;
     private bool _hotkeyRegistered;
 
     public MainForm(AppConfig cfg)
@@ -31,21 +33,38 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(800, 734);
+        ClientSize = new Size(800, 758);
+
+        _pin.SetBounds(764, 6, 24, 22);
+        _pin.Text = "P";
+        _pin.Font = new Font("Segoe UI", 8, FontStyle.Bold);
+        _pin.FlatStyle = FlatStyle.System;
+        var tip = new ToolTip();
+        tip.SetToolTip(_pin, "Pin a small always-on-top readout over the game");
+        _pin.Click += (_, _) => ToggleOverlay(!(_overlay?.Visible ?? false));
+        Controls.Add(_pin);
+
+        Controls.Add(new Label
+        {
+            Text = "pin a small readout over the game",
+            Bounds = new Rectangle(520, 10, 240, 18),
+            TextAlign = ContentAlignment.MiddleRight,
+            ForeColor = SystemColors.GrayText,
+        });
 
         var probe = new TextProbe(_engine.TextAvailable, _engine.TextUnavailable,
                                   _engine.ProbeText);
 
         _life = new GlobePanel("Life", cfg.Life, blue: false, Save,
             () => _cfg.WindowMatch, () => _cfg.Mana.Region, probe)
-            { Location = new Point(12, 12) };
+            { Location = new Point(12, 36) };
         _mana = new GlobePanel("Mana", cfg.Mana, blue: true, Save,
             () => _cfg.WindowMatch, () => _cfg.Life.Region, probe)
-            { Location = new Point(406, 12) };
+            { Location = new Point(406, 36) };
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 500;
+        int y = 524;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -281,6 +300,19 @@ public sealed class MainForm : Form
 
         _engine.Sampled += OnSampled;
         _engine.ArmedChanged += _ => BeginInvoke(RefreshArmUi);
+        _engine.Fired += (_, _) =>
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            try
+            {
+                BeginInvoke(() =>
+                {
+                    if (_overlay is { IsDisposed: false, Visible: true }) _overlay.Fired();
+                });
+            }
+            catch (ObjectDisposedException) { /* closing */ }
+        };
+
         _engine.Blind += (name, blind) =>
         {
             if (IsDisposed || !IsHandleCreated) return;
@@ -330,6 +362,7 @@ public sealed class MainForm : Form
         _lastKnownMana = cfg.Mana.KnownMax;
 
         SetupTray();
+        if (cfg.OverlayOn) ToggleOverlay(true);
         RefreshArmUi();
         _engine.Start();
     }
@@ -366,6 +399,42 @@ public sealed class MainForm : Form
         RefreshArmUi();
     }
 
+    /// <summary>Shows or hides the small always-on-top readout.</summary>
+    private void ToggleOverlay(bool on)
+    {
+        if (on)
+        {
+            if (_overlay is null || _overlay.IsDisposed)
+            {
+                _overlay = new OverlayForm();
+                var spot = new Rectangle(_cfg.OverlayX, _cfg.OverlayY,
+                                         _overlay.Width, _overlay.Height);
+                if (_cfg.OverlayX >= 0 && _cfg.OverlayY >= 0
+                    && Screen.AllScreens.Any(sc => sc.WorkingArea.IntersectsWith(spot)))
+                    _overlay.Location = new Point(_cfg.OverlayX, _cfg.OverlayY);
+                else
+                    _overlay.Location = new Point(
+                        Screen.PrimaryScreen!.WorkingArea.Right - _overlay.Width - 20, 20);
+            }
+            _overlay.SetArmed(_engine.Armed);
+            _overlay.Show();
+        }
+        else
+        {
+            if (_overlay is { IsDisposed: false })
+            {
+                _cfg.OverlayX = _overlay.Location.X;
+                _cfg.OverlayY = _overlay.Location.Y;
+                _overlay.Hide();
+            }
+        }
+
+        _cfg.OverlayOn = on;
+        _pin.BackColor = on ? Color.FromArgb(200, 60, 60) : SystemColors.Control;
+        _pin.ForeColor = on ? Color.White : SystemColors.ControlText;
+        Save();
+    }
+
     private void OnSampled(GlobeReading life, GlobeReading mana, bool focused)
     {
         if (IsDisposed || !IsHandleCreated) return;
@@ -373,6 +442,9 @@ public sealed class MainForm : Form
         {
             BeginInvoke(() =>
             {
+                if (_overlay is { IsDisposed: false, Visible: true })
+                    _overlay.Show(life, mana, _cfg.Life.Threshold, _cfg.Mana.Threshold);
+
                 _life.Update(life);
                 _mana.Update(mana);
                 _focus.Text = focused
@@ -405,6 +477,7 @@ public sealed class MainForm : Form
         // would have pressed. Arming or disarming makes either one stale.
         _life.ClearStatus();
         _mana.ClearStatus();
+        if (_overlay is { IsDisposed: false }) _overlay.SetArmed(on);
         _arm.Text = on ? "ARMED  –  click to stop" : "DISARMED  –  click to arm";
         _arm.BackColor = on ? Color.FromArgb(200, 60, 60) : SystemColors.Control;
         _arm.ForeColor = on ? Color.White : SystemColors.ControlText;
@@ -578,6 +651,12 @@ public sealed class MainForm : Form
         {
             _cfg.WindowX = Location.X;
             _cfg.WindowY = Location.Y;
+        }
+        if (_overlay is { IsDisposed: false })
+        {
+            _cfg.OverlayX = _overlay.Location.X;
+            _cfg.OverlayY = _overlay.Location.Y;
+            _overlay.Dispose();
         }
         _cfg.SaveNow();
         if (_hotkeyRegistered) Native.UnregisterHotKey(Handle, HotkeyId);

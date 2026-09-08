@@ -86,6 +86,9 @@ region is set. The pixel path produces a
 - **Check** window that draws what the detector sees, with two live sliders for
   the only setting that ever needs tuning.
 - **Self-updating** from GitHub Releases.
+- **Pin** in the top right corner puts a small always-on-top readout over the
+  game: both globes, whether it is armed, and a light that blinks when a key
+  actually goes out. Drag it anywhere; it remembers where you left it.
 - Runs to the system tray.
 
 ## Setting it up

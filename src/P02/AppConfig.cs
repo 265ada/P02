@@ -236,6 +236,13 @@ public sealed class AppConfig
     public int WindowX { get; set; } = -1;
 
     public int WindowY { get; set; } = -1;
+
+    /// <summary>The small always-on-top readout: shown, and where it sits.</summary>
+    public bool OverlayOn { get; set; }
+
+    public int OverlayX { get; set; } = -1;
+
+    public int OverlayY { get; set; } = -1;
     public bool StartMinimised { get; set; }
     public bool CheckUpdatesOnStart { get; set; } = true;
 
