@@ -273,7 +273,7 @@ public sealed class GlobePanel : GroupBox
                        + "calibration, and stops it acting on menu screens.";
         else if (_cfg.ColourMargin < 10 && _cfg.EmptyDominance < 0)
             _warn.Text = "Colour margin is very low. An empty globe may read as full. "
-                       + "Press Empty = 0% while drained.";
+                       + "Press Tune colours with the globe part way down.";
         else if (_cfg.EmptyDominance < 0)
             _warn.Text = "Not calibrated against an empty globe. If it never fires, "
                        + "press Tune colours with the globe part way down.";
@@ -581,7 +581,7 @@ public sealed class GlobePanel : GroupBox
             MessageBox.Show(this,
                 "Found it and calibrated against the full globe." + Environment.NewLine
                 + note + Environment.NewLine + Environment.NewLine
-                + "Now spend this globe down and press Empty = 0% to finish.",
+                + "Now take it to about half and press Tune colours to finish.",
                 "Auto-find", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         else
@@ -700,7 +700,7 @@ public sealed class GlobePanel : GroupBox
         _cfg.EmptyRow = empty;
         RefreshWarning();
 
-        // Remember what liquid looks like, so Empty = 0% has something to
+        // Remember what liquid looks like, so Tune colours has something to
         // compare against.
         var st = OrbDetector.Measure(buf, shot.Width, shot.Height, _cfg, full, empty);
         _cfg.FullDominance = st.DomLow;

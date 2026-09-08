@@ -92,7 +92,7 @@ public sealed class PreviewForm : Form
             ForeColor = SystemColors.GrayText,
             Text = "This updates live. Spend the globe and watch the number "
                  + "follow it down — if it stays near 100% while the globe "
-                 + "drains, that is the bug, and Empty = 0% fixes it.",
+                 + "drains, that is the bug, and Tune colours is the fix.",
         });
         y += 54;
 

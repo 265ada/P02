@@ -266,7 +266,7 @@ internal static class OrbDetector
 
         if (domFull < 0 || domEmpty < 0)
         {
-            note = "needs both Full = 100% and Empty = 0%";
+            note = "needs both Full = 100% and Tune colours";
             return false;
         }
 

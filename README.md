@@ -115,7 +115,7 @@ configured misfires anyway.
 region is set. Worth knowing what they cannot do. **The life globe is not always red**: poison
 and other debuffs recolour it, and a green globe has no red in it at all, so a
 colour test reads it as empty the moment the colour changes - a jump from full
-to nothing that looks exactly like a killing blow. **Empty = 0%** switches to
+to nothing that looks exactly like a killing blow. **Tune colours** switches to
 judging brightness instead when colour turns out not to separate full from
 empty, which survives a recolour: the liquid is bright whatever colour it has
 been turned, and the drained part stays dark.
@@ -488,7 +488,7 @@ left P02 and the game did not act on it. In order of likelihood:
 Work through it in this order.
 
 1. Open **Check** and drain the globe. If the reading does not move, it is
-   detection, not keys — do **Empty = 0%**.
+   detection, not keys — do **Tune colours**.
 2. **Test keys (3s)** sends the enabled globes' keys once, ignoring arm state and
    the window match. Click it, click into the game, and watch. Nothing happening
    means the problem is the keybind or permissions, not detection.

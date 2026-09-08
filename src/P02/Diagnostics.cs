@@ -173,7 +173,7 @@ internal static partial class Diagnostics
                           + "much frame the box caught. Press Full = 100%.");
 
             if (c.EmptyDominance < 0)
-                notes.Add($"- {name}: Empty = 0% has not been done. If a drained globe still "
+                notes.Add($"- {name}: Tune colours has not been done. If a drained globe still "
                           + "reads high, this is why.");
 
             if (c.ColourMargin <= 6)
