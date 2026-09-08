@@ -85,6 +85,17 @@ internal sealed class GameMemory : IDisposable
     public volatile int HintMaxHp;
     public volatile int HintMaxMp;
 
+    /// <summary>
+    /// The current values from the screen, when they are readable.
+    ///
+    /// Without these the search had nothing to test a candidate current
+    /// against and took the first integer beside the maximum that was not
+    /// absurd - which found the maxima correctly and then read someone else's
+    /// number as your life.
+    /// </summary>
+    public volatile int HintCurHp;
+    public volatile int HintCurMp;
+
     public bool Attached => _handle != 0;
 
     public bool Found => _address != 0;
@@ -320,6 +331,20 @@ internal sealed class GameMemory : IDisposable
                   + $"in {best.Value.Count} candidate(s)");
 
         // Current sits beside maximum; which side is not worth assuming either.
+        //
+        // "Not absurd" was not a test. Any integer in a wide range passed, and
+        // the first one to do so won - which is how a perfectly located pair of
+        // maxima ended up reporting a life of 240 out of 1,490 while the screen
+        // said 1,947. When the screen can be read, the current has to match it;
+        // when it cannot, the best that can be said is that a real current
+        // never exceeds its own maximum by much, so prefer the candidate that
+        // sits closest to being a sensible fraction rather than taking whatever
+        // comes first.
+        int hintCurHp = HintCurHp, hintCurMp = HintCurMp;
+        long bestAddr = 0;
+        int bestOff = 4;
+        double bestScore = double.MaxValue;
+
         foreach (long a in best.Value)
         {
             foreach (int curOff in new[] { 4, -4 })
@@ -329,14 +354,47 @@ internal sealed class GameMemory : IDisposable
                 if (!ReadInt(a + _manaDelta + curOff, out int curMp)) continue;
                 if (curMp < 0 || curMp > wantMp * 3) continue;
 
-                _curOffset = curOff;
-                Log.Write($"memory: current sits {curOff:+#;-#} from maximum; "
-                          + $"life {curHp}/{wantHp}, mana {curMp}/{wantMp}");
-                return a;
+                double score;
+                if (hintCurHp > 0)
+                {
+                    // The screen is the witness. Anything more than a few
+                    // percent off is a different number that happens to fit.
+                    double offHp = Math.Abs(curHp - hintCurHp) / (double)wantHp;
+                    double offMp = hintCurMp > 0 && wantMp > 0
+                        ? Math.Abs(curMp - hintCurMp) / (double)wantMp
+                        : 0;
+                    if (offHp > 0.05 || offMp > 0.05) continue;
+                    score = offHp + offMp;
+                }
+                else
+                {
+                    // Nothing to check against: a current above its maximum is
+                    // possible but rare, so treat distance above it as cost.
+                    score = Math.Max(0, curHp - wantHp) / (double)wantHp
+                            + (wantMp > 0 ? Math.Max(0, curMp - wantMp) / (double)wantMp : 0);
+                }
+
+                if (score >= bestScore) continue;
+                bestScore = score;
+                bestAddr = a;
+                bestOff = curOff;
             }
         }
 
-        Status = "found the maxima but no sensible current value beside them";
+        if (bestAddr != 0)
+        {
+            _curOffset = bestOff;
+            ReadInt(bestAddr + bestOff, out int gotHp);
+            ReadInt(bestAddr + _manaDelta + bestOff, out int gotMp);
+            Log.Write($"memory: current sits {bestOff:+#;-#} from maximum; "
+                      + $"life {gotHp}/{wantHp}, mana {gotMp}/{wantMp}"
+                      + (hintCurHp > 0 ? $" (screen said {hintCurHp}/{hintCurMp})" : ""));
+            return bestAddr;
+        }
+
+        Status = hintCurHp > 0
+            ? "found the maxima but no current beside them matching the screen"
+            : "found the maxima but no sensible current value beside them";
         return 0;
     }
 

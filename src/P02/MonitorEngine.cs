@@ -356,6 +356,14 @@ public sealed class MonitorEngine : IDisposable
                 {
                     _mem.HintMaxHp = ExpectedMax("Life", _cfg.Life, 0);
                     _mem.HintMaxMp = ExpectedMax("Mana", _cfg.Mana, 0);
+
+                    // The currents as well, when the numbers can be read. The
+                    // maxima locate the structure; only the current tells the
+                    // search which integer beside it is actually yours.
+                    _mem.HintCurHp = _ocr.TryGet("Life", out var lh)
+                                     && _ocr.NowMs - lh.AtMs < 1500 ? lh.Current : 0;
+                    _mem.HintCurMp = _ocr.TryGet("Mana", out var mh)
+                                     && _ocr.NowMs - mh.AtMs < 1500 ? mh.Current : 0;
                 }
 
                 AdoptChangedMax("Life", _cfg.Life);
