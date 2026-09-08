@@ -175,7 +175,8 @@ whenever it is the pixels. The pixel path produces a
    If it cannot find them, **Numbers…** on a panel lets you drag the box
    yourself; include the label word.
 3. Optionally set up the globe itself as a fallback: **Auto-find**, then
-   **Full = 100%** while topped up, then spend it down and press **Empty = 0%**.
+   **Full = 100%** while topped up, then spend it to about half and press
+   **Tune colours**.
 4. Set the trigger percentage and click the key box, then press the key you want
    sent — the flask slot, not a modifier.
 5. Tick **Watch this globe** on the ones you want, then click **ARM**.
@@ -222,15 +223,21 @@ low the empty globe counts as full, the reading never falls below the trigger,
 and nothing ever fires. No amount of slider fiddling fixes this reliably,
 because there is no single colour rule that separates them.
 
-**Empty = 0%** is the attempt at a fix. Spend the globe down, press it, and it
+**Tune colours** is the attempt at a fix. Spend the globe down, press it, and it
 measures what drained actually looks like in your box, compares it against what
 full looked like, and puts the thresholds between the two. Then it reads the
 drained globe back: if that still comes out high, the tuning did not work, so it
 is **thrown away rather than saved** and it offers to set up the numbers
 instead.
 
-Do it alive, with the globe spent. The death screen washes the whole screen red,
-so a globe calibrated there does not match the one you play with.
+It asks for a globe **part way down** rather than an empty one, and reads both
+colours out of the same frame: above the liquid is drained, below it is full,
+lit identically at the same instant.
+
+That is not fussiness. An empty globe is unreachable - life regenerates, so it
+never sits at zero while alive - and the one place it does sit at zero is the
+death screen, which paints everything red and makes anything measured there
+useless for comparing against a globe seen during play.
 
 Some globes simply cannot be separated by colour at all - full and drained are
 the same hue, differing only in brightness, and the two ranges overlap. That is

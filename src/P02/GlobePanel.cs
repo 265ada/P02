@@ -101,7 +101,7 @@ public sealed class GlobePanel : GroupBox
         numBtn.Click += (_, _) => PickTextRegion();
         Controls.Add(numBtn);
 
-        var emptyBtn = new Button { Text = "Empty = 0%", Bounds = new Rectangle(206, y, 86, 26) };
+        var emptyBtn = new Button { Text = "Tune colours", Bounds = new Rectangle(206, y, 86, 26) };
         emptyBtn.Click += (_, _) => CalibrateEmpty();
         Controls.Add(emptyBtn);
 
@@ -276,7 +276,7 @@ public sealed class GlobePanel : GroupBox
                        + "Press Empty = 0% while drained.";
         else if (_cfg.EmptyDominance < 0)
             _warn.Text = "Not calibrated against an empty globe. If it never fires, "
-                       + "press Empty = 0% while drained.";
+                       + "press Tune colours with the globe part way down.";
         else
             _warn.Text = "";
     }
@@ -740,21 +740,32 @@ public sealed class GlobePanel : GroupBox
     /// separate full from empty on the life globe — the drained part is the
     /// same red, only darker — so the threshold has to be learned from both.
     /// </summary>
+    /// <summary>
+    /// Learns the two colours from one frame of a part-full globe.
+    ///
+    /// Asking for an empty globe was asking for something unreachable: life
+    /// regenerates, so it is never at zero while alive, and the death screen -
+    /// where it is - paints everything red, so nothing measured there compares
+    /// with anything measured during play. A globe part way down has both
+    /// colours in it at once, lit identically.
+    /// </summary>
     private void CalibrateEmpty()
     {
         if (!_cfg.Region.IsValid || _cfg.FullRow < 0)
         {
-            MessageBox.Show("Set a region and press Full = 100% first.", "Empty = 0%",
+            MessageBox.Show(this, "Set a region and press Full = 100% first.", "Tune colours",
                             MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
-        string ask = $"Spend your {Text.ToLowerInvariant()} down as low as you can — "
-                   + "the lower the better, empty is ideal."
+        string ask = $"Get your {Text.ToLowerInvariant()} to somewhere around half - not "
+                   + "full, not empty, and not dead - then press OK."
                    + Environment.NewLine + Environment.NewLine
-                   + "Then press OK. This records what a drained globe looks like, so the "
-                   + "threshold can go between full and empty instead of being guessed.";
-        if (MessageBox.Show(ask, "Empty = 0%", MessageBoxButtons.OKCancel,
+                   + "Both colours are read from the same frame: above the liquid is "
+                   + "drained, below it is full. That is why it does not ask for an empty "
+                   + "globe, which regeneration never allows, or a death screen, which "
+                   + "tints everything red.";
+        if (MessageBox.Show(this, ask, "Tune colours", MessageBoxButtons.OKCancel,
                             MessageBoxIcon.Information) != DialogResult.OK)
             return;
 
@@ -764,50 +775,63 @@ public sealed class GlobePanel : GroupBox
         using var shot = ScreenCapture.Snapshot(_cfg.Region.ToRect());
         owner?.Show();
 
-        var buf = ScreenCapture.ToBuffer(shot);
-        // Measure the same rows the liquid occupied when full; those are the
-        // ones that are now drained.
-        var st = OrbDetector.Measure(buf, shot.Width, shot.Height, _cfg,
-                                     _cfg.FullRow, _cfg.EmptyRow);
-        if (st.Count == 0)
-        {
-            MessageBox.Show("Couldn't read anything in that box.", "Empty = 0%",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        // Keep what we had: a tuning that does not work must not be left in
-        // place of one that at least was not tuned to nonsense.
         int wasMargin = _cfg.ColourMargin;
         int wasValue = _cfg.MinValue;
         bool wasIgnoreHue = _cfg.IgnoreHue;
 
-        _cfg.EmptyDominance = st.DomHigh;
-        _cfg.EmptyValue = st.ValHigh;
-        RefreshWarning();
+        var buf = ScreenCapture.ToBuffer(shot);
+        bool tuned = OrbDetector.LearnFromPartial(buf, shot.Width, shot.Height, _cfg,
+                                                  out string note);
+        double reads = OrbDetector.Fraction(buf, shot.Width, shot.Height, _cfg);
 
-        if (!OrbDetector.AutoTune(_cfg, out string note))
+        // A globe that was part full must read as part full. Pinned at either
+        // end means the two colours were not told apart.
+        bool worked = tuned && reads > 0.05 && reads < 0.95;
+
+        if (!worked)
         {
-            MessageBox.Show(note, "Empty = 0%", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            _tuned.Text = "tuning failed";
+            _cfg.ColourMargin = wasMargin;
+            _cfg.MinValue = wasValue;
+            _cfg.IgnoreHue = wasIgnoreHue;
+            _cfg.EmptyDominance = -1;
+            _cfg.EmptyValue = -1;
+            _tuned.Text = "colour cannot separate full from drained here";
             _onChange();
+
+            string why = (tuned
+                    ? $"After tuning, that globe reads {reads * 100:0.0}% - pinned at one end "
+                      + "rather than part way down, so the two colours were not told apart."
+                    : $"Could not tune: {note}.")
+                + Environment.NewLine + Environment.NewLine
+                + "The colours have been left as they were. Some globes cannot be separated "
+                + "this way at all: drained and full are the same hue and their brightness "
+                + "ranges overlap, which is not a setting anyone can find by retrying."
+                + Environment.NewLine + Environment.NewLine
+                + "The numbers beside the globe have none of these problems - exact, no "
+                + "calibration, and they cannot confuse life with shield or ward."
+                + Environment.NewLine + Environment.NewLine
+                + "Set the numbers up now instead?";
+
+            if (_findNumbers is not null
+                && MessageBox.Show(this, why, "Tune colours", MessageBoxButtons.YesNo,
+                                   MessageBoxIcon.Warning) == DialogResult.Yes)
+                _findNumbers();
+            else if (_findNumbers is null)
+                MessageBox.Show(this, why, "Tune colours", MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
             return;
         }
 
-        // Prove it on the very frame just captured.
-        double nowReads = OrbDetector.Fraction(buf, shot.Width, shot.Height, _cfg);
         _tuned.Text = note;
+        RefreshWarning();
         _onChange();
 
-        MessageBox.Show(
+        MessageBox.Show(this,
             $"Tuned: {note}." + Environment.NewLine + Environment.NewLine
-            + $"That drained globe now reads {nowReads * 100:0.0}%."
-            + Environment.NewLine + Environment.NewLine
-            + (nowReads < 0.35
-                ? "Open Check and watch it track as you spend."
-                : "That is still high. Press Check, and if it stays near 100% while the "
-                + "globe drains, redo Empty = 0% with the globe emptier."),
-            "Empty = 0%", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            + $"That globe now reads {reads * 100:0.0}% - check that against what it "
+            + "actually looks like." + Environment.NewLine + Environment.NewLine
+            + "Open Check and watch it track as you spend.",
+            "Tune colours", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         Preview();
     }

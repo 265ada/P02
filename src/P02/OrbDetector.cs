@@ -213,6 +213,48 @@ internal static class OrbDetector
     }
 
     /// <summary>
+    /// Learns both colours from one frame of a part-full globe: the rows above
+    /// the liquid are drained, the rows below it are full, and both are lit the
+    /// same way at the same instant.
+    ///
+    /// This exists because there is no other honest way to sample "empty".
+    /// Life regenerates, so it never sits at zero while alive, and the death
+    /// screen - the only place it does - washes the whole screen red, which
+    /// makes anything measured there useless for comparison against a sample
+    /// taken during play.
+    /// </summary>
+    public static bool LearnFromPartial(byte[] buf, int w, int h, WatcherConfig c,
+                                        out string note)
+    {
+        note = "";
+        Span_(h, c, out int top, out int bottom);
+        int span = bottom - top;
+        if (span < 40)
+        {
+            note = "press Full = 100% first, with the globe topped up";
+            return false;
+        }
+
+        // A quarter from each end, so a surface anywhere in the middle half
+        // leaves both samples on the right side of it.
+        int band = Math.Max(6, span / 4);
+        var drained = Measure(buf, w, h, c, top, top + band);
+        var liquid = Measure(buf, w, h, c, bottom - band, bottom);
+
+        if (drained.Count == 0 || liquid.Count == 0)
+        {
+            note = "could not sample the globe";
+            return false;
+        }
+
+        c.FullDominance = liquid.DomLow;
+        c.FullValue = liquid.ValLow;
+        c.EmptyDominance = drained.DomHigh;
+        c.EmptyValue = drained.ValHigh;
+        return AutoTune(c, out note);
+    }
+
+    /// <summary>
     /// Puts the thresholds between what full looks like and what empty looks
     /// like. Returns false when the two are too alike to tell apart, which is
     /// worth saying out loud rather than silently picking a bad number.
