@@ -446,6 +446,9 @@ public sealed class MonitorEngine : IDisposable
         }
     }
 
+    /// <summary>The run-up to each press, kept so one can be explained later.</summary>
+    private readonly FireTrail _trail = new();
+
     private GlobeReading Sample(State st, WatcherConfig c, string name,
                                 bool focused, Stopwatch clock)
     {
@@ -648,39 +651,6 @@ public sealed class MonitorEngine : IDisposable
             return new GlobeReading(name, frac, true, "", fromText, textRaw);
         }
 
-        // The safety net: one press, once, when you fall past the floor.
-        //
-        // Everything above this can be waiting - a cooldown running, a burst
-        // still going out, a confirming frame not yet counted - and that is
-        // where a heal gets missed. This does not care what is waiting and does
-        // not repeat: it fires a single press and then stays quiet until you
-        // have climbed back out, so it is a net rather than a second trigger
-        // spending charges alongside the first.
-        if (c.UberBelow > 0 && frac > 0)
-        {
-            if (frac > c.UberBelow + 0.05) st.UberUsed = false;
-
-            if (frac <= c.UberBelow && !st.UberUsed && !_keys.Busy
-                && _keys.Send(c.Key, c.HoldMs, 1, 40, PostingKeys, GameWindow))
-            {
-                st.UberUsed = true;
-                st.LastFireMs = now;
-                st.Below = 0;
-                FiresThisFight++;
-                if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
-                Log.Write($"{name}: '{c.Key}' x1 at {frac:P1} EMERGENCY - one press, "
-                          + "will not repeat until recovered");
-                Fired?.Invoke(name, frac);
-                return new GlobeReading(name, frac, true, "", fromText, textRaw);
-            }
-        }
-
-        if (frac >= c.Threshold)
-        {
-            st.Below = 0;
-            return new GlobeReading(name, frac, true, "", fromText, textRaw);
-        }
-
         // Nothing goes into a globe we cannot see. The grace period is what
         // makes this safe: a globe that read 60% a second ago and reads 1% now
         // is nearly dead and gets its flask, while one that has read nothing
@@ -720,13 +690,69 @@ public sealed class MonitorEngine : IDisposable
                           && (!st.HadGoodSource
                               || now - st.NoGoodSourceSinceMs > c.ActOnStaleMs);
 
-        if (sourceLost || textLost || Unreadable(frac, now, st.LastGoodMs, c))
+        bool blind = Unreadable(frac, now, st.LastGoodMs, c);
+
+        // Every poll, into memory only. This is what makes "it fired and it
+        // should not have" answerable: the press itself says almost nothing,
+        // and by the time it is logged the run-up has gone.
+        _trail.Note($"{name} {frac:P1} from {(fromText ? textRaw : "globe pixels")} "
+                    + $"age {(textAge == long.MaxValue ? -1 : textAge)}ms  "
+                    + $"armed={Armed} focused={focused}  "
+                    + $"refuse={(textLost ? "numbers gone" : sourceLost ? "no exact reading" : blind ? "globe unreadable" : "no")}  "
+                    + $"fire<{c.Threshold:P0} panic<{c.PanicBelow:P0} emergency<{c.UberBelow:P0}  "
+                    + $"below={st.Below} sinceFire={now - st.LastFireMs}ms "
+                    + $"backoff={Math.Max(0, st.BackoffUntilMs - now)}ms uberUsed={st.UberUsed}");
+
+        if (sourceLost || textLost || blind)
         {
             st.Below = 0;
             string why = textLost ? "numbers not on screen"
                        : sourceLost ? "no exact reading yet"
                        : "cannot read the globe";
             return new GlobeReading(name, frac, true, why, fromText, textRaw);
+        }
+
+        // The safety net: one press, once, when you fall past the floor.
+        //
+        // It sits below the readability guard on purpose. It used to sit above
+        // it, which meant it was the one path that could fire on a reading the
+        // rest of the code had already decided not to trust - so opening the
+        // atlas, where the numbers are gone and the globe pixels read low,
+        // pressed a flask. A net that fires when nothing is falling is not a
+        // net.
+        //
+        // Everything else here can be waiting - a cooldown running, a burst
+        // still going out, a confirming frame not yet counted - and that is
+        // where a heal gets missed. This does not care what is waiting and does
+        // not repeat: it fires a single press and then stays quiet until you
+        // have climbed back out, so it is a net rather than a second trigger
+        // spending charges alongside the first.
+        if (c.UberBelow > 0 && frac > 0)
+        {
+            if (frac > c.UberBelow + 0.05) st.UberUsed = false;
+
+            if (frac <= c.UberBelow && !st.UberUsed && !_keys.Busy
+                && _keys.Send(c.Key, c.HoldMs, 1, 40, PostingKeys, GameWindow))
+            {
+                st.UberUsed = true;
+                st.LastFireMs = now;
+                st.Below = 0;
+                FiresThisFight++;
+                if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
+                Log.Write($"{name}: '{c.Key}' x1 at {frac:P1} EMERGENCY - one press, "
+                          + "will not repeat until recovered");
+                _trail.Dump($"{name} emergency press at {frac:P1}, under the "
+                            + $"{c.UberBelow:P0} floor, reading from "
+                            + $"{(fromText ? textRaw : "globe pixels")}");
+                Fired?.Invoke(name, frac);
+                return new GlobeReading(name, frac, true, "", fromText, textRaw);
+            }
+        }
+
+        if (frac >= c.Threshold)
+        {
+            st.Below = 0;
+            return new GlobeReading(name, frac, true, "", fromText, textRaw);
         }
 
         // Deep in the red, or dropping fast enough that waiting a full cooldown
@@ -774,6 +800,9 @@ public sealed class MonitorEngine : IDisposable
 
         Log.Write($"{name}: '{c.Key}' x{shots} at {frac:P1}"
                   + (panic ? $" PANIC (drop {dropRate:0}%/s)" : ""));
+        _trail.Dump($"{name} x{shots} at {frac:P1}, under the {c.Threshold:P0} trigger"
+                    + (panic ? $", panicking (dropping {dropRate:0}%/s)" : "")
+                    + $", reading from {(fromText ? textRaw : "globe pixels")}");
         Fired?.Invoke(name, frac);
 
         return new GlobeReading(name, frac, true, "", fromText, textRaw);

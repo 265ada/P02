@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 
 namespace P02;
 
@@ -20,7 +21,7 @@ public sealed class OverlayForm : Form
     private const int RowH = 24;
     private const int BarH = 11;
     private const int NameW = 34;
-    private const int ValueW = 52;
+    private const int ValueW = 54;
 
     private readonly System.Windows.Forms.Timer _fade = new();
 
@@ -48,7 +49,7 @@ public sealed class OverlayForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        ClientSize = new Size(276, 100);
+        ClientSize = new Size(292, 100);
 
         _fade.Interval = 260;
         _fade.Tick += (_, _) => { _fade.Stop(); _firing = false; Render(); };
@@ -160,26 +161,71 @@ public sealed class OverlayForm : Form
         Render();
     }
 
-    /// <summary>Draws the whole readout and hands it to the window as one image.</summary>
+    /// <summary>
+    /// Draws the whole readout and hands it to the window as one image.
+    ///
+    /// It draws straight into a DIB the window can be handed directly, in
+    /// premultiplied form. UpdateLayeredWindow reads the colour channels as
+    /// already multiplied by the alpha, so an ordinary ARGB bitmap - where they
+    /// are not - comes out washed and colour-shifted, which is what left the
+    /// whole readout pink even after the key colour was gone.
+    /// </summary>
     private void Render()
     {
-        if (!IsHandleCreated || ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
+        int w = ClientSize.Width, h = ClientSize.Height;
+        if (!IsHandleCreated || w <= 0 || h <= 0) return;
 
-        using var frame = new Bitmap(ClientSize.Width, ClientSize.Height,
-                                     PixelFormat.Format32bppArgb);
-        using (var g = Graphics.FromImage(frame))
+        var info = new Native.BITMAPINFO();
+        info.bmiHeader.biSize = (uint)Marshal.SizeOf<Native.BITMAPINFOHEADER>();
+        info.bmiHeader.biWidth = w;
+        info.bmiHeader.biHeight = -h;   // negative: top-down, like everything else here
+        info.bmiHeader.biPlanes = 1;
+        info.bmiHeader.biBitCount = 32;
+        info.bmiHeader.biCompression = 0;   // BI_RGB
+
+        nint screen = Native.GetDC(0);
+        nint mem = Native.CreateCompatibleDC(screen);
+        nint dib = Native.CreateDIBSection(screen, ref info, 0, out nint bits, 0, 0);
+        nint old = 0;
+        try
         {
-            g.Clear(Color.Transparent);
-            g.SmoothingMode = SmoothingMode.AntiAlias;
+            if (dib == 0) return;
+            old = Native.SelectObject(mem, dib);
 
-            // Subpixel rendering has no ground to antialias against here and
-            // leaves coloured fringes on the glyphs. Grey keeps the alpha honest.
-            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+            using (var frame = new Bitmap(w, h, w * 4, PixelFormat.Format32bppPArgb, bits))
+            using (var g = Graphics.FromImage(frame))
+            {
+                g.Clear(Color.Transparent);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            Compose(g);
+                // Subpixel rendering has no ground to antialias against here and
+                // leaves coloured fringes on the glyphs. Grey keeps the alpha honest.
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+
+                Compose(g);
+            }
+
+            var size = new Native.SIZE { Cx = w, Cy = h };
+            var src = new Native.POINT { X = 0, Y = 0 };
+            var dst = new Native.POINT { X = Left, Y = Top };
+            var blend = new Native.BLENDFUNCTION
+            {
+                BlendOp = Native.AC_SRC_OVER,
+                BlendFlags = 0,
+                SourceConstantAlpha = 255,
+                AlphaFormat = Native.AC_SRC_ALPHA,
+            };
+
+            Native.UpdateLayeredWindow(Handle, screen, ref dst, ref size, mem, ref src,
+                                       0, ref blend, Native.ULW_ALPHA);
         }
-
-        Push(frame);
+        finally
+        {
+            if (old != 0) Native.SelectObject(mem, old);
+            if (dib != 0) Native.DeleteObject(dib);
+            Native.DeleteDC(mem);
+            Native.ReleaseDC(0, screen);
+        }
     }
 
     private void Compose(Graphics g)
@@ -274,8 +320,14 @@ public sealed class OverlayForm : Form
         }
 
         if (_inCombat || _fired > 0)
-            Glyph(g, _fired.ToString(), _inCombat ? Theme.Warn : Theme.Dim,
-                  Theme.UiBold, ClientSize.Width - Pad - 22, y);
+        {
+            // The one number you look for mid-fight, so it is sized to be read
+            // at a glance from the corner of an eye rather than squinted at.
+            string n = _fired.ToString();
+            int w = (int)Math.Ceiling(g.MeasureString(n, Theme.Big).Width);
+            Glyph(g, n, _inCombat ? Theme.Warn : Theme.Dim, Theme.Big,
+                  ClientSize.Width - Pad - w, y - 4);
+        }
     }
 
     /// <summary>
@@ -296,41 +348,6 @@ public sealed class OverlayForm : Form
 
         using var brush = new SolidBrush(colour);
         g.DrawString(s, font, brush, x, y);
-    }
-
-    /// <summary>Hands the finished image to the window, alpha and all.</summary>
-    private void Push(Bitmap frame)
-    {
-        nint screen = Native.GetDC(0);
-        nint mem = Native.CreateCompatibleDC(screen);
-        nint bmp = 0;
-        nint old = 0;
-        try
-        {
-            bmp = frame.GetHbitmap(Color.FromArgb(0));
-            old = Native.SelectObject(mem, bmp);
-
-            var size = new Native.SIZE { Cx = frame.Width, Cy = frame.Height };
-            var src = new Native.POINT { X = 0, Y = 0 };
-            var dst = new Native.POINT { X = Left, Y = Top };
-            var blend = new Native.BLENDFUNCTION
-            {
-                BlendOp = Native.AC_SRC_OVER,
-                BlendFlags = 0,
-                SourceConstantAlpha = 255,
-                AlphaFormat = Native.AC_SRC_ALPHA,
-            };
-
-            Native.UpdateLayeredWindow(Handle, screen, ref dst, ref size, mem, ref src,
-                                       0, ref blend, Native.ULW_ALPHA);
-        }
-        finally
-        {
-            if (old != 0) Native.SelectObject(mem, old);
-            if (bmp != 0) Native.DeleteObject(bmp);
-            Native.DeleteDC(mem);
-            Native.ReleaseDC(0, screen);
-        }
     }
 
     private static GraphicsPath Rounded(Rectangle r, int radius)
