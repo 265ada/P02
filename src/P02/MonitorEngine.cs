@@ -311,7 +311,7 @@ public sealed class MonitorEngine : IDisposable
             {
                 frac = tr.Fraction;
                 fromText = true;
-                textRaw = $"{tr.Current:N0}/{tr.Max:N0}";
+                textRaw = $"numbers, {tr.Current:N0}/{tr.Max:N0}";
             }
             else if (textAge < 1200)
             {
@@ -341,7 +341,7 @@ public sealed class MonitorEngine : IDisposable
             {
                 frac = name == "Life" ? ms.LifeFraction : ms.ManaFraction;
                 fromText = true;
-                textRaw = $"{cur:N0}/{max:N0} (memory)";
+                textRaw = $"memory, life {cur:N0}/{max:N0}";
                 textLostOverride = false;
             }
             else if (max > 0 && expectedMax > 0)

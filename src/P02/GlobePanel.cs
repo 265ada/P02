@@ -219,9 +219,7 @@ public sealed class GlobePanel : GroupBox
 
         _numbers.SetBounds(14, y, 340, 18);
         _numbers.ForeColor = SystemColors.GrayText;
-        _numbers.Text = cfg.TextRegion.IsValid
-            ? "Numbers: set - this decides when to fire"
-            : "Numbers: not set - using globe pixels";
+        _numbers.Text = "Deciding: not read yet";
         Controls.Add(_numbers);
     }
 
@@ -705,7 +703,11 @@ public sealed class GlobePanel : GroupBox
 
         if (r.FromText && r.TextRaw.Length > 0)
         {
-            _numbers.Text = $"Numbers: {r.TextRaw} - this is what decides";
+            // Which source decided matters more than the number itself. The
+            // globe pixels cannot tell life from energy shield - the shield is
+            // drawn over the same globe - while the numbers and memory read the
+            // life value specifically.
+            _numbers.Text = $"Deciding: {r.TextRaw}";
             _numbers.ForeColor = Color.FromArgb(0, 100, 0);
         }
         else if (r.Note == "numbers not on screen")
@@ -715,7 +717,12 @@ public sealed class GlobePanel : GroupBox
         }
         else if (_cfg.TextRegion.IsValid)
         {
-            _numbers.Text = "Numbers: set, but not being read - falling back to pixels";
+            _numbers.Text = "Deciding: globe pixels (numbers set but not readable)";
+            _numbers.ForeColor = Color.FromArgb(190, 60, 0);
+        }
+        else
+        {
+            _numbers.Text = "Deciding: globe pixels - these follow energy shield too";
             _numbers.ForeColor = Color.FromArgb(190, 60, 0);
         }
     }

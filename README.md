@@ -71,7 +71,12 @@ fire and stays silent until they come back. Short gaps still fall back to
 pixels, because OCR misses the odd frame.
 
 **Globe pixels** - the last fallback, used between text reads and when no text
-region is set. The pixel path produces a
+region is set. Worth knowing what it cannot do: **energy shield is drawn over
+the life globe**, so the pixels follow shield loss as well as life loss and will
+pot for a shield that is draining while life is untouched. Numbers and memory
+both read the life value itself and do not have this problem. Each panel names
+which source is deciding, and the pinned readout shows the percentage in amber
+whenever it is the pixels. The pixel path produces a
 *fraction* of the globe, so gear swaps and buffs change nothing there either -
 40% is 40% whether your pool is 1,440 or 3,000.
 

@@ -102,7 +102,12 @@ public sealed class OverlayForm : Form
         bar.Value = r.Fraction;
         bar.Below = r.Fraction < trigger;
         pct.Text = $"{r.Fraction * 100:0} %";
-        pct.ForeColor = Color.FromArgb(220, 220, 225);
+
+        // Amber when the globe pixels are deciding: those follow energy shield
+        // as well as life, since the shield is drawn over the same globe.
+        pct.ForeColor = r.FromText
+            ? Color.FromArgb(220, 220, 225)
+            : Color.FromArgb(230, 180, 90);
     }
 
     public void SetArmed(bool armed)
