@@ -40,6 +40,9 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>The trigger was crossed while disarmed - what would have happened.</summary>
     public event Action<string, double>? WouldFire;
 
+    /// <summary>A pool's maximum changed and has been adopted: name, old, new.</summary>
+    public event Action<string, int, int>? MaxAdopted;
+
     /// <summary>A watched globe has been reading nothing for a while: the box
     /// is not on the globe. Bool says whether it is currently blind.</summary>
     public event Action<string, bool>? Blind;
@@ -94,6 +97,32 @@ public sealed class MonitorEngine : IDisposable
             ? _cfg.Mana.TextRegion.ToRect() : null,
             _cfg.Mana.TextLabel, _cfg.Mana.KnownMax);
     }
+
+    /// <summary>
+    /// Levelling and gear move a pool's maximum, and a stated one that has gone
+    /// stale refuses every reading in silence. The numbers on screen already
+    /// carry the true maximum, so when they have insisted on a different one
+    /// for long enough to rule out a misread, take it: update the setting,
+    /// point the search at the new value and say so.
+    /// </summary>
+    private void AdoptChangedMax(string name, WatcherConfig c)
+    {
+        if (c.KnownMax <= 0) return;
+
+        int seen = _ocr.SuggestedMax(name);
+        if (seen <= 0 || seen == c.KnownMax) return;
+
+        int was = c.KnownMax;
+        c.KnownMax = seen;
+        Log.Write($"{name}: maximum changed from {was} to {seen} - adopted");
+
+        SyncTextRegions();
+        if (_cfg.UseMemory) _mem.Rescan();
+        MaxAdopted?.Invoke(name, was, seen);
+    }
+
+    /// <summary>A maximum the numbers keep showing that disagrees with yours.</summary>
+    public int SuggestedMax(string name) => _ocr.SuggestedMax(name);
 
     /// <summary>Reads a region once, for the setup button.</summary>
     public string ProbeText(Rectangle r) => _ocr.ProbeOnce(r);
@@ -228,6 +257,10 @@ public sealed class MonitorEngine : IDisposable
                     _mem.HintMaxHp = ExpectedMax("Life", _cfg.Life, 0);
                     _mem.HintMaxMp = ExpectedMax("Mana", _cfg.Mana, 0);
                 }
+
+                AdoptChangedMax("Life", _cfg.Life);
+                AdoptChangedMax("Mana", _cfg.Mana);
+                AdoptChangedMax("Shield", _cfg.Shield);
 
                 var lr = Sample(life, _cfg.Life, "Life", focused, clock);
                 var mr = Sample(mana, _cfg.Mana, "Mana", focused, clock);

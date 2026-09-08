@@ -56,7 +56,14 @@ so firing at it is pure waste.
 **Numbers** - point it at the `1,465/1,465` beside the globe and that becomes
 what decides. It is an exact ratio, needs no calibration and no colour tuning,
 and because the maximum is read too, gear and buffs that move your pool change
-nothing. Windows does the reading, so there is nothing extra to install. Every
+nothing. Windows does the reading, so there is nothing extra to install. **A maximum that changes looks after itself.** Levelling and gear move it, and a
+stated maximum that has gone stale refuses every reading in silence - which
+looks exactly like the app being broken. The numbers on screen already carry the
+true maximum, so when they have insisted on a different one for long enough to
+rule out a misread, it is adopted: the setting updates, the memory search is
+pointed at the new value, and the panel says what changed. Nothing to maintain.
+
+Every
 reading is checked before it is believed, and **filling in My max is what makes
 that check exact**. A stray leading digit turns 1,465 into 11,465; a current of
 1,465 against that reads as 13%, which is under any trigger, so it fires while

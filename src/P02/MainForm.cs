@@ -326,6 +326,20 @@ public sealed class MainForm : Form
             catch (ObjectDisposedException) { /* closing */ }
         };
 
+        _engine.MaxAdopted += (name, was, now) =>
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            try
+            {
+                BeginInvoke(() =>
+                {
+                    (name == "Life" ? _life : _mana).MaxAdopted(was, now);
+                    _cfg.SaveNow();
+                });
+            }
+            catch (ObjectDisposedException) { /* closing */ }
+        };
+
         _engine.Blind += (name, blind) =>
         {
             if (IsDisposed || !IsHandleCreated) return;
@@ -523,6 +537,7 @@ public sealed class MainForm : Form
 
                 _life.Update(life);
                 _mana.Update(mana);
+
                 _life.UpdateShield(shield);
                 _focus.Text = focused
                     ? "game window focused — firing allowed"

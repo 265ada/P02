@@ -22,6 +22,7 @@ public sealed class GlobePanel : GroupBox
     private readonly Label _burstTime = new();
     private readonly Label _effect = new();
     private bool _blind;
+    private bool _settingMax;
     private readonly Label _numbers = new();
 
     // Only the life panel carries these: energy shield is recovered by the life
@@ -206,6 +207,7 @@ public sealed class GlobePanel : GroupBox
         _knownMax.Value = Math.Clamp(cfg.KnownMax, 0, 1_000_000);
         _knownMax.ValueChanged += (_, _) =>
         {
+            if (_settingMax) return;   // adopted, not typed
             _cfg.KnownMax = (int)_knownMax.Value;
             RefreshShieldWarning();
             _onChange();
@@ -877,6 +879,21 @@ public sealed class GlobePanel : GroupBox
     {
         _effect.Text = $"Would have fired at {frac:P0} - disarmed, so nothing was sent.";
         _effect.ForeColor = Color.FromArgb(0, 90, 160);
+    }
+
+    /// <summary>
+    /// The numbers keep reading a maximum that is not the one entered. Almost
+    /// always a level or a gear change; never adopted automatically, because
+    /// the entered value is what protects against misreads.
+    /// </summary>
+    public void MaxAdopted(int was, int now)
+    {
+        _settingMax = true;
+        _knownMax.Value = Math.Clamp(now, 0, 1_000_000);
+        _settingMax = false;
+
+        _warn.Text = $"Maximum changed from {was:N0} to {now:N0} - updated to match.";
+        _warn.ForeColor = Color.FromArgb(0, 100, 0);
     }
 
     /// <summary>Called from the UI thread with the latest reading.</summary>

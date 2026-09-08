@@ -43,6 +43,9 @@ internal sealed partial class TextOcr : IDisposable
         public int PendingMax;
         public int PendingCount;
         public long LastComplaintMs = long.MinValue / 2;
+        public int DisagreeMax;
+        public int DisagreeCount;
+        public int Suggested;
     }
 
     private readonly Dictionary<string, Slot> _slots = new();
@@ -119,6 +122,16 @@ internal sealed partial class TextOcr : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// A maximum that keeps being read while a different one is configured, or
+    /// 0 when there is no such disagreement.
+    /// </summary>
+    public int SuggestedMax(string name)
+    {
+        lock (_gate)
+            return _slots.TryGetValue(name, out var slot) ? slot.Suggested : 0;
+    }
+
     public long NowMs => _clock.ElapsedMilliseconds;
 
     private void Run()
@@ -187,14 +200,30 @@ internal sealed partial class TextOcr : IDisposable
         // trigger, so it fires while you are at full health.
         if (expected > 0 && max != expected)
         {
-            if (_clock.ElapsedMilliseconds - slot.LastComplaintMs > 10000)
+            // Maxima do change - a level, a gear swap - and a stated one that
+            // has gone stale refuses every reading in silence, which looks
+            // exactly like the app being broken. A misread does not repeat this
+            // consistently, so a value that keeps coming back is worth pointing
+            // out. It is suggested, never adopted: quietly overriding the
+            // number you typed would defeat the check it exists to perform.
+            if (max == slot.DisagreeMax) slot.DisagreeCount++;
+            else { slot.DisagreeMax = max; slot.DisagreeCount = 1; }
+
+            if (slot.DisagreeCount >= 15)
             {
-                slot.LastComplaintMs = _clock.ElapsedMilliseconds;
-                Log.Write($"{name}: read a maximum of {max} but yours is {expected}"
-                          + " - ignoring that reading");
+                lock (_gate) slot.Suggested = max;
+                if (_clock.ElapsedMilliseconds - slot.LastComplaintMs > 30000)
+                {
+                    slot.LastComplaintMs = _clock.ElapsedMilliseconds;
+                    Log.Write($"{name}: has read a maximum of {max} {slot.DisagreeCount} times "
+                              + $"running but yours is set to {expected} - has it changed?");
+                }
             }
             return;
         }
+
+        slot.DisagreeCount = 0;
+        lock (_gate) slot.Suggested = 0;
 
         // Without a stated maximum, lean on the fact that a real one barely
         // ever changes. A small change might be a gear swap; a large one is
