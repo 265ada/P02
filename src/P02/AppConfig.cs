@@ -67,6 +67,26 @@ public sealed class WatcherConfig
     /// the way down instead of after it lands.</summary>
     public double FastDropPctPerSec { get; set; } = 30;
 
+    // --- did it actually work? -------------------------------------------
+    // Flasks recover over a duration and the recovery stops the moment the
+    // resource is full, so a press that works shows up as the globe rising
+    // within a second. A press that changes nothing means no charges, the
+    // wrong key, or input not reaching the game - and nothing else in P02 can
+    // tell those apart from a press that simply had no room to heal.
+
+    /// <summary>Watch the globe after firing to see whether the press did anything.</summary>
+    public bool VerifyEffect { get; set; } = true;
+
+    /// <summary>How long to wait for the globe to start rising.</summary>
+    public int VerifyWindowMs { get; set; } = 900;
+
+    /// <summary>
+    /// Hold off while a recovery that is already working is still running.
+    /// Saves charges, but off by default: while something is hitting you hard,
+    /// stacking another flask on top is usually the right call.
+    /// </summary>
+    public bool SkipWhileRecovering { get; set; }
+
     /// <summary>Presses sent per trigger. Raise if one charge is not enough.</summary>
     public int BurstCount { get; set; } = 1;
 

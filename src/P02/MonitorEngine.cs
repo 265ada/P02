@@ -28,6 +28,10 @@ public sealed class MonitorEngine : IDisposable
 
     public event Action<GlobeReading, GlobeReading, bool>? Sampled;
     public event Action<string, double>? Fired;
+
+    /// <summary>Globe name, whether the last press moved the globe, and how
+    /// many in a row have not.</summary>
+    public event Action<string, bool, int>? EffectChecked;
     public event Action<bool>? ArmedChanged;
 
     public MonitorEngine(AppConfig cfg)
@@ -102,6 +106,14 @@ public sealed class MonitorEngine : IDisposable
         }
 
         public void Reset() => _hist.Clear();
+
+        // --- effect verification ---
+        public bool Verifying;
+        public long FireMs;
+        public double FracAtFire;
+        public double MaxSinceFire;
+        public int NoEffect;
+        public long RecoveringUntilMs;
     }
 
     private void Loop(CancellationToken ct)
@@ -197,6 +209,28 @@ public sealed class MonitorEngine : IDisposable
         double dropRate = st.DropPctPerSec(now, frac);
         st.Push(now, frac);
 
+        // A press that worked shows up as the globe climbing. Anything else is
+        // a press that went nowhere, and that is worth saying out loud.
+        if (st.Verifying)
+        {
+            st.MaxSinceFire = Math.Max(st.MaxSinceFire, frac);
+            if (st.MaxSinceFire > st.FracAtFire + 0.015)
+            {
+                st.Verifying = false;
+                st.NoEffect = 0;
+                st.RecoveringUntilMs = now + 600;
+                EffectChecked?.Invoke(name, true, 0);
+            }
+            else if (now - st.FireMs > c.VerifyWindowMs)
+            {
+                st.Verifying = false;
+                st.NoEffect++;
+                Log.Write($"{name}: press had no effect ({st.NoEffect} in a row) - "
+                          + "no charges, wrong key, or input not reaching the game");
+                EffectChecked?.Invoke(name, false, st.NoEffect);
+            }
+        }
+
         // Reading runs whenever the globe is on, so the UI stays live even
         // while disarmed; only firing is gated below.
         if (!Armed || !focused)
@@ -236,12 +270,26 @@ public sealed class MonitorEngine : IDisposable
         if (_keys.Busy)
             return new GlobeReading(name, frac, true);
 
+        // Recovery is already running and working. Stacking another flask on
+        // top spends a charge for recovery that will be cut off the moment the
+        // globe fills, so this is optional and off by default.
+        if (c.SkipWhileRecovering && now < st.RecoveringUntilMs)
+            return new GlobeReading(name, frac, true);
+
         int shots = Math.Clamp(c.BurstCount, 1, 5);
         if (!_keys.Send(c.Key, c.HoldMs, shots, Math.Clamp(c.BurstGapMs, 5, 500)))
             return new GlobeReading(name, frac, true);
 
         st.LastFireMs = now;
         st.Below = 0;
+
+        if (c.VerifyEffect)
+        {
+            st.Verifying = true;
+            st.FireMs = now;
+            st.FracAtFire = frac;
+            st.MaxSinceFire = frac;
+        }
         // The globe has not refilled yet, so old samples would read as a
         // continuing crash and inflate the drop rate.
         st.Reset();

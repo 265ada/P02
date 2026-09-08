@@ -18,6 +18,7 @@ public sealed class GlobePanel : GroupBox
     private readonly NumericUpDown _burst = new();
     private readonly NumericUpDown _hold = new();
     private readonly Label _burstTime = new();
+    private readonly Label _effect = new();
     private readonly Label _tuned = new();
     private readonly Label _warn = new();
     private readonly KeyBindBox _key = new();
@@ -35,7 +36,7 @@ public sealed class GlobePanel : GroupBox
 
         Text = title;
         Width = 366;
-        Height = 458;
+        Height = 482;
         Padding = new Padding(10);
 
         int y = 24;
@@ -184,6 +185,11 @@ public sealed class GlobePanel : GroupBox
         _burstTime.ForeColor = SystemColors.GrayText;
         Controls.Add(_burstTime);
         RefreshBurstTime();
+        y += 22;
+
+        _effect.SetBounds(14, y, 340, 18);
+        _effect.ForeColor = SystemColors.GrayText;
+        Controls.Add(_effect);
     }
 
     /// <summary>
@@ -523,6 +529,32 @@ public sealed class GlobePanel : GroupBox
     private void TryTune()
     {
         if (OrbDetector.AutoTune(_cfg, out string note)) _tuned.Text = note;
+    }
+
+    /// <summary>
+    /// Reports whether the last press actually moved the globe. A run of
+    /// presses that change nothing is the clearest signal there is that the
+    /// key, the charges, or the input path is the problem rather than the
+    /// detection.
+    /// </summary>
+    public void ShowEffect(bool worked, int noEffectStreak)
+    {
+        if (worked)
+        {
+            _effect.Text = "Last press: the globe rose, so it worked.";
+            _effect.ForeColor = Color.FromArgb(0, 120, 0);
+        }
+        else if (noEffectStreak >= 3)
+        {
+            _effect.Text = $"Last {noEffectStreak} presses did nothing. Check the key, "
+                         + "your charges, and Hold each press.";
+            _effect.ForeColor = Color.FromArgb(190, 60, 0);
+        }
+        else
+        {
+            _effect.Text = $"Last press: no change ({noEffectStreak} in a row).";
+            _effect.ForeColor = SystemColors.GrayText;
+        }
     }
 
     /// <summary>Called from the UI thread with the latest reading.</summary>

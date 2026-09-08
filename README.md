@@ -213,6 +213,25 @@ The button writes a zip and a matching plain-text report to `%APPDATA%\P02`:
 Your update token is never included, and anything token-shaped in the log is
 redacted. The `.txt` is meant to be pasted straight into a chat.
 
+## Does the press actually do anything?
+
+Flasks in Path of Exile 2 recover **over a duration**, and the recovery is
+cancelled the moment the resource fills, so the remainder is wasted. There is no
+documented cooldown between uses - the real limit is charges, and a press with
+none available does nothing at all. Pressing again mid-recovery costs another
+charge for recovery that will be cut short anyway.
+
+So P02 checks. After firing it watches the globe for a second: a press that
+worked shows up as the globe climbing. One that changes nothing means no
+charges, the wrong key, or input not reaching the game - and the panel says so,
+loudly after three in a row. That is the difference between "it is not
+detecting" and "it is detecting fine and the key is going nowhere", which is
+otherwise very hard to tell apart.
+
+**Skip while recovering** holds off while a recovery that is already working is
+still running, which saves charges. It is off by default: while something is
+hitting you hard, stacking another flask is usually the right call.
+
 ## The ding sounds but the flask is not used
 
 That narrows it a long way. The ding plays on the same path as the key press,

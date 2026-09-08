@@ -31,7 +31,7 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(772, 684);
+        ClientSize = new Size(772, 708);
 
         _life = new GlobePanel("Life", cfg.Life, blue: false, Save,
             () => _cfg.WindowMatch, () => _cfg.Mana.Region) { Location = new Point(12, 12) };
@@ -40,7 +40,7 @@ public sealed class MainForm : Form
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 488;
+        int y = 512;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
@@ -191,6 +191,19 @@ public sealed class MainForm : Form
 
         _engine.Sampled += OnSampled;
         _engine.ArmedChanged += _ => BeginInvoke(RefreshArmUi);
+        _engine.EffectChecked += (name, worked, streak) =>
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            try
+            {
+                BeginInvoke(() =>
+                {
+                    var panel = name == "Life" ? _life : _mana;
+                    panel.ShowEffect(worked, streak);
+                });
+            }
+            catch (ObjectDisposedException) { /* closing */ }
+        };
 
         // Come back where it was left, unless that screen has since gone away.
         if (cfg.WindowX >= 0 && cfg.WindowY >= 0)

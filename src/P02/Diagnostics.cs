@@ -130,6 +130,8 @@ internal static partial class Diagnostics
         b.AppendLine($"key          : \"{c.Key}\"  -> {KeyNote(c.Key)}");
         b.AppendLine($"colour       : margin {c.ColourMargin}, min brightness {c.MinValue}, "
                      + $"glare={c.GlareIsLiquid}");
+        b.AppendLine($"verify       : {(c.VerifyEffect ? $"on, {c.VerifyWindowMs} ms window" : "off")}"
+                     + $"   skip while recovering: {c.SkipWhileRecovering}");
         b.AppendLine($"calibration  : full row {c.FullRow}, empty row {c.EmptyRow}");
         b.AppendLine($"learned      : full dom/val {c.FullDominance}/{c.FullValue}, "
                      + $"empty dom/val {c.EmptyDominance}/{c.EmptyValue}");
