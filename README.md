@@ -142,6 +142,10 @@ percentage in amber whenever it is the pixels.
   Its **My max** is your maximum *shield*. Putting your life maximum there makes
   it read your life, since the maximum is one of the things used to pick which
   line of the HUD to read - so it says so if you do.
+- **Every control explains itself.** Hover anything and it says what it is for,
+  when it is worth changing, and what to set it to - because a setting you have
+  to guess at is a setting that gets left wrong, which is how a maximum ended up
+  in the shield box and a burst ended up set faster than a key can be sent.
 - Runs to the system tray.
 
 ## Setting it up

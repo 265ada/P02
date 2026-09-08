@@ -56,7 +56,7 @@ public sealed partial class UpdateDialog : Form
             ScrollBars = ScrollBars.Vertical,
             WordWrap = true,
             BorderStyle = BorderStyle.FixedSingle,
-            BackColor = SystemColors.Window,
+            BackColor = Theme.Field,
             Bounds = new Rectangle(16, 46, 548, 336),
             Text = Tidy(notes),
         };
@@ -112,6 +112,11 @@ public sealed partial class UpdateDialog : Form
         };
         Controls.Add(yes);
         Controls.Add(no);
+        BackColor = Theme.Bg;
+        ForeColor = Theme.Text;
+        Font = Theme.Ui;
+        Theme.Apply(this);
+
         AcceptButton = yes;
         CancelButton = no;
     }

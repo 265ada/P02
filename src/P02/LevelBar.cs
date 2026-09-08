@@ -58,22 +58,20 @@ internal sealed class LevelBar : Control
         // filling it would paint a solid block over the game.
         bool seeThrough = BackColor == Color.Transparent;
         if (!seeThrough)
-            using (var back = new SolidBrush(SystemColors.ControlLight))
+            using (var back = new SolidBrush(Theme.Field))
                 g.FillRectangle(back, r);
 
         int w = (int)Math.Round((r.Width - 2) * _value);
         if (w > 0)
         {
-            var fill = _below
-                ? Color.FromArgb(200, 60, 60)
-                : Color.FromArgb(60, 160, 70);
+            var fill = _below ? Theme.Bad : Theme.Good;
             using var brush = new SolidBrush(fill);
             g.FillRectangle(brush, r.X + 1, r.Y + 1, w, r.Height - 2);
         }
 
         using var pen = new Pen(seeThrough
             ? Color.FromArgb(150, 150, 155)
-            : SystemColors.ControlDark);
+            : Theme.Line);
         g.DrawRectangle(pen, r.X, r.Y, r.Width - 1, r.Height - 1);
     }
 }

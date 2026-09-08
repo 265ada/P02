@@ -33,16 +33,14 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(900, 838);
+        ClientSize = new Size(900, 856);
 
         _pin.SetBounds(864, 6, 24, 22);
         _pin.Text = "P";
         _pin.Font = new Font("Segoe UI", 8, FontStyle.Bold);
         _pin.FlatStyle = FlatStyle.System;
         var tip = new ToolTip();
-        tip.SetToolTip(_pin, "Pin a small always-on-top readout over the game."
-                             + Environment.NewLine
-                             + "Right-click to bring it back if it has gone missing.");
+        Tips.On(_pin, Tips.Pin);
         _pin.MouseUp += (_, e) => { if (e.Button == MouseButtons.Right) ResetOverlay(); };
         _pin.Click += (_, _) => ToggleOverlay(!(_overlay?.Visible ?? false));
         Controls.Add(_pin);
@@ -67,12 +65,14 @@ public sealed class MainForm : Form
         Controls.Add(_life);
         Controls.Add(_mana);
 
-        int y = 604;
+        int y = 622;
 
         _arm.SetBounds(12, y, 200, 54);
         _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
         _arm.Click += (_, _) => _engine.Toggle();
         Controls.Add(_arm);
+        Tips.On(_arm, "Arms and disarms. Nothing is ever sent while disarmed.",
+            "", "It starts disarmed every launch, on purpose.");
 
         _status.SetBounds(224, y + 6, 460, 22);
         _status.Font = new Font("Segoe UI", 10);
@@ -88,6 +88,7 @@ public sealed class MainForm : Form
         _window.Text = cfg.WindowMatch;
         _window.TextChanged += (_, _) => { _cfg.WindowMatch = _window.Text; Save(); };
         Controls.Add(_window);
+        Tips.On(_window, Tips.WindowMatch);
 
         var clearBtn = new Button { Text = "Any window", Bounds = new Rectangle(430, y, 86, 24) };
         clearBtn.Click += (_, _) => _window.Text = "";
@@ -105,6 +106,7 @@ public sealed class MainForm : Form
         _pollHz.Value = Math.Clamp(cfg.PollHz, 5, 250);
         _pollHz.ValueChanged += (_, _) => { _cfg.PollHz = (int)_pollHz.Value; Save(); };
         Controls.Add(_pollHz);
+        Tips.On(_pollHz, Tips.PollHz);
 
         Controls.Add(new Label { Text = "Arm key", Bounds = new Rectangle(658, y + 4, 50, 20) });
         _hotkey.SetBounds(708, y, 52, 24);
@@ -119,6 +121,7 @@ public sealed class MainForm : Form
             RegisterArmHotkey();
         };
         Controls.Add(_hotkey);
+        Tips.On(_hotkey, Tips.ArmKey);
 
         y += 34;
         var logBtn = new Button { Text = "Open log folder", Bounds = new Rectangle(12, y, 130, 26) };
@@ -186,6 +189,7 @@ public sealed class MainForm : Form
                     "Hide from screen capture", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         };
         Controls.Add(hide);
+        Tips.On(hide, Tips.HideCapture);
 
 
         var diagBtn = new Button
@@ -195,6 +199,7 @@ public sealed class MainForm : Form
         };
         diagBtn.Click += (_, _) => ExportDiagnostics();
         Controls.Add(diagBtn);
+        Tips.On(diagBtn, Tips.Diagnostics);
 
         var sound = new CheckBox
         {
@@ -209,6 +214,7 @@ public sealed class MainForm : Form
             if (sound.Checked) _engine.TestSound();
         };
         Controls.Add(sound);
+        Tips.On(sound, Tips.Ding);
 
         Controls.Add(new Label
         {
@@ -222,6 +228,7 @@ public sealed class MainForm : Form
         gap.Value = Math.Clamp(cfg.SoundGapMs, 0, 120000);
         gap.ValueChanged += (_, _) => { _cfg.SoundGapMs = (int)gap.Value; Save(); };
         Controls.Add(gap);
+        Tips.On(gap, Tips.DingGap);
         Controls.Add(new Label
         {
             Text = "ms",
@@ -255,6 +262,7 @@ public sealed class MainForm : Form
             if (_cfg.SoundOnFire) _engine.SetSoundGain(_cfg.SoundGainDb);
         };
         Controls.Add(vol);
+        Tips.On(vol, Tips.Volume);
         Controls.Add(new Label
         {
             Text = $"dB (max +{MonitorEngine.MaxGainDb})",
@@ -269,10 +277,12 @@ public sealed class MainForm : Form
         };
         rescan.Click += (_, _) => { _engine.RescanMemory(); Log.Write("memory: manual rescan"); };
         Controls.Add(rescan);
+        Tips.On(rescan, Tips.Rescan);
 
         var testBtn = new Button { Text = "Test keys (3s)", Bounds = new Rectangle(12, y, 110, 26) };
         testBtn.Click += (_, _) => TestKeys();
         Controls.Add(testBtn);
+        Tips.On(testBtn, Tips.TestKeys);
 
         y += 32;
         Controls.Add(new Label { Text = "Send by", Bounds = new Rectangle(12, y + 4, 50, 20) });
@@ -290,6 +300,7 @@ public sealed class MainForm : Form
             Save();
         };
         Controls.Add(method);
+        Tips.On(method, Tips.SendBy);
 
         Controls.Add(new Label
         {
@@ -326,6 +337,7 @@ public sealed class MainForm : Form
             Save();
         };
         Controls.Add(mem);
+        Tips.On(mem, Tips.Memory);
 
 
         y += 32;
@@ -410,6 +422,18 @@ public sealed class MainForm : Form
 
         _lastKnownLife = cfg.Life.KnownMax;
         _lastKnownMana = cfg.Mana.KnownMax;
+
+        BackColor = Theme.Bg;
+        ForeColor = Theme.Text;
+        Font = Theme.Ui;
+        Theme.Apply(this);
+
+        _life.Accent = Theme.Bad;
+        _mana.Accent = Theme.Accent;
+        _arm.Font = Theme.Big;
+        _status.Font = Theme.UiBold;
+        _live.Font = Theme.Small;
+        _pin.Font = Theme.UiBold;
 
         SetupTray();
         if (cfg.OverlayOn) ToggleOverlay(true);

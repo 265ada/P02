@@ -44,7 +44,7 @@ public sealed class PreviewForm : Form
 
         _pic.SetBounds(12, 12, pw, ph);
         _pic.SizeMode = PictureBoxSizeMode.StretchImage;
-        _pic.BorderStyle = BorderStyle.FixedSingle;
+        _pic.BorderStyle = BorderStyle.None;
         Controls.Add(_pic);
 
         int cx = pw + 24;
@@ -84,7 +84,12 @@ public sealed class PreviewForm : Form
         _ignoreHue.CheckedChanged += (_, _) =>
         {
             _cfg.IgnoreHue = _ignoreHue.Checked;
-            ApplyHueMode();
+            BackColor = Theme.Bg;
+        ForeColor = Theme.Text;
+        Font = Theme.Ui;
+        Theme.Apply(this);
+
+        ApplyHueMode();
             _onChange();
             Refresh_();
         };

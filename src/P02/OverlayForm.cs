@@ -1,32 +1,39 @@
+using System.Drawing.Drawing2D;
+
 namespace P02;
 
 /// <summary>
-/// A small always-on-top readout: both globes, whether it is armed, and a light
-/// that blinks when a key goes out.
+/// The small readout that sits over the game.
 ///
-/// The full window is far too big to leave over a game, and minimising it means
-/// flying blind. This is the part worth watching while playing.
+/// Drawn by hand rather than assembled from labels. Over a moving, brightly lit
+/// game, text needs its own contrast to stay legible, bars need to read at a
+/// glance rather than be studied, and the whole thing has to stay out of the
+/// way - none of which a grid of grey system controls manages.
 /// </summary>
 public sealed class OverlayForm : Form
 {
-    private readonly LevelBar _life = new();
-    private readonly LevelBar _mana = new();
-    private readonly Label _lifePct = new();
-    private readonly Label _manaPct = new();
-    private readonly Label _armed = new();
-    private readonly Label _fire = new();
-    private readonly Label _detail = new();
-    private readonly Label _count = new();
+    private const int Pad = 10;
+    private const int RowH = 22;
+    private const int BarH = 12;
+
     private readonly System.Windows.Forms.Timer _fade = new();
 
-    /// <summary>Raised when a drag finishes, so the position can be saved.</summary>
-    public event Action? Moved;
+    private GlobeReading _life = new("Life", 0, false);
+    private GlobeReading _mana = new("Mana", 0, false, "off");
+    private double _lifeTrigger = 0.5;
+    private double _manaTrigger = 0.3;
+    private bool _armed;
+    private bool _firing;
+    private int _fired;
+    private bool _inCombat;
+    private string _detail = "";
 
-    private readonly Label _manaCaption;
     private Point _grabbedAt;
     private Point _wasAt;
     private bool _dragging;
-    private bool _manaShown = true;
+
+    /// <summary>Raised when a drag finishes, so the position can be saved.</summary>
+    public event Action? Moved;
 
     public OverlayForm()
     {
@@ -35,69 +42,18 @@ public sealed class OverlayForm : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        ClientSize = new Size(344, 84);
+        DoubleBuffered = true;
+        ClientSize = new Size(268, 96);
 
-        // Only the readouts should be visible over the game. Everything painted
-        // in this exact colour is punched through, so the window has no
-        // background and no border at all - drag it by the text.
+        // Everything painted in this colour is punched through, so the window
+        // is only ever its own contents - no panel sitting over the game.
         BackColor = Color.Magenta;
         TransparencyKey = Color.Magenta;
 
-        AddRow("Life", _life, _lifePct, 4);
-        _manaCaption = AddRow("Mana", _mana, _manaPct, 26);
+        _fade.Interval = 220;
+        _fade.Tick += (_, _) => { _fade.Stop(); _firing = false; Invalidate(); };
 
-        _armed.SetBounds(10, 52, 78, 22);
-        _armed.Font = new Font("Segoe UI", 9, FontStyle.Bold);
-        _armed.BackColor = Color.Transparent;
-        Controls.Add(_armed);
-
-        _detail.SetBounds(92, 52, 128, 22);
-        _detail.Font = new Font("Segoe UI", 9);
-        _detail.ForeColor = Color.FromArgb(190, 190, 195);
-        _detail.BackColor = Color.Transparent;
-        Controls.Add(_detail);
-
-        _fire.SetBounds(214, 52, 60, 22);
-        _fire.TextAlign = ContentAlignment.MiddleRight;
-        _fire.Font = new Font("Segoe UI", 9, FontStyle.Bold);
-        _fire.ForeColor = Color.FromArgb(90, 90, 95);
-        _fire.BackColor = Color.Transparent;
-        _fire.Text = "";
-        Controls.Add(_fire);
-
-        _count.SetBounds(280, 52, 56, 22);
-        _count.TextAlign = ContentAlignment.MiddleRight;
-        _count.Font = new Font("Segoe UI", 9, FontStyle.Bold);
-        _count.ForeColor = Color.FromArgb(200, 200, 205);
-        _count.BackColor = Color.Transparent;
-        Controls.Add(_count);
-
-        _fade.Interval = 260;
-        _fade.Tick += (_, _) =>
-        {
-            _fade.Stop();
-            _fire.Text = "";
-        };
-
-        // Draggable by any part of it - there is no title bar to grab, and the
-        // background is punched through, so only the readouts can be clicked.
-        // Screen coordinates rather than control-relative ones: the previous
-        // attempt added each control's own position to the movement, so the
-        // window bolted across the desktop instead of following the pointer.
-        // The row controls wire themselves as they are built; these are the
-        // ones added afterwards.
-        MakeDraggable(this);
-        MakeDraggable(_armed);
-        MakeDraggable(_detail);
-        MakeDraggable(_fire);
-        MakeDraggable(_count);
-
-        SetArmed(false);
-    }
-
-    private void MakeDraggable(Control c)
-    {
-        c.MouseDown += (_, e) =>
+        MouseDown += (_, e) =>
         {
             if (e.Button != MouseButtons.Left) return;
             _dragging = true;
@@ -105,157 +61,184 @@ public sealed class OverlayForm : Form
             _wasAt = Location;
             Cursor = Cursors.SizeAll;
         };
-
-        c.MouseMove += (_, _) =>
+        MouseMove += (_, _) =>
         {
             if (!_dragging) return;
             var now = Cursor.Position;
             Location = new Point(_wasAt.X + now.X - _grabbedAt.X,
                                  _wasAt.Y + now.Y - _grabbedAt.Y);
         };
-
-        c.MouseUp += (_, _) =>
+        MouseUp += (_, _) =>
         {
+            if (!_dragging) return;
             _dragging = false;
             Cursor = Cursors.Default;
             Moved?.Invoke();
         };
     }
 
-    private Label AddRow(string name, LevelBar bar, Label pct, int y)
+    public void Show(GlobeReading life, GlobeReading mana,
+                     double lifeTrigger, double manaTrigger)
     {
-        var caption = new Label
-        {
-            Text = name,
-            Bounds = new Rectangle(10, y, 34, 18),
-            ForeColor = Color.FromArgb(210, 210, 215),
-            BackColor = Color.Transparent,
-        };
-        Controls.Add(caption);
-        bar.SetBounds(48, y + 1, 238, 15);
-        Controls.Add(bar);
-        bar.BackColor = Color.Transparent;
-        pct.SetBounds(290, y, 46, 18);
-        pct.ForeColor = Color.FromArgb(220, 220, 225);
-        pct.BackColor = Color.Transparent;
-        Controls.Add(pct);
-        MakeDraggable(caption);
-        MakeDraggable(bar);
-        MakeDraggable(pct);
-        return caption;
-    }
+        _life = life;
+        _mana = mana;
+        _lifeTrigger = lifeTrigger;
+        _manaTrigger = manaTrigger;
 
-    /// <summary>
-    /// A globe that is not watched has nothing to say, so it takes no room.
-    /// </summary>
-    private void ShowMana(bool on)
-    {
-        if (on == _manaShown) return;
-        _manaShown = on;
-
-        _manaCaption.Visible = on;
-        _mana.Visible = on;
-        _manaPct.Visible = on;
-
-        int top = on ? 52 : 30;
-        _armed.Top = top;
-        _detail.Top = top;
-        _fire.Top = top;
-        ClientSize = new Size(ClientSize.Width, top + 32);
-    }
-
-    /// <summary>
-    /// Presses sent in this fight, cleared once nothing has hit you for a
-    /// while. A count per fight is what says whether it is behaving; a running
-    /// total since launch says nothing.
-    /// </summary>
-    public void SetFightCount(int fired, bool inCombat)
-    {
-        string text = inCombat || fired > 0 ? fired.ToString() : "";
-        if (_count.Text == text) return;
-        _count.Text = text;
-        _count.ForeColor = inCombat
-            ? Color.FromArgb(235, 200, 110)
-            : Color.FromArgb(140, 140, 145);
-    }
-
-    public void Show(GlobeReading life, GlobeReading mana, double lifeTrigger, double manaTrigger)
-    {
-        ShowMana(!(mana.Note == "off" && !mana.Ok));
-
-        Apply(_life, _lifePct, life, lifeTrigger);
-        if (_manaShown) Apply(_mana, _manaPct, mana, manaTrigger);
-
-        // The actual numbers, not just a percentage: seeing 1,465/1,465 next to
-        // the armed state is what tells you it is reading the right thing.
-        string detail = life.Note.Length > 0
+        _detail = life.Note.Length > 0
             ? life.Note
             : life.TextRaw.Length > 0
                 ? life.TextRaw.Replace("memory, life ", "").Replace("numbers, ", "")
                 : "globe pixels";
-        if (detail.Length > 22) detail = detail[..22];
-        _detail.Text = detail;
-        _detail.ForeColor = life.Note.Length > 0
-            ? Color.FromArgb(235, 110, 90)
-            : life.FromText
-                ? Color.FromArgb(190, 190, 195)
-                : Color.FromArgb(230, 180, 90);
-    }
 
-    private static void Apply(LevelBar bar, Label pct, GlobeReading r, double trigger)
-    {
-        if (!r.Ok)
-        {
-            bar.Value = 0;
-            bar.Below = false;
-            pct.Text = r.Note.Length > 0 ? r.Note : "--";
-            pct.ForeColor = Color.FromArgb(140, 140, 145);
-            return;
-        }
-
-        // A note on a reading that is otherwise fine means nothing is being
-        // sent. Showing the percentage alone made that look like a live
-        // reading, when it is the opposite: a number it does not believe.
-        if (r.Note.Length > 0)
-        {
-            bar.Value = 0;
-            bar.Below = false;
-            pct.Text = "held";
-            pct.ForeColor = Color.FromArgb(235, 110, 90);
-            return;
-        }
-
-        bar.Value = r.Fraction;
-        bar.Below = r.Fraction < trigger;
-        pct.Text = $"{r.Fraction * 100:0} %";
-
-        // Amber when the globe pixels are deciding: those follow energy shield
-        // as well as life, since the shield is drawn over the same globe.
-        pct.ForeColor = r.FromText
-            ? Color.FromArgb(220, 220, 225)
-            : Color.FromArgb(230, 180, 90);
+        FitHeight();
+        Invalidate();
     }
 
     public void SetArmed(bool armed)
     {
-        _armed.Text = armed ? "ARMED" : "disarmed";
-        _armed.ForeColor = armed ? Color.FromArgb(255, 90, 90) : Color.FromArgb(140, 140, 145);
+        _armed = armed;
+        Invalidate();
+    }
+
+    public void SetFightCount(int fired, bool inCombat)
+    {
+        if (fired == _fired && inCombat == _inCombat) return;
+        _fired = fired;
+        _inCombat = inCombat;
+        Invalidate();
     }
 
     /// <summary>Blinks when a key is actually sent.</summary>
     public void Fired()
     {
-        _fire.Text = "FIRING";
-        _fire.ForeColor = Color.FromArgb(120, 230, 130);
+        _firing = true;
+        Invalidate();
         _fade.Stop();
         _fade.Start();
+    }
+
+    /// <summary>A globe that is not watched has nothing to say, so it takes no room.</summary>
+    private bool ManaShown => !(_mana.Note == "off" && !_mana.Ok);
+
+    private void FitHeight()
+    {
+        int h = Pad + RowH + (ManaShown ? RowH : 0) + 30 + Pad;
+        if (ClientSize.Height != h) ClientSize = new Size(ClientSize.Width, h);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+        int y = Pad;
+        Row(g, "Life", _life, _lifeTrigger, y);
+        y += RowH;
+
+        if (ManaShown)
+        {
+            Row(g, "Mana", _mana, _manaTrigger, y);
+            y += RowH;
+        }
+
+        Status(g, y + 6);
+    }
+
+    private void Row(Graphics g, string name, GlobeReading r, double trigger, int y)
+    {
+        Glyph(g, name, Theme.Dim, Theme.Small, Pad, y + 1);
+
+        int barX = Pad + 34;
+        var bar = new Rectangle(barX, y + 3, ClientSize.Width - barX - 54, BarH);
+
+        // A dark bed under the bar: an unbacked bar is unreadable over bright
+        // ground, which is most of a game.
+        using (var bed = new SolidBrush(Color.FromArgb(190, 16, 17, 20)))
+        using (var path = Rounded(bar, BarH / 2))
+            g.FillPath(bed, path);
+
+        bool held = r.Note.Length > 0;
+        if (r.Ok && !held)
+        {
+            int w = (int)Math.Round((bar.Width - 2) * Math.Clamp(r.Fraction, 0, 1));
+            if (w > 3)
+            {
+                var fill = r.Fraction < trigger ? Theme.Bad : Theme.Good;
+                var inner = new Rectangle(bar.X + 1, bar.Y + 1, w, bar.Height - 2);
+                using var brush = new LinearGradientBrush(inner,
+                    ControlPaint.Light(fill, 0.2f), fill, LinearGradientMode.Vertical);
+                using var path = Rounded(inner, (bar.Height - 2) / 2);
+                g.FillPath(brush, path);
+            }
+
+            // Where the trigger sits, so a glance says how much room is left
+            // rather than only where the level is.
+            int tx = bar.X + 1 + (int)((bar.Width - 2) * Math.Clamp(trigger, 0, 1));
+            using var tick = new Pen(Color.FromArgb(170, 255, 255, 255));
+            g.DrawLine(tick, tx, bar.Y + 1, tx, bar.Bottom - 2);
+        }
+
+        using (var edge = new Pen(Color.FromArgb(110, 255, 255, 255)))
+        using (var path = Rounded(bar, BarH / 2))
+            g.DrawPath(edge, path);
+
+        string right = !r.Ok ? (r.Note.Length > 0 ? r.Note : "--")
+                     : held ? "held"
+                     : $"{r.Fraction * 100:0}%";
+        var colour = !r.Ok ? Theme.Dim
+                   : held ? Theme.Warn
+                   : r.Fraction < trigger ? Theme.Bad : Theme.Text;
+        Glyph(g, right, colour, Theme.UiBold, bar.Right + 7, y + 1);
+    }
+
+    private void Status(Graphics g, int y)
+    {
+        Glyph(g, _armed ? "ARMED" : "disarmed",
+              _armed ? Theme.Armed : Theme.Dim, Theme.UiBold, Pad, y);
+
+        string detail = _detail.Length > 24 ? _detail[..24] : _detail;
+        var detailColour = _life.Note.Length > 0 || !_life.FromText ? Theme.Warn : Theme.Dim;
+        Glyph(g, detail, detailColour, Theme.Small, Pad + 60, y + 1);
+
+        if (_firing)
+            Glyph(g, "FIRE", Theme.Good, Theme.UiBold, ClientSize.Width - 76, y);
+
+        if (_inCombat || _fired > 0)
+            Glyph(g, _fired.ToString(), _inCombat ? Theme.Warn : Theme.Dim,
+                  Theme.UiBold, ClientSize.Width - 28, y);
+    }
+
+    /// <summary>
+    /// Text with a dark halo behind it. The ground behind a word changes
+    /// constantly over a game and no single colour stays readable against all
+    /// of it; an outline does.
+    /// </summary>
+    private static void Glyph(Graphics g, string s, Color colour, Font font, int x, int y)
+    {
+        if (s.Length == 0) return;
+        using (var shadow = new SolidBrush(Color.FromArgb(200, 0, 0, 0)))
+            foreach (var (dx, dy) in new[] { (-1, 0), (1, 0), (0, -1), (0, 1) })
+                g.DrawString(s, font, shadow, x + dx, y + dy);
+
+        using var brush = new SolidBrush(colour);
+        g.DrawString(s, font, brush, x, y);
+    }
+
+    private static GraphicsPath Rounded(Rectangle r, int radius)
+    {
+        var path = new GraphicsPath();
+        int d = Math.Max(2, radius * 2);
+        path.AddArc(r.X, r.Y, d, d, 90, 180);
+        path.AddArc(r.Right - d, r.Y, d, d, 270, 180);
+        path.CloseFigure();
+        return path;
     }
 
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
-        // Never read as a globe by our own capture, and never a surprise in a
-        // screenshot either - it is small and the user put it there.
         Native.ExcludeFromCapture(Handle, false);
     }
 

@@ -1,7 +1,7 @@
 namespace P02;
 
 /// <summary>Controls for one globe: on/off, region, trigger point, key.</summary>
-public sealed class GlobePanel : GroupBox
+public sealed class GlobePanel : Card
 {
     private readonly WatcherConfig _cfg;
     private readonly bool _blue;
@@ -55,10 +55,10 @@ public sealed class GlobePanel : GroupBox
 
         Text = title;
         Width = 382;
-        Height = 552;
-        Padding = new Padding(10);
+        Height = 570;
 
-        int y = 24;
+
+        int y = 38;
 
         _enabled.Text = "Watch this globe";
         _enabled.Checked = cfg.Enabled;
@@ -66,6 +66,7 @@ public sealed class GlobePanel : GroupBox
         _enabled.SetBounds(14, y, 200, 24);
         _enabled.CheckedChanged += (_, _) => { _cfg.Enabled = _enabled.Checked; _onChange(); };
         Controls.Add(_enabled);
+        Tips.On(_enabled, Tips.Watch);
         y += 30;
 
         _bar.SetBounds(14, y, 200, 18);
@@ -79,23 +80,28 @@ public sealed class GlobePanel : GroupBox
         _region.SetBounds(70, y + 4, 150, 18);
         _region.Text = cfg.Region.ToString();
         Controls.Add(_region);
+        Tips.On(_region, Tips.Region);
         y += 26;
 
         var setBtn = new Button { Text = "Set…", Bounds = new Rectangle(70, y, 56, 26) };
         setBtn.Click += (_, _) => PickRegion();
         Controls.Add(setBtn);
+        Tips.On(setBtn, Tips.SetRegion);
 
         var autoBtn = new Button { Text = "Auto-find", Bounds = new Rectangle(130, y, 72, 26) };
         autoBtn.Click += (_, _) => AutoFind();
         Controls.Add(autoBtn);
+        Tips.On(autoBtn, Tips.AutoFind);
 
         var calBtn = new Button { Text = "Full = 100%", Bounds = new Rectangle(206, y, 86, 26) };
         calBtn.Click += (_, _) => CalibrateFull();
         Controls.Add(calBtn);
+        Tips.On(calBtn, Tips.FullHundred);
 
         var prevBtn = new Button { Text = "Check", Bounds = new Rectangle(296, y, 56, 26) };
         prevBtn.Click += (_, _) => Preview();
         Controls.Add(prevBtn);
+        Tips.On(prevBtn, Tips.Check);
         y += 30;
 
         var numBtn = new Button { Text = "Numbers...", Bounds = new Rectangle(296, y, 76, 26) };
@@ -136,6 +142,7 @@ public sealed class GlobePanel : GroupBox
         _threshold.ValueChanged += (_, _) =>
             { _cfg.Threshold = (double)_threshold.Value / 100.0; _onChange(); };
         Controls.Add(_threshold);
+        Tips.On(_threshold, Tips.FireBelow);
         Controls.Add(Lab("%", 156, y + 4));
 
         Controls.Add(Lab("Key", 190, y + 4));
@@ -154,6 +161,7 @@ public sealed class GlobePanel : GroupBox
         _cooldown.ValueChanged += (_, _) =>
             { _cfg.CooldownMs = (int)_cooldown.Value; _onChange(); };
         Controls.Add(_cooldown);
+        Tips.On(_cooldown, Tips.Cooldown);
         Controls.Add(Lab("ms", 170, y + 4));
         y += 32;
 
@@ -165,6 +173,7 @@ public sealed class GlobePanel : GroupBox
         _panicBelow.ValueChanged += (_, _) =>
             { _cfg.PanicBelow = (double)_panicBelow.Value / 100.0; _onChange(); };
         Controls.Add(_panicBelow);
+        Tips.On(_panicBelow, Tips.PanicBelow);
         Controls.Add(Lab("%", 156, y + 4));
 
         Controls.Add(Lab("gap", 190, y + 4));
@@ -176,6 +185,7 @@ public sealed class GlobePanel : GroupBox
         _panicGap.ValueChanged += (_, _) =>
             { _cfg.PanicCooldownMs = (int)_panicGap.Value; _onChange(); };
         Controls.Add(_panicGap);
+        Tips.On(_panicGap, Tips.PanicGap);
         y += 30;
 
         Controls.Add(Lab("Emergency below", 14, y + 4));
@@ -224,6 +234,7 @@ public sealed class GlobePanel : GroupBox
         _burst.ValueChanged += (_, _) =>
             { _cfg.BurstCount = (int)_burst.Value; RefreshBurstTime(); _onChange(); };
         Controls.Add(_burst);
+        Tips.On(_burst, Tips.Presses);
 
         Controls.Add(new Label
         {
@@ -242,6 +253,7 @@ public sealed class GlobePanel : GroupBox
         _hold.ValueChanged += (_, _) =>
         { _cfg.HoldMs = (int)_hold.Value; RefreshBurstTime(); _onChange(); };
         Controls.Add(_hold);
+        Tips.On(_hold, Tips.Hold);
         Controls.Add(Lab("ms", 204, y + 4));
 
         Controls.Add(new Label
@@ -266,6 +278,7 @@ public sealed class GlobePanel : GroupBox
             _onChange();
         };
         Controls.Add(_knownMax);
+        Tips.On(_knownMax, Tips.KnownMax);
         Controls.Add(new Label
         {
             Bounds = new Rectangle(218, y + 4, 150, 18),
