@@ -120,7 +120,6 @@ public sealed class MonitorEngine : IDisposable
         public double FracAtFire;
         public double MaxSinceFire;
         public int NoEffect;
-        public long RecoveringUntilMs;
         public long LastWouldFireMs = long.MinValue / 2;
         public long BlindSinceMs;
         public bool Blind;
@@ -246,20 +245,35 @@ public sealed class MonitorEngine : IDisposable
         if (st.Verifying)
         {
             st.MaxSinceFire = Math.Max(st.MaxSinceFire, frac);
-            if (st.MaxSinceFire > st.FracAtFire + 0.015)
+
+            // Every class regenerates, and life and spell leech both refill the
+            // globe as well, so any rise at all proves nothing. Only a jump
+            // large enough that regen could not have produced it inside the
+            // window is worth calling a flask - and even that is a hint, not a
+            // fact. Nothing here is allowed to gate firing.
+            double rise = st.MaxSinceFire - st.FracAtFire;
+            if (rise >= 0.05)
             {
                 st.Verifying = false;
                 st.NoEffect = 0;
-                st.RecoveringUntilMs = now + 600;
                 EffectChecked?.Invoke(name, true, 0);
             }
             else if (now - st.FireMs > c.VerifyWindowMs)
             {
                 st.Verifying = false;
-                st.NoEffect++;
-                Log.Write($"{name}: press had no effect ({st.NoEffect} in a row) - "
-                          + "no charges, wrong key, or input not reaching the game");
-                EffectChecked?.Invoke(name, false, st.NoEffect);
+                if (rise <= 0.005)
+                {
+                    st.NoEffect++;
+                    Log.Write($"{name}: globe did not move after the press "
+                              + $"({st.NoEffect} in a row) - no charges, wrong key, or "
+                              + "input not reaching the game");
+                }
+                else
+                {
+                    Log.Write($"{name}: globe rose {rise:P1} after the press - too little to "
+                              + "tell a flask from regen or leech");
+                }
+                EffectChecked?.Invoke(name, false, rise <= 0.005 ? st.NoEffect : 0);
             }
         }
 
@@ -295,10 +309,12 @@ public sealed class MonitorEngine : IDisposable
             return new GlobeReading(name, frac, true);
         }
 
-        // A globe that reads flat zero is usually one we cannot see at all —
-        // dead, loading, or covered. The logs from a real session showed over a
-        // thousand presses fired into exactly this state.
-        if (frac <= c.IgnoreBelow)
+        // Only refuse when the globe has been unreadable for a while. Judging
+        // a single low reading as "cannot see it" also refused to fire at 1%
+        // life - the exact moment it is needed most. A globe that was reading
+        // 60% a second ago and now reads 1% is not unreadable, it is nearly
+        // dead.
+        if (st.Blind)
         {
             st.Below = 0;
             return new GlobeReading(name, frac, true);
@@ -318,12 +334,6 @@ public sealed class MonitorEngine : IDisposable
         // A burst still going out means the previous request has not even
         // finished leaving; asking for another only builds a backlog.
         if (_keys.Busy)
-            return new GlobeReading(name, frac, true);
-
-        // Recovery is already running and working. Stacking another flask on
-        // top spends a charge for recovery that will be cut off the moment the
-        // globe fills, so this is optional and off by default.
-        if (c.SkipWhileRecovering && now < st.RecoveringUntilMs)
             return new GlobeReading(name, frac, true);
 
         int shots = Math.Clamp(c.BurstCount, 1, 5);

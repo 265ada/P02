@@ -543,18 +543,24 @@ public sealed class GlobePanel : GroupBox
     {
         if (worked)
         {
-            _effect.Text = "Last press: the globe rose, so it worked.";
+            // Deliberately not "it worked": regen and leech raise the globe too.
+            _effect.Text = "Last press: the globe jumped, which looks like a flask.";
             _effect.ForeColor = Color.FromArgb(0, 120, 0);
         }
         else if (noEffectStreak >= 3)
         {
-            _effect.Text = $"Last {noEffectStreak} presses did nothing. Check the key, "
-                         + "your charges, and Hold each press.";
+            _effect.Text = $"Last {noEffectStreak} presses moved nothing at all. Check the "
+                         + "key, your charges, and Hold each press.";
             _effect.ForeColor = Color.FromArgb(190, 60, 0);
+        }
+        else if (noEffectStreak > 0)
+        {
+            _effect.Text = $"Last press: the globe did not move ({noEffectStreak} in a row).";
+            _effect.ForeColor = SystemColors.GrayText;
         }
         else
         {
-            _effect.Text = $"Last press: no change ({noEffectStreak} in a row).";
+            _effect.Text = "Last press: the globe rose a little - could be regen or leech.";
             _effect.ForeColor = SystemColors.GrayText;
         }
     }

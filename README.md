@@ -234,16 +234,18 @@ documented cooldown between uses - the real limit is charges, and a press with
 none available does nothing at all. Pressing again mid-recovery costs another
 charge for recovery that will be cut short anyway.
 
-So P02 checks. After firing it watches the globe for a second: a press that
-worked shows up as the globe climbing. One that changes nothing means no
-charges, the wrong key, or input not reaching the game - and the panel says so,
-loudly after three in a row. That is the difference between "it is not
-detecting" and "it is detecting fine and the key is going nowhere", which is
-otherwise very hard to tell apart.
+So P02 watches the globe for a second after firing - but only as a hint, and it
+never gates firing. **Every class regenerates, and life and spell leech refill
+the globe as well**, so a rise on its own proves nothing. Only the two ends of
+the scale mean anything:
 
-**Skip while recovering** holds off while a recovery that is already working is
-still running, which saves charges. It is off by default: while something is
-hitting you hard, stacking another flask is usually the right call.
+- **A large jump** looks like a flask, because regen could not do that inside a
+  second.
+- **No movement at all** means nothing healed you: no charges, the wrong key, or
+  input not reaching the game. That one is worth acting on, and the panel says
+  so loudly after three in a row.
+- Anything in between is reported as exactly that - a small rise that could be
+  regen or leech.
 
 ## A globe reading 0% forever
 
@@ -259,9 +261,9 @@ screen does not trip it.
 Two things follow from a globe reading 0%, and they pull in opposite directions,
 which is what made this so confusing to diagnose:
 
-- **It will not fire.** Readings at or under Ignore below count as "cannot see
-  the globe", so nothing is sent - correctly, since pressing into an unreadable
-  globe just burns charges.
+- **It will not fire**, once the globe has read nothing for eight seconds
+  straight. A *single* low reading is never treated that way - doing so refused
+  to fire at 1% life, which is the exact moment it is needed most.
 - **It used to ding anyway.** The disarmed would-fire ding did not apply that
   same rule, so it chirped continuously about a globe it could not read. The
   sound looked like proof that keys were being sent when the firing path was

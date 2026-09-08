@@ -50,9 +50,9 @@ public sealed class WatcherConfig
     // --- emergency response ---------------------------------------------
 
     /// <summary>
-    /// Readings at or below this are treated as "cannot see the globe" rather
-    /// than "empty": a death screen, a loading screen, or something covering
-    /// the corner. Pressing into those achieves nothing and burns charges.
+    /// What counts as "no reading" when deciding a globe has gone blind. A
+    /// single reading this low is NOT treated as unreadable - that refused to
+    /// fire at 1% life - only one that stays there for several seconds.
     /// </summary>
     public double IgnoreBelow { get; set; } = 0.02;
 
@@ -74,18 +74,15 @@ public sealed class WatcherConfig
     // wrong key, or input not reaching the game - and nothing else in P02 can
     // tell those apart from a press that simply had no room to heal.
 
-    /// <summary>Watch the globe after firing to see whether the press did anything.</summary>
+    /// <summary>
+    /// Watch the globe after firing. Only ever a hint: every class regenerates,
+    /// and life and spell leech refill the globe too, so a rise cannot prove a
+    /// flask fired. It never gates firing.
+    /// </summary>
     public bool VerifyEffect { get; set; } = true;
 
     /// <summary>How long to wait for the globe to start rising.</summary>
     public int VerifyWindowMs { get; set; } = 900;
-
-    /// <summary>
-    /// Hold off while a recovery that is already working is still running.
-    /// Saves charges, but off by default: while something is hitting you hard,
-    /// stacking another flask on top is usually the right call.
-    /// </summary>
-    public bool SkipWhileRecovering { get; set; }
 
     /// <summary>Presses sent per trigger. Raise if one charge is not enough.</summary>
     public int BurstCount { get; set; } = 1;
