@@ -293,6 +293,24 @@ touches the keyboard state that raw input reads. Which applies is a matter for
 testing, so both are there. If the ding sounds and nothing happens in game,
 this is worth trying before anything else.
 
+## Which source is fastest
+
+Worst case for how old the number being acted on can be:
+
+| Source | Refreshes | Can be behind by |
+|---|---|---|
+| **Game memory** | every 15 ms | **65 ms** |
+| Numbers on screen | 60-160 ms | 110-210 ms |
+| Globe pixels | one poll | one poll |
+
+Memory is the responsive one by a distance, which is the argument for turning it
+on. The numbers read faster - every 60 ms instead of 160 - whenever anything is
+within 15 points of its trigger, since reading flat out while healthy is wasted
+work and reading lazily while dropping is exactly wrong.
+
+The status line shows the age of the reading actually being used, so this is
+measurable rather than a matter of opinion.
+
 ## Speed, and what is actually achievable
 
 A globe that is switched off is not captured at all. That sounds obvious, but

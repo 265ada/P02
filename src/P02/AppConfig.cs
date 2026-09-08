@@ -70,6 +70,15 @@ public sealed class WatcherConfig
     /// </summary>
     public int RequireTextMs { get; set; } = 2000;
 
+    /// <summary>
+    /// How stale an exact reading may be and still be acted on.
+    ///
+    /// Short on purpose. A missed OCR frame is one interval; a loading screen
+    /// is seconds. Carrying a reading for two seconds meant portalling out at
+    /// low life kept firing at a value frozen from before the load.
+    /// </summary>
+    public int ActOnStaleMs { get; set; } = 400;
+
     /// <summary>Fire when the globe falls below this fraction (0-1).</summary>
     public double Threshold { get; set; } = 0.50;
 

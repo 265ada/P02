@@ -327,7 +327,7 @@ static class T
         // vanish and the pixels read the loading screen.
         {
             int bad = 0;
-            const int grace = 2000;
+            const int grace = 400;
 
             void Case(string what, bool better, bool exactNow, bool hadExact,
                       long since, long now, double wantFrac, bool wantHold)
@@ -351,9 +351,11 @@ static class T
 
             // Numbers gone for a moment: carry the last exact value, do NOT
             // fall to the pixels, which read 0% on a loading screen.
-            Case("gone 500ms, carries last", true, false, true, 9_500, 10_000, 0.95, false);
+            Case("gone 200ms, carries last", true, false, true, 9_800, 10_000, 0.95, false);
 
-            // Gone too long: hold fire outright.
+            // A loading screen is seconds, not one missed frame. Acting on a
+            // value frozen from before the load is what fired through them.
+            Case("gone 500ms, holds", true, false, true, 9_500, 10_000, 0.95, true);
             Case("gone 3s, holds", true, false, true, 7_000, 10_000, 0.95, true);
 
             // Never worked: holds immediately, no grace at all.

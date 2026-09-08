@@ -33,6 +33,9 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>Life has dropped recently enough to still count as fighting.</summary>
     public bool InCombat { get; private set; }
 
+    /// <summary>How old the life reading being acted on is, in milliseconds.</summary>
+    public long ReadingAgeMs { get; private set; }
+
     /// <summary>Title of whatever window currently has focus, for the UI.</summary>
     public string ForegroundTitle { get; private set; } = "";
 
@@ -371,6 +374,16 @@ public sealed class MonitorEngine : IDisposable
                     lastLife = lr.Fraction;
                 }
 
+                // Read the numbers harder when anything is near its trigger.
+                // Reading flat out all the time is wasted work while healthy,
+                // and reading lazily is exactly wrong while dropping.
+                bool nearTrouble =
+                    (lr.Ok && _cfg.Life.Enabled && lr.Fraction < _cfg.Life.Threshold + 0.15)
+                    || (mr.Ok && _cfg.Mana.Enabled && mr.Fraction < _cfg.Mana.Threshold + 0.15)
+                    || (sr.Ok && _cfg.Shield.Enabled
+                        && sr.Fraction < _cfg.Shield.Threshold + 0.15);
+                _ocr.SetInterval(nearTrouble ? 60 : 160);
+
                 bool fighting = t0 - lastDropMs < _cfg.CombatGraceMs;
                 if (fighting != InCombat)
                 {
@@ -476,6 +489,8 @@ public sealed class MonitorEngine : IDisposable
             // The pixels are crude but they are never wildly wrong. A text
             // reading that disagrees with them by this much is a misread, not a
             // correction, so the pixels win and the disagreement is logged.
+            if (name == "Life") ReadingAgeMs = textAge;
+
             if (textAge < 1200 && Math.Abs(tr.Fraction - frac) <= 0.40)
             {
                 frac = tr.Fraction;
@@ -694,7 +709,7 @@ public sealed class MonitorEngine : IDisposable
         // every charge on it.
         bool sourceLost = betterWanted && !fromText
                           && (!st.HadGoodSource
-                              || now - st.NoGoodSourceSinceMs > c.RequireTextMs);
+                              || now - st.NoGoodSourceSinceMs > c.ActOnStaleMs);
 
         if (sourceLost || textLost || Unreadable(frac, now, st.LastGoodMs, c))
         {
@@ -774,8 +789,11 @@ public sealed class MonitorEngine : IDisposable
         // pixels do not get to fill in.
         if (!hadExact) return new SourceChoice(pixelFrac, true, false);
 
-        bool expired = nowMs - sinceMs > graceMs;
-        return new SourceChoice(lastExactFrac, expired, false);
+        // The carried value is shown either way, but it is only acted on
+        // briefly. A missed frame is one interval; a loading screen is seconds,
+        // and a value frozen from before the load kept firing right through it.
+        bool tooOld = nowMs - sinceMs > graceMs;
+        return new SourceChoice(lastExactFrac, tooOld, false);
     }
 
     /// <summary>

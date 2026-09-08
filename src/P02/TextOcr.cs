@@ -139,6 +139,11 @@ internal sealed partial class TextOcr : IDisposable
             return _slots.TryGetValue(name, out var slot) ? slot.Suggested : 0;
     }
 
+    private int _intervalMs = 160;
+
+    /// <summary>How often to read, in milliseconds.</summary>
+    public void SetInterval(int ms) => Volatile.Write(ref _intervalMs, Math.Clamp(ms, 40, 1000));
+
     public long NowMs => _clock.ElapsedMilliseconds;
 
     private void Run()
@@ -161,9 +166,11 @@ internal sealed partial class TextOcr : IDisposable
                 Log.Write($"ocr loop: {ex.Message}");
             }
 
-            // Six times a second is plenty: this corrects and confirms the
-            // pixel reading, which runs far faster.
-            _stop.Token.WaitHandle.WaitOne(160);
+            // Reading rate follows how close to trouble you are. Six times a
+            // second is plenty while healthy and far too slow while dropping:
+            // at that rate a reading can be a fifth of a second old before it
+            // is even looked at.
+            _stop.Token.WaitHandle.WaitOne(Volatile.Read(ref _intervalMs));
         }
     }
 
