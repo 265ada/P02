@@ -19,7 +19,8 @@ public sealed class OverlayForm : Form
     private readonly System.Windows.Forms.Timer _fade = new();
 
     private readonly Label _manaCaption;
-    private Point _dragFrom;
+    private Point _grabbedAt;
+    private Point _wasAt;
     private bool _dragging;
     private bool _manaShown = true;
 
@@ -67,21 +68,45 @@ public sealed class OverlayForm : Form
             _fire.Text = "";
         };
 
-        // Draggable by any part of it: there is no title bar worth grabbing.
-        foreach (Control c in new Control[] { this, _armed, _fire, _detail, _lifePct, _manaPct })
-        {
-            c.MouseDown += (_, e) => { _dragging = true; _dragFrom = e.Location; };
-            c.MouseMove += (s, e) =>
-            {
-                if (!_dragging) return;
-                var origin = s == this ? Point.Empty : ((Control)s!).Location;
-                Location = new Point(Location.X + origin.X + e.X - _dragFrom.X,
-                                     Location.Y + origin.Y + e.Y - _dragFrom.Y);
-            };
-            c.MouseUp += (_, _) => _dragging = false;
-        }
+        // Draggable by any part of it - there is no title bar to grab, and the
+        // background is punched through, so only the readouts can be clicked.
+        // Screen coordinates rather than control-relative ones: the previous
+        // attempt added each control's own position to the movement, so the
+        // window bolted across the desktop instead of following the pointer.
+        // The row controls wire themselves as they are built; these are the
+        // ones added afterwards.
+        MakeDraggable(this);
+        MakeDraggable(_armed);
+        MakeDraggable(_detail);
+        MakeDraggable(_fire);
 
         SetArmed(false);
+    }
+
+    private void MakeDraggable(Control c)
+    {
+        c.MouseDown += (_, e) =>
+        {
+            if (e.Button != MouseButtons.Left) return;
+            _dragging = true;
+            _grabbedAt = Cursor.Position;
+            _wasAt = Location;
+            Cursor = Cursors.SizeAll;
+        };
+
+        c.MouseMove += (_, _) =>
+        {
+            if (!_dragging) return;
+            var now = Cursor.Position;
+            Location = new Point(_wasAt.X + now.X - _grabbedAt.X,
+                                 _wasAt.Y + now.Y - _grabbedAt.Y);
+        };
+
+        c.MouseUp += (_, _) =>
+        {
+            _dragging = false;
+            Cursor = Cursors.Default;
+        };
     }
 
     private Label AddRow(string name, LevelBar bar, Label pct, int y)
@@ -101,6 +126,9 @@ public sealed class OverlayForm : Form
         pct.ForeColor = Color.FromArgb(220, 220, 225);
         pct.BackColor = Color.Transparent;
         Controls.Add(pct);
+        MakeDraggable(caption);
+        MakeDraggable(bar);
+        MakeDraggable(pct);
         return caption;
     }
 
