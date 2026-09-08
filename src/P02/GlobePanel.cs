@@ -896,6 +896,17 @@ public sealed class GlobePanel : GroupBox
         _warn.ForeColor = Color.FromArgb(0, 100, 0);
     }
 
+    /// <summary>Re-reads settings that something else has changed.</summary>
+    public void RefreshFromConfig()
+    {
+        _region.Text = _cfg.Region.ToString();
+        _numbers.Text = _cfg.TextRegion.IsValid
+            ? "Numbers: set - waiting for a reading"
+            : "Deciding: globe pixels - these follow energy shield too";
+        _numbers.ForeColor = SystemColors.GrayText;
+        RefreshWarning();
+    }
+
     /// <summary>Called from the UI thread with the latest reading.</summary>
     public void Update(GlobeReading r)
     {

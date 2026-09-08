@@ -386,6 +386,81 @@ internal sealed partial class TextOcr : IDisposable
         return bmp;
     }
 
+    /// <summary>
+    /// Finds the HUD lines by their labels and returns where each one is.
+    ///
+    /// The engine reports where every word it read was, so there is no need for
+    /// anyone to drag boxes around text: look in the corners of the game for
+    /// the word "Life", and the numbers beside it are the region.
+    /// </summary>
+    public Dictionary<string, Rectangle> FindLabelled(Rectangle search,
+                                                      IEnumerable<string> labels)
+    {
+        var found = new Dictionary<string, Rectangle>(StringComparer.OrdinalIgnoreCase);
+        if (_engine is null) return found;
+
+        const int scale = 2;
+        using var cap = new ScreenCapture();
+        if (!cap.Grab(search)) return found;
+
+        using var shot = ToBitmap(cap.Buffer, cap.Width, cap.Height);
+        using var big = Upscale(shot, scale);
+
+        OcrResult result;
+        try
+        {
+            using var ms = new MemoryStream();
+            big.Save(ms, ImageFormat.Bmp);
+            ms.Position = 0;
+            var decoder = BitmapDecoder.CreateAsync(ms.AsRandomAccessStream())
+                                       .AsTask().GetAwaiter().GetResult();
+            using var soft = decoder.GetSoftwareBitmapAsync(
+                BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied)
+                .AsTask().GetAwaiter().GetResult();
+            result = _engine.RecognizeAsync(soft).AsTask().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"find numbers failed: {ex.Message}");
+            return found;
+        }
+
+        foreach (var line in result.Lines)
+        {
+            // Only a line that carries a pair of numbers is a stat line; the
+            // word alone appears in plenty of other places.
+            if (!PairPattern().IsMatch(line.Text)) continue;
+
+            foreach (string label in labels)
+            {
+                if (found.ContainsKey(label)) continue;
+                if (!line.Text.Contains(label, StringComparison.OrdinalIgnoreCase)) continue;
+
+                double l = double.MaxValue, t = double.MaxValue, r = 0, b = 0;
+                foreach (var w in line.Words)
+                {
+                    l = Math.Min(l, w.BoundingRect.X);
+                    t = Math.Min(t, w.BoundingRect.Y);
+                    r = Math.Max(r, w.BoundingRect.X + w.BoundingRect.Width);
+                    b = Math.Max(b, w.BoundingRect.Y + w.BoundingRect.Height);
+                }
+                if (r <= l || b <= t) continue;
+
+                // Back to screen coordinates, with a little room around it so
+                // the glyphs are not clipped on the next read.
+                const int pad = 6;
+                found[label] = new Rectangle(
+                    search.X + (int)(l / scale) - pad,
+                    search.Y + (int)(t / scale) - pad,
+                    (int)((r - l) / scale) + pad * 2,
+                    (int)((b - t) / scale) + pad * 2);
+                Log.Write($"found \"{label}\" at {found[label]} reading \"{line.Text}\"");
+            }
+        }
+
+        return found;
+    }
+
     /// <summary>One-off read, for the setup button to show what it sees.</summary>
     public string ProbeOnce(Rectangle region)
     {

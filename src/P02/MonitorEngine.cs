@@ -124,6 +124,52 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>A maximum the numbers keep showing that disagrees with yours.</summary>
     public int SuggestedMax(string name) => _ocr.SuggestedMax(name);
 
+    /// <summary>
+    /// Sets up every stat line it can find in one go: the numbers in the game's
+    /// bottom corners, located by their own labels.
+    /// </summary>
+    public string FindAllNumbers()
+    {
+        if (!_ocr.Available) return "Windows OCR is not available on this machine.";
+
+        var area = Native.FindWindowRect(_cfg.WindowMatch)
+                   ?? (Screen.PrimaryScreen ?? Screen.AllScreens[0]).Bounds;
+
+        // Life, shield and ward sit in one corner and mana in the other, so
+        // look along the bottom of the game rather than at all of it.
+        int w = Math.Max(320, (int)(area.Width * 0.28));
+        int h = Math.Max(200, (int)(area.Height * 0.40));
+        var left = new Rectangle(area.Left, area.Bottom - h, w, h);
+        var right = new Rectangle(area.Right - w, area.Bottom - h, w, h);
+
+        var hits = _ocr.FindLabelled(left, ["Life", "Shield"]);
+        foreach (var (k, v) in _ocr.FindLabelled(right, ["Mana"])) hits[k] = v;
+
+        // Some layouts put them all together; if mana was not on the right,
+        // look where life was.
+        if (!hits.ContainsKey("Mana"))
+            foreach (var (k, v) in _ocr.FindLabelled(left, ["Mana"])) hits[k] = v;
+
+        var done = new List<string>();
+        foreach (var (label, cfg) in new[]
+                 { ("Life", _cfg.Life), ("Mana", _cfg.Mana), ("Shield", _cfg.Shield) })
+        {
+            if (!hits.TryGetValue(label, out var r)) continue;
+            cfg.TextRegion = Box.From(r);
+            cfg.TextLabel = label;
+            cfg.UseText = true;
+            done.Add(label);
+        }
+
+        SyncTextRegions();
+        if (done.Count == 0)
+            return "Could not find the numbers. Is the game on screen, with life and mana "
+                 + "showing? They are only drawn during play.";
+
+        return "Found " + string.Join(", ", done)
+             + ". These now decide when to fire - no calibration needed.";
+    }
+
     /// <summary>Reads a region once, for the setup button.</summary>
     public string ProbeText(Rectangle r) => _ocr.ProbeOnce(r);
 

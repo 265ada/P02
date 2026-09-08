@@ -43,8 +43,11 @@ roughly two seconds on first use. If more than one candidate matches, the
 numbers read off the screen pick between them, and failing that it watches which
 one moves.
 
-**Numbers on screen** - point it at the `1,465/1,465` beside the globe, and
-**include the word "Life"** in the box.
+**Numbers on screen** - press **Find numbers** and it locates them itself. The
+OCR engine reports where every word it reads was, so there is no need to drag a
+box around anything: it looks in the corners of the game for the words Life,
+Mana and Shield, and the numbers beside them are the region. Setting a box by
+hand still works, and should **include the label word**.
 
 That word matters. A box around the life numbers almost always catches shield
 and ward as well, and those are number pairs too - ward at 90/90 read as life
@@ -153,9 +156,12 @@ whenever it is the pixels. The pixel path produces a
 
 1. Start the game **borderless fullscreen** and get to a safe spot with both
    globes full.
-2. Run `P02.exe` and press **Numbers…**, then drag a box around the
-   `1,465/1,465` text beside the globe. It tells you what it read. That is the
-   whole setup - no calibration needed.
+2. Run `P02.exe` and press **Find numbers**. It looks in the corners of the
+   game for the words Life, Mana and Shield and points itself at whatever it
+   finds. That is the whole setup - no boxes to drag, no calibration.
+
+   If it cannot find them, **Numbers…** on a panel lets you drag the box
+   yourself; include the label word.
 3. Optionally set up the globe itself as a fallback: **Auto-find**, then
    **Full = 100%** while topped up, then spend it down and press **Empty = 0%**.
 4. Set the trigger percentage and click the key box, then press the key you want

@@ -33,9 +33,9 @@ public sealed class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(800, 778);
+        ClientSize = new Size(900, 778);
 
-        _pin.SetBounds(764, 6, 24, 22);
+        _pin.SetBounds(864, 6, 24, 22);
         _pin.Text = "P";
         _pin.Font = new Font("Segoe UI", 8, FontStyle.Bold);
         _pin.FlatStyle = FlatStyle.System;
@@ -50,7 +50,7 @@ public sealed class MainForm : Form
         Controls.Add(new Label
         {
             Text = "pin a small readout over the game",
-            Bounds = new Rectangle(520, 10, 240, 18),
+            Bounds = new Rectangle(620, 10, 240, 18),
             TextAlign = ContentAlignment.MiddleRight,
             ForeColor = SystemColors.GrayText,
         });
@@ -134,10 +134,19 @@ public sealed class MainForm : Form
             await Updater.CheckAsync(this, silent: false, beforeExit: _cfg.SaveNow);
         Controls.Add(updBtn);
 
+        var findAll = new Button
+        {
+            Text = "Find numbers",
+            Bounds = new Rectangle(298, y, 130, 26),
+        };
+        findAll.Click += (_, _) => FindAllNumbers();
+        Controls.Add(findAll);
+
+
         var upd = new CheckBox
         {
             Text = "Check at launch",
-            Bounds = new Rectangle(436, y + 3, 118, 22),
+            Bounds = new Rectangle(586, y + 3, 118, 22),
             Checked = cfg.CheckUpdatesOnStart,
         };
         upd.CheckedChanged += (_, _) =>
@@ -147,7 +156,7 @@ public sealed class MainForm : Form
         var hide = new CheckBox
         {
             Text = "Hide from capture",
-            Bounds = new Rectangle(560, y + 3, 136, 22),
+            Bounds = new Rectangle(712, y + 3, 140, 22),
             Checked = cfg.HideFromCapture,
         };
         hide.CheckedChanged += (_, _) =>
@@ -170,7 +179,7 @@ public sealed class MainForm : Form
         var diagBtn = new Button
         {
             Text = "Export diagnostics",
-            Bounds = new Rectangle(298, y, 130, 26),
+            Bounds = new Rectangle(436, y, 140, 26),
         };
         diagBtn.Click += (_, _) => ExportDiagnostics();
         Controls.Add(diagBtn);
@@ -209,7 +218,7 @@ public sealed class MainForm : Form
         var disarmedDing = new CheckBox
         {
             Text = "when disarmed",
-            Bounds = new Rectangle(686, y + 36, 104, 22),
+            Bounds = new Rectangle(700, y + 36, 116, 22),
             Checked = cfg.SoundWhenDisarmed,
         };
         disarmedDing.CheckedChanged += (_, _) =>
@@ -243,7 +252,7 @@ public sealed class MainForm : Form
         var rescan = new Button
         {
             Text = "Re-scan",
-            Bounds = new Rectangle(702, y - 32, 86, 26),
+            Bounds = new Rectangle(766, y + 32, 96, 26),
         };
         rescan.Click += (_, _) => { _engine.RescanMemory(); Log.Write("memory: manual rescan"); };
         Controls.Add(rescan);
@@ -272,14 +281,14 @@ public sealed class MainForm : Form
         Controls.Add(new Label
         {
             Text = "posted reaches an unfocused window; try it if injected is ignored",
-            Bounds = new Rectangle(220, y + 4, 372, 20),
+            Bounds = new Rectangle(220, y + 4, 380, 20),
             ForeColor = SystemColors.GrayText,
         });
 
         var mem = new CheckBox
         {
             Text = "Read game memory",
-            Bounds = new Rectangle(600, y + 2, 150, 22),
+            Bounds = new Rectangle(608, y + 2, 150, 22),
             Checked = cfg.UseMemory,
         };
         mem.CheckedChanged += (_, _) =>
@@ -307,7 +316,7 @@ public sealed class MainForm : Form
 
 
         y += 32;
-        _live.SetBounds(12, y, 776, 20);
+        _live.SetBounds(12, y, 876, 20);
         _live.ForeColor = SystemColors.GrayText;
         Controls.Add(_live);
 
@@ -684,6 +693,28 @@ public sealed class MainForm : Form
     /// Writes a shareable bundle: a readable report, the recent log, the
     /// config, and what the detector currently sees in each globe.
     /// </summary>
+    /// <summary>
+    /// One button for the whole setup: hide, look at the game, find every stat
+    /// line by its label, and point the watchers at them.
+    /// </summary>
+    private void FindAllNumbers()
+    {
+        Hide();
+        Thread.Sleep(350);
+        string result;
+        try { result = _engine.FindAllNumbers(); }
+        finally { Show(); }
+
+        Save();
+        _life.RefreshFromConfig();
+        _mana.RefreshFromConfig();
+
+        MessageBox.Show(this, result, "Find numbers", MessageBoxButtons.OK,
+                        result.StartsWith("Found")
+                            ? MessageBoxIcon.Information
+                            : MessageBoxIcon.Warning);
+    }
+
     private void ExportDiagnostics()
     {
         try
