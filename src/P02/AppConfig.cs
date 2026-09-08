@@ -79,6 +79,20 @@ public sealed class WatcherConfig
     /// </summary>
     public int ActOnStaleMs { get; set; } = 400;
 
+    /// <summary>
+    /// Stop pressing for this long after several presses in a row change
+    /// nothing.
+    ///
+    /// P02 cannot see your charges, so without this it keeps pressing into an
+    /// empty flask - which is where "it ate everything instantly and then did
+    /// nothing" comes from. If a press does not move the pool, more presses
+    /// will not either, so it waits and lets charges come back.
+    /// </summary>
+    public int NoEffectBackoffMs { get; set; } = 3000;
+
+    /// <summary>Presses in a row that must do nothing before backing off.</summary>
+    public int NoEffectBefore { get; set; } = 3;
+
     /// <summary>Fire when the globe falls below this fraction (0-1).</summary>
     public double Threshold { get; set; } = 0.50;
 

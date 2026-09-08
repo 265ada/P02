@@ -321,6 +321,7 @@ public sealed class MonitorEngine : IDisposable
         public bool HadGoodSource;
         public double LastGoodFrac;
         public bool UberUsed;
+        public long BackoffUntilMs;
         public bool Blind;
     }
 
@@ -591,6 +592,7 @@ public sealed class MonitorEngine : IDisposable
             {
                 st.Verifying = false;
                 st.NoEffect = 0;
+                st.BackoffUntilMs = 0;
                 EffectChecked?.Invoke(name, true, 0);
             }
             else if (now - st.FireMs > c.VerifyWindowMs)
@@ -599,6 +601,13 @@ public sealed class MonitorEngine : IDisposable
                 if (rise <= 0.005)
                 {
                     st.NoEffect++;
+                    if (st.NoEffect >= Math.Max(1, c.NoEffectBefore))
+                    {
+                        st.BackoffUntilMs = now + c.NoEffectBackoffMs;
+                        Log.Write($"{name}: {st.NoEffect} presses changed nothing - "
+                                  + $"pausing {c.NoEffectBackoffMs} ms rather than spending "
+                                  + "more charges on nothing");
+                    }
                     Log.Write($"{name}: globe did not move after the press "
                               + $"({st.NoEffect} in a row) - no charges, wrong key, or "
                               + "input not reaching the game");
@@ -726,6 +735,12 @@ public sealed class MonitorEngine : IDisposable
         bool panic = frac < c.PanicBelow || dropRate >= c.FastDropPctPerSec;
         int gap = panic ? c.PanicCooldownMs : c.CooldownMs;
         int confirm = panic ? 1 : Math.Max(1, c.ConfirmFrames);
+
+        // Presses are doing nothing: no charges, or they are not arriving.
+        // Either way, more of them will not help, so wait instead of emptying
+        // what is left into a flask that cannot use it.
+        if (now < st.BackoffUntilMs)
+            return new GlobeReading(name, frac, true, "no effect - waiting", fromText, textRaw);
 
         st.Below++;
         if (st.Below < confirm || now - st.LastFireMs < gap)

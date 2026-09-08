@@ -50,7 +50,12 @@ internal static class Tips
         "these settings works out for you. Setting it lower does nothing except",
         "make requests get skipped.",
         "",
-        "300-900 ms suits most builds.",
+        "300-900 ms suits most builds. This is the setting that controls how",
+        "often it fires - not the hold time.",
+        "",
+        "It also stops on its own when presses are doing nothing: after three",
+        "in a row that do not move the pool, it waits a few seconds rather than",
+        "spending what is left of your charges on a flask that cannot use them.",
     ];
 
     public static readonly string[] PanicBelow =
@@ -100,6 +105,11 @@ internal static class Tips
         "70 ms spans a frame down to 14 fps and is the default. Raise it if the",
         "ding sounds and nothing happens in game; there is no benefit above",
         "about 120 ms, and every press costs that long to send.",
+        "",
+        "It is not a rate limit. A long hold does slow firing down, but only",
+        "because each press takes that long to leave - and it slows the",
+        "emergency press down with everything else. Use Cooldown to control how",
+        "often it fires.",
     ];
 
     public static readonly string[] KnownMax =

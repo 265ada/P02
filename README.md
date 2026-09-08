@@ -383,6 +383,27 @@ is impossible by construction rather than by picking a cautious multiplier.
 The app runs unelevated on purpose. If the game is running as administrator,
 Windows blocks our input — run the game normally, or nothing will happen.
 
+## It eats every charge at once
+
+P02 cannot see your charges, so left alone it will keep pressing a flask that
+has nothing left to give. Three things stop that, in order of how much they
+matter:
+
+**It backs off by itself.** After three presses in a row that do not move the
+pool, it stops for a few seconds. If a press is not working, more of them will
+not work either - that is either an empty flask or a key that is not arriving,
+and neither is fixed by pressing harder.
+
+**Presses per trigger should be 1.** A flask recovers over a duration and the
+recovery is cancelled the moment the pool fills, so a second press landing while
+the first is still working spends a charge for almost nothing. Three per trigger
+is what empties a set in one fight.
+
+**Cooldown is the rate limit, not Hold each press.** A long hold does slow
+firing down, but only because each press takes that long to physically leave -
+and it slows the emergency press down with it. Set Hold to 70-120 and control
+the rate with Cooldown.
+
 ## Charges are not being spent even though it is firing
 
 This is a different failure from "not firing", and the log tells them apart:

@@ -325,6 +325,18 @@ public sealed class GlobePanel : Card
             ? $"One press takes {ms} ms to send, so at most {1000 / Math.Max(1, ms)} a second."
             : $"{n} presses take {ms} ms to send, so at most "
               + $"{1000 / Math.Max(1, ms)} bursts a second.";
+
+        // A long hold does throttle firing, but only as a side effect, and it
+        // slows the emergency press down with everything else.
+        if (_cfg.HoldMs > 150)
+        {
+            _burstTime.Text += "  Hold is not a rate limit - use Cooldown.";
+            _burstTime.ForeColor = Color.FromArgb(240, 180, 70);
+        }
+        else
+        {
+            _burstTime.ForeColor = Theme.Dim;
+        }
     }
 
     /// <summary>
