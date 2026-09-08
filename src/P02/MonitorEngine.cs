@@ -2,7 +2,9 @@ using System.Diagnostics;
 
 namespace P02;
 
-public sealed record GlobeReading(string Name, double Fraction, bool Ok);
+/// <summary>One globe's latest sample. <paramref name="Ok"/> false means there
+/// is no reading, and Note says why.</summary>
+public sealed record GlobeReading(string Name, double Fraction, bool Ok, string Note = "");
 
 public sealed class MonitorEngine : IDisposable
 {
@@ -17,6 +19,9 @@ public sealed class MonitorEngine : IDisposable
 
     /// <summary>Polls actually completed in the last second.</summary>
     public int ActualHz { get; private set; }
+
+    /// <summary>Milliseconds of work in the last poll, excluding the sleep.</summary>
+    public double LastPollMs { get; private set; }
 
     /// <summary>Title of whatever window currently has focus, for the UI.</summary>
     public string ForegroundTitle { get; private set; } = "";
@@ -107,6 +112,8 @@ public sealed class MonitorEngine : IDisposable
                 var lr = Sample(life, _cfg.Life, "Life", focused, clock);
                 var mr = Sample(mana, _cfg.Mana, "Mana", focused, clock);
 
+                LastPollMs = clock.Elapsed.TotalMilliseconds - t0;
+
                 polls++;
                 if (t0 - hzWindowMs >= 1000)
                 {
@@ -124,7 +131,7 @@ public sealed class MonitorEngine : IDisposable
                     Log.Write($"watch  life {lr.Fraction:P1}{(_cfg.Life.Enabled ? "" : " (off)")}" +
                               $"  mana {mr.Fraction:P1}{(_cfg.Mana.Enabled ? "" : " (off)")}" +
                               $"  focused={focused}  hz={ActualHz}  " +
-                              $"skipped={_keys.Skipped}");
+                              $"skipped={_keys.Skipped}  poll={LastPollMs:0.0}ms");
                 }
 
                 // The UI cannot use 100 samples a second and repainting that
@@ -155,19 +162,30 @@ public sealed class MonitorEngine : IDisposable
     private GlobeReading Sample(State st, WatcherConfig c, string name,
                                 bool focused, Stopwatch clock)
     {
+        // Switched off means not looked at. Capturing costs about 9 ms whatever
+        // the region size, so reading a globe nobody asked about was spending
+        // half the loop's budget to update a number that changes nothing.
+        if (!c.Enabled)
+        {
+            st.Below = 0;
+            st.Reset();
+            return new GlobeReading(name, 0, false, "off");
+        }
+
         if (!c.Region.IsValid)
-            return new GlobeReading(name, 0, false);
+            return new GlobeReading(name, 0, false, "no region");
 
         if (!st.Cap.Grab(c.Region.ToRect()))
-            return new GlobeReading(name, 0, false);
+            return new GlobeReading(name, 0, false, "capture failed");
 
         double frac = OrbDetector.Fraction(st.Cap.Buffer, st.Cap.Width, st.Cap.Height, c);
         long now = clock.ElapsedMilliseconds;
         double dropRate = st.DropPctPerSec(now, frac);
         st.Push(now, frac);
 
-        // Reading always runs so the UI stays live; only firing is gated.
-        if (!Armed || !c.Enabled || !focused)
+        // Reading runs whenever the globe is on, so the UI stays live even
+        // while disarmed; only firing is gated below.
+        if (!Armed || !focused)
         {
             st.Below = 0;
             return new GlobeReading(name, frac, true);

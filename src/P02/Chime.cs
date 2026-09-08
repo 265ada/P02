@@ -18,11 +18,36 @@ internal sealed class Chime : IDisposable
     private long _lastMs;
     private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
+    // SoundPlayer.Play goes through PlaySound, which can stall for a long time
+    // when something else holds the audio device - a game using exclusive-mode
+    // output, for instance. On the monitor thread that stall is time spent not
+    // watching your health, so playing happens somewhere else entirely.
+    private readonly SemaphoreSlim _pending = new(0);
+    private readonly CancellationTokenSource _stop = new();
+    private readonly Thread _thread;
+
     public Chime()
     {
         _wav = new MemoryStream(BuildWav(frequency: 1180, milliseconds: 55, amplitude: 0.18));
         _player = new SoundPlayer(_wav);
         try { _player.Load(); } catch { /* no audio device; play becomes a no-op */ }
+
+        _thread = new Thread(Run) { IsBackground = true, Name = "P02 chime" };
+        _thread.Start();
+    }
+
+    private void Run()
+    {
+        try
+        {
+            while (!_stop.IsCancellationRequested)
+            {
+                _pending.Wait(_stop.Token);
+                try { _player.Play(); } catch { /* never let a sound matter */ }
+            }
+        }
+        catch (OperationCanceledException) { /* shutting down */ }
+        catch (ObjectDisposedException) { /* shutting down */ }
     }
 
     /// <summary>
@@ -35,7 +60,9 @@ internal sealed class Chime : IDisposable
         long now = _clock.ElapsedMilliseconds;
         if (now - _lastMs < minGapMs) return;
         _lastMs = now;
-        try { _player.Play(); } catch { /* never let a sound break the loop */ }
+
+        // Signal and return; the sound thread does the waiting.
+        if (_pending.CurrentCount == 0) _pending.Release();
     }
 
     /// <summary>
@@ -90,6 +117,10 @@ internal sealed class Chime : IDisposable
 
     public void Dispose()
     {
+        _stop.Cancel();
+        _thread.Join(300);
+        _stop.Dispose();
+        _pending.Dispose();
         _player.Dispose();
         _wav.Dispose();
     }

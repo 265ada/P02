@@ -168,7 +168,6 @@ public sealed class MainForm : Form
 
         _engine.Sampled += OnSampled;
         _engine.ArmedChanged += _ => BeginInvoke(RefreshArmUi);
-        _engine.Fired += (name, f) => Log.Write($"UI: {name} fired at {f:P1}");
 
         // Come back where it was left, unless that screen has since gone away.
         if (cfg.WindowX >= 0 && cfg.WindowY >= 0)
@@ -215,8 +214,9 @@ public sealed class MainForm : Form
                 _focus.ForeColor = focused
                     ? Color.FromArgb(0, 120, 0)
                     : SystemColors.GrayText;
-                _live.Text = $"focused window: \"{_engine.ForegroundTitle}\"     " +
-                             $"actual polls/sec: {_engine.ActualHz}";
+                _live.Text = $"focused window: \"{_engine.ForegroundTitle}\"     "
+                    + $"polls/sec: {_engine.ActualHz}     "
+                    + $"work per poll: {_engine.LastPollMs:0.0} ms";
             });
         }
         catch (ObjectDisposedException) { /* closing */ }

@@ -258,22 +258,62 @@ public sealed class AppConfig
     }
 }
 
+/// <summary>
+/// Logging that never blocks the caller.
+///
+/// This used to create the directory and open, append and close the file on
+/// every single line, under a lock, on the monitor thread - during firing that
+/// is file I/O in the middle of the loop that is supposed to be watching your
+/// health. Lines are queued and written by a background thread instead.
+/// </summary>
 internal static class Log
 {
-    private static readonly object Gate = new();
+    private static readonly System.Collections.Concurrent.BlockingCollection<string> Queue
+        = new(new System.Collections.Concurrent.ConcurrentQueue<string>(), 8192);
 
     public static string Path_ => System.IO.Path.Combine(AppConfig.Dir, "p02.log");
 
+    static Log()
+    {
+        var t = new Thread(Pump) { IsBackground = true, Name = "P02 log" };
+        t.Start();
+    }
+
     public static void Write(string msg)
+    {
+        // Dropping a line is better than stalling the poll loop behind a disk.
+        Queue.TryAdd($"{DateTime.Now:HH:mm:ss.fff}  {msg}");
+    }
+
+    private static void Pump()
     {
         try
         {
-            lock (Gate)
-            {
-                Directory.CreateDirectory(AppConfig.Dir);
-                File.AppendAllText(Path_, $"{DateTime.Now:HH:mm:ss.fff}  {msg}{Environment.NewLine}");
-            }
+            Directory.CreateDirectory(AppConfig.Dir);
+            Rotate();
         }
-        catch { /* logging must never throw into the poll loop */ }
+        catch { /* carry on; writes below will fail quietly */ }
+
+        foreach (string first in Queue.GetConsumingEnumerable())
+        {
+            try
+            {
+                using var w = new StreamWriter(Path_, append: true);
+                w.WriteLine(first);
+                // Drain whatever else has piled up in the same open file.
+                while (Queue.TryTake(out string? more)) w.WriteLine(more);
+            }
+            catch { /* a log must never take the app down */ }
+        }
+    }
+
+    /// <summary>Keeps the file from growing without bound across sessions.</summary>
+    private static void Rotate()
+    {
+        var f = new FileInfo(Path_);
+        if (!f.Exists || f.Length < 5_000_000) return;
+        string old = Path_ + ".1";
+        if (File.Exists(old)) File.Delete(old);
+        File.Move(Path_, old);
     }
 }

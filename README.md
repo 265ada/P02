@@ -114,14 +114,20 @@ anything is down to your charges — the app cannot see those.
 
 ## Speed, and what is actually achievable
 
-Windows screen capture costs about **9 ms per call regardless of size** — a
+A globe that is switched off is not captured at all. That sounds obvious, but
+it used to be read anyway to keep the UI live, and a capture costs the same
+whether you use the answer or not - measured at **19.6 ms per poll** given back
+by switching one globe off.
+
+Windows screen capture costs about **9 ms per call regardless of size** on an
+idle desktop, and closer to **20 ms with a game running** — a
 32x32 grab costs the same as a 190x270 one, because the cost is per-call
 synchronisation with the desktop compositor, not pixel work. Two globes is two
 calls, so the loop tops out near **60 polls per second** on a typical machine.
 Capturing both in one call, or on two threads, measured no better.
 
 So the Polls/sec box goes up to 250, but the status line reports what the loop
-**actually** achieved. If you ask for 200 and it reports 60, that is the ceiling
+**actually** achieved, and how many milliseconds of work each poll took. If you ask for 200 and it reports 60, that is the ceiling
 and asking for more only burns a core spinning.
 
 Key presses are sent on their own thread. A press has to be held a few

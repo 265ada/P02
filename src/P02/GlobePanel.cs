@@ -19,7 +19,7 @@ public sealed class GlobePanel : GroupBox
     private readonly Label _tuned = new();
     private readonly Label _warn = new();
     private readonly KeyBindBox _key = new();
-    private readonly ProgressBar _bar = new();
+    private readonly LevelBar _bar = new();
     private readonly Label _pct = new();
 
     public GlobePanel(string title, WatcherConfig cfg, bool blue, Action onChange,
@@ -47,7 +47,6 @@ public sealed class GlobePanel : GroupBox
         y += 30;
 
         _bar.SetBounds(14, y, 200, 18);
-        _bar.Maximum = 1000;
         Controls.Add(_bar);
         _pct.SetBounds(222, y, 90, 18);
         _pct.Text = "--";
@@ -238,7 +237,48 @@ public sealed class GlobePanel : GroupBox
             return;
         }
         Apply(found.Value);
+
+        // Auto-find already requires a full globe, and its box comes from the
+        // edges of the colour blob, which sit a few percent inside the real
+        // liquid. Calibrating straight away off the same full globe is what
+        // makes a full globe read exactly 100% instead of 88-96%.
+        if (CalibrateFullSilently(out string note))
+            MessageBox.Show(this,
+                "Found it and calibrated against the full globe." + Environment.NewLine
+                + note + Environment.NewLine + Environment.NewLine
+                + "Now spend this globe down and press Empty = 0% to finish.",
+                "Auto-find", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
         Preview();
+    }
+
+    /// <summary>
+    /// The measuring half of Full = 100%, with no prompts. Returns false if no
+    /// liquid could be seen in the region.
+    /// </summary>
+    private bool CalibrateFullSilently(out string note)
+    {
+        note = "";
+        if (!_cfg.Region.IsValid) return false;
+
+        using var shot = ScreenCapture.Snapshot(_cfg.Region.ToRect());
+        var buf = ScreenCapture.ToBuffer(shot);
+        if (!OrbDetector.CalibrateFull(buf, shot.Width, shot.Height, _cfg,
+                                       out int full, out int empty))
+            return false;
+
+        _cfg.FullRow = full;
+        _cfg.EmptyRow = empty;
+
+        var st = OrbDetector.Measure(buf, shot.Width, shot.Height, _cfg, full, empty);
+        _cfg.FullDominance = st.DomLow;
+        _cfg.FullValue = st.ValLow;
+
+        double reads = OrbDetector.Fraction(buf, shot.Width, shot.Height, _cfg);
+        note = $"Full is rows {full}-{empty} of {shot.Height}; it now reads {reads:P0}.";
+        RefreshWarning();
+        _onChange();
+        return true;
     }
 
     /// <summary>
@@ -428,13 +468,15 @@ public sealed class GlobePanel : GroupBox
     {
         if (_warn.Text.Length == 0 && _cfg.EmptyDominance < 0) RefreshWarning();
 
-        if (!r.Ok || !_cfg.Region.IsValid)
+        if (!r.Ok)
         {
-            _pct.Text = "no region";
+            _pct.Text = r.Note.Length > 0 ? r.Note : "--";
             _bar.Value = 0;
+            _bar.Below = false;
             return;
         }
-        _bar.Value = (int)Math.Clamp(r.Fraction * 1000, 0, 1000);
+        _bar.Value = r.Fraction;
+        _bar.Below = r.Fraction < _cfg.Threshold;
         _pct.Text = $"{r.Fraction * 100:0.0} %";
     }
 }

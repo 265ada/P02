@@ -23,6 +23,8 @@ internal sealed class KeyPresser : IDisposable
     private readonly Thread _thread;
     private int _busy;
     private int _skipped;
+    private long _busySinceMs;
+    private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
     /// <summary>True while a press or burst is still going out.</summary>
     public bool Busy => Volatile.Read(ref _busy) != 0;
@@ -49,9 +51,31 @@ internal sealed class KeyPresser : IDisposable
     {
         if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
         {
-            Interlocked.Increment(ref _skipped);
-            return false;
+            // A burst has a known duration. If the flag has outlived any
+            // plausible one, something went wrong on the sending thread and
+            // leaving it set would silently stop every future press - which
+            // looks exactly like firing once and then never again.
+            long stuckFor = _clock.ElapsedMilliseconds - Volatile.Read(ref _busySinceMs);
+            long plausible = Math.Max(2000, (count * (long)holdMs + count * (long)gapMs) * 4);
+            if (stuckFor > plausible)
+            {
+                Log.Write($"key sender was stuck busy for {stuckFor} ms; clearing");
+                Volatile.Write(ref _busy, 0);
+            }
+            else
+            {
+                Interlocked.Increment(ref _skipped);
+                return false;
+            }
+
+            if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
+            {
+                Interlocked.Increment(ref _skipped);
+                return false;
+            }
         }
+
+        Volatile.Write(ref _busySinceMs, _clock.ElapsedMilliseconds);
 
         if (_queue.TryAdd(new Job(key, holdMs, count, gapMs))) return true;
 

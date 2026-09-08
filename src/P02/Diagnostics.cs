@@ -82,7 +82,8 @@ internal static partial class Diagnostics
         b.AppendLine($".net         : {Environment.Version}");
         b.AppendLine($"dpi          : {owner.DeviceDpi}");
         b.AppendLine($"armed        : {engine.Armed}");
-        b.AppendLine($"poll wanted  : {cfg.PollHz}/s     actual: {engine.ActualHz}/s");
+        b.AppendLine($"poll wanted  : {cfg.PollHz}/s     actual: {engine.ActualHz}/s"
+                     + $"     work per poll: {engine.LastPollMs:0.0} ms");
         b.AppendLine($"token file   : {TokenState()}");
 
         H("screens");
@@ -184,6 +185,16 @@ internal static partial class Diagnostics
                           + $"is {c.PanicCooldownMs} ms, so requests will be skipped. That is "
                           + "harmless, but the real rate is one burst per ~" + burstMs + " ms.");
         }
+
+        if (cfg.PollHz < 30)
+            notes.Add($"- Poll rate is {cfg.PollHz}/s, so the reading is only refreshed every "
+                      + $"{1000 / Math.Max(1, cfg.PollHz)} ms and firing can be that late. 60 is "
+                      + "a better starting point.");
+
+        if (cfg.Life.Enabled && cfg.Mana.Enabled)
+            notes.Add("- Both globes are on. Each costs a screen capture per poll (about 9 ms "
+                      + "idle, closer to 20 ms with a game running), so switching one off "
+                      + "roughly doubles the achievable rate.");
 
         if (engine.ActualHz > 0 && engine.ActualHz < cfg.PollHz - 5)
             notes.Add($"- Asking for {cfg.PollHz} polls/s but achieving {engine.ActualHz}. Screen "
