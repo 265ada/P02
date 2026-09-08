@@ -121,7 +121,10 @@ public sealed class MonitorEngine : IDisposable
         // Nothing entered: learn it. This is the whole chain - the numbers give
         // the maximum, the maximum lets the memory search find you, and nobody
         // types anything.
-        int seen = c.KnownMax <= 0 ? _ocr.StableMaxOf(name) : _ocr.SuggestedMax(name);
+        // Whatever the numbers have settled on, whether or not something is
+        // stored. A stored maximum that is only replaced when someone notices
+        // is a stored maximum that is wrong for the whole of a level.
+        int seen = _ocr.StableMaxOf(name);
         if (seen <= 0 || seen == c.KnownMax) return;
 
         int was = c.KnownMax;

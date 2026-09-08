@@ -114,15 +114,17 @@ internal static class Tips
 
     public static readonly string[] KnownMax =
     [
-        "Your maximum for this pool, or 0 to work it out.",
+        "Your maximum for this pool. It fills itself in and keeps itself up to",
+        "date; there is normally no reason to touch it.",
         "",
-        "Left at 0 it is read from the numbers and filled in, and kept up to",
-        "date as you level. That is usually the right choice.",
+        "It is read from the numbers and re-read as you level, and a new value",
+        "has to hold steady before it is taken, so a stray digit cannot become",
+        "your maximum. It is a reading, not a rule - a value here never refuses",
+        "anything, which is what used to leave it blind for a whole level after",
+        "a gear change.",
         "",
-        "Setting it by hand makes the misread check exact - a stray digit turns",
-        "1,465 into 11,465, which reads as 13% and fires at full health - but a",
-        "stale value refuses every reading, so it is only worth typing if the",
-        "numbers cannot be read at all.",
+        "Type one only if the numbers cannot be read at all. 0 means work it",
+        "out.",
     ];
 
     public static readonly string[] Region =

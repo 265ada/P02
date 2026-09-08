@@ -209,40 +209,41 @@ internal sealed partial class TextOcr : IDisposable
             return;
         }
 
-        // If you have told us the maximum, anything else is a misread. This is
-        // the one that matters: a stray leading digit turns 1,465 into 11,465,
-        // and a current of 1,465 against that reads as 13% - well under any
-        // trigger, so it fires while you are at full health.
+        // A stated maximum used to reject anything that disagreed with it. That
+        // is exactly backwards for somebody levelling: the maximum changes, and
+        // from that moment every reading is refused - which reads as "numbers
+        // not on screen" on a screen with the numbers plainly on it, and means
+        // holding fire until somebody notices and retypes it.
+        //
+        // The maximum is a thing to be read, not a thing to be checked against.
+        // What the check was guarding - a stray digit turning 1,465 into 11,465
+        // - is caught by making a new maximum prove itself over time below, and
+        // by refusing a current more than twice its maximum. Both of those work
+        // without anyone typing anything.
+        //
+        // The disagreement is still counted, so the panel can say the stored
+        // value has moved on.
         if (expected > 0 && max != expected)
         {
-            // Maxima do change - a level, a gear swap - and a stated one that
-            // has gone stale refuses every reading in silence, which looks
-            // exactly like the app being broken. A misread does not repeat this
-            // consistently, so a value that keeps coming back is worth pointing
-            // out. It is suggested, never adopted: quietly overriding the
-            // number you typed would defeat the check it exists to perform.
             if (max == slot.DisagreeMax) slot.DisagreeCount++;
             else { slot.DisagreeMax = max; slot.DisagreeCount = 1; }
 
-            // Fifteen readings was far too patient. A stated maximum that has
-            // gone stale refuses every reading in the meantime, and refusing
-            // every reading means holding fire - so the cost of waiting is
-            // being unprotected, not merely being wrong.
-            if (slot.DisagreeCount >= 5)
+            if (slot.DisagreeCount >= 3)
             {
                 lock (_gate) slot.Suggested = max;
                 if (_clock.ElapsedMilliseconds - slot.LastComplaintMs > 30000)
                 {
                     slot.LastComplaintMs = _clock.ElapsedMilliseconds;
-                    Log.Write($"{name}: has read a maximum of {max} {slot.DisagreeCount} times "
-                              + $"running but yours is set to {expected} - has it changed?");
+                    Log.Write($"{name}: maximum reads {max} where {expected} is stored - "
+                              + "taking the reading");
                 }
             }
-            return;
         }
-
-        slot.DisagreeCount = 0;
-        lock (_gate) slot.Suggested = 0;
+        else
+        {
+            slot.DisagreeCount = 0;
+            lock (_gate) slot.Suggested = 0;
+        }
 
         // Without a stated maximum, lean on the fact that a real one barely
         // ever changes. A small change might be a gear swap; a large one is
