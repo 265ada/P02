@@ -35,6 +35,10 @@ public sealed class MonitorEngine : IDisposable
 
     /// <summary>The trigger was crossed while disarmed - what would have happened.</summary>
     public event Action<string, double>? WouldFire;
+
+    /// <summary>A watched globe has been reading nothing for a while: the box
+    /// is not on the globe. Bool says whether it is currently blind.</summary>
+    public event Action<string, bool>? Blind;
     public event Action<bool>? ArmedChanged;
 
     public MonitorEngine(AppConfig cfg)
@@ -118,6 +122,8 @@ public sealed class MonitorEngine : IDisposable
         public int NoEffect;
         public long RecoveringUntilMs;
         public long LastWouldFireMs = long.MinValue / 2;
+        public long BlindSinceMs;
+        public bool Blind;
     }
 
     private void Loop(CancellationToken ct)
@@ -210,6 +216,28 @@ public sealed class MonitorEngine : IDisposable
 
         double frac = OrbDetector.Fraction(st.Cap.Buffer, st.Cap.Width, st.Cap.Height, c);
         long now = clock.ElapsedMilliseconds;
+
+        // A watched globe stuck at nothing is the single most common broken
+        // setup, and it looks identical to a globe that is simply full: no
+        // firing, no complaint. Say it out loud.
+        if (frac <= c.IgnoreBelow)
+        {
+            if (st.BlindSinceMs == 0) st.BlindSinceMs = now;
+            // Long enough that being dead or on a loading screen does not
+            // trip it, short enough to notice before a fight.
+            else if (!st.Blind && now - st.BlindSinceMs > 8000)
+            {
+                st.Blind = true;
+                Log.Write($"{name}: reading {frac:P1} for 8s - the region is not on the globe");
+                Blind?.Invoke(name, true);
+            }
+        }
+        else if (st.BlindSinceMs != 0)
+        {
+            st.BlindSinceMs = 0;
+            if (st.Blind) { st.Blind = false; Blind?.Invoke(name, false); }
+        }
+
         double dropRate = st.DropPctPerSec(now, frac);
         st.Push(now, frac);
 
@@ -245,7 +273,11 @@ public sealed class MonitorEngine : IDisposable
             // be confirmed by ear without a single key being sent. Only while
             // disarmed, not merely unfocused, so alt-tabbing at low health does
             // not chirp at you.
-            if (!Armed && frac < c.Threshold && c.Enabled)
+            // Reading flat zero means the box is not on the globe at all, so
+            // there is nothing to announce. Chirping about an unreadable globe
+            // while the firing path silently refuses to act on it made the
+            // sound look like proof that keys were being sent.
+            if (!Armed && frac > c.IgnoreBelow && frac < c.Threshold && c.Enabled)
             {
                 if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
                 if (now - st.LastWouldFireMs > _cfg.SoundGapMs)

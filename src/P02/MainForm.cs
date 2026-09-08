@@ -214,6 +214,16 @@ public sealed class MainForm : Form
 
         _engine.Sampled += OnSampled;
         _engine.ArmedChanged += _ => BeginInvoke(RefreshArmUi);
+        _engine.Blind += (name, blind) =>
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+            try
+            {
+                BeginInvoke(() => (name == "Life" ? _life : _mana).ShowBlind(blind));
+            }
+            catch (ObjectDisposedException) { /* closing */ }
+        };
+
         _engine.WouldFire += (name, frac) =>
         {
             if (IsDisposed || !IsHandleCreated) return;

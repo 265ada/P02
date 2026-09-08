@@ -19,6 +19,7 @@ public sealed class GlobePanel : GroupBox
     private readonly NumericUpDown _hold = new();
     private readonly Label _burstTime = new();
     private readonly Label _effect = new();
+    private bool _blind;
     private readonly Label _tuned = new();
     private readonly Label _warn = new();
     private readonly KeyBindBox _key = new();
@@ -213,6 +214,7 @@ public sealed class GlobePanel : GroupBox
 
     private void RefreshWarning()
     {
+        if (_blind) return;
         if (!_cfg.Region.IsValid) { _warn.Text = ""; return; }
 
         if (_cfg.ColourMargin < 10 && _cfg.EmptyDominance < 0)
@@ -554,6 +556,28 @@ public sealed class GlobePanel : GroupBox
         {
             _effect.Text = $"Last press: no change ({noEffectStreak} in a row).";
             _effect.ForeColor = SystemColors.GrayText;
+        }
+    }
+
+    /// <summary>
+    /// The box is reading nothing at all. This is almost always a region that
+    /// is not on the globe, and it is silent in every other way: no firing, no
+    /// error, indistinguishable from a globe that is simply full.
+    /// </summary>
+    public void ShowBlind(bool blind)
+    {
+        _blind = blind;
+        if (blind)
+        {
+            _warn.Text = $"{Text} has read 0% for 8 seconds. If the globe is not empty, "
+                       + "this box is not on it - press Set... and drag one around it.";
+            _warn.ForeColor = Color.FromArgb(200, 30, 30);
+            _warn.Font = new Font(_warn.Font, FontStyle.Bold);
+        }
+        else
+        {
+            _warn.Font = new Font(_warn.Font, FontStyle.Regular);
+            RefreshWarning();
         }
     }
 

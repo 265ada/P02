@@ -245,6 +245,28 @@ otherwise very hard to tell apart.
 still running, which saves charges. It is off by default: while something is
 hitting you hard, stacking another flask is usually the right call.
 
+## A globe reading 0% forever
+
+This is the failure that hides the best, because it looks like nothing at all:
+no firing, no error, and a globe reading 0% is indistinguishable from one that
+is simply full as far as anything visible goes. It means the box is not on the
+globe.
+
+It is called out now: a watched globe that reads nothing for eight seconds gets
+a red line in its panel saying so. Long enough that being dead or on a loading
+screen does not trip it.
+
+Two things follow from a globe reading 0%, and they pull in opposite directions,
+which is what made this so confusing to diagnose:
+
+- **It will not fire.** Readings at or under Ignore below count as "cannot see
+  the globe", so nothing is sent - correctly, since pressing into an unreadable
+  globe just burns charges.
+- **It used to ding anyway.** The disarmed would-fire ding did not apply that
+  same rule, so it chirped continuously about a globe it could not read. The
+  sound looked like proof that keys were being sent when the firing path was
+  deliberately doing nothing. Both paths follow the same rule now.
+
 ## The ding sounds but the flask is not used
 
 That narrows it a long way. The ding plays on the same path as the key press,
