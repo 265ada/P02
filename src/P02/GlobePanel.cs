@@ -101,6 +101,18 @@ public sealed class GlobePanel : GroupBox
         numBtn.Click += (_, _) => PickTextRegion();
         Controls.Add(numBtn);
 
+        var numTip = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
+        numTip.SetToolTip(numBtn,
+            $"Box the {title} line on its own - the word \"{title}\" and its numbers, and"
+            + Environment.NewLine
+            + "nothing above or below. Each stat gets its own box; this one is only for"
+            + Environment.NewLine
+            + $"{title}."
+            + Environment.NewLine + Environment.NewLine
+            + "Find numbers, at the bottom of the window, does all of them at once without"
+            + Environment.NewLine
+            + "any dragging. Use this only when that cannot find one.");
+
         var emptyBtn = new Button { Text = "Tune colours", Bounds = new Rectangle(206, y, 86, 26) };
         emptyBtn.Click += (_, _) => CalibrateEmpty();
         Controls.Add(emptyBtn);
@@ -341,6 +353,16 @@ public sealed class GlobePanel : GroupBox
         numBtn.Click += (_, _) => PickShieldNumbers();
         Controls.Add(numBtn);
 
+        var shieldTip = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
+        shieldTip.SetToolTip(numBtn,
+            "Box the Shield line on its own - the word \"Shield\" and its numbers, and"
+            + Environment.NewLine
+            + "nothing above or below. Not the life line: this is a separate reading."
+            + Environment.NewLine + Environment.NewLine
+            + "Only needed if Also fire for energy shield is ticked, and only if"
+            + Environment.NewLine
+            + "Find numbers could not locate it.");
+
         Controls.Add(Lab("My max shield", 102, y + 3));
         _shieldMax.SetBounds(190, y, 72, 24);
         _shieldMax.Minimum = 0;
@@ -394,7 +416,8 @@ public sealed class GlobePanel : GroupBox
         owner?.Hide();
         Thread.Sleep(180);
         var r = RegionPickerForm.Pick(
-            "Drag a box around the Shield numbers - include the word \"Shield\"");
+            "Drag a box around the Shield LINE ONLY - the word \"Shield\" and its "
+            + "numbers, nothing above or below it");
         owner?.Show();
         if (r is null) return;
 
@@ -481,8 +504,8 @@ public sealed class GlobePanel : GroupBox
         owner?.Hide();
         Thread.Sleep(180);
         var r = RegionPickerForm.Pick(
-            $"Drag a box around the {Text} numbers - include the word "
-            + $"\"{Text}\" so shield and ward cannot be mistaken for it");
+            $"Drag a box around the {Text} LINE ONLY - the word \"{Text}\" and its "
+            + "numbers, nothing above or below it");
         owner?.Show();
         if (r is null) return;
 

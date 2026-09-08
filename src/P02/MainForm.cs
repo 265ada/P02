@@ -142,6 +142,18 @@ public sealed class MainForm : Form
         findAll.Click += (_, _) => FindAllNumbers();
         Controls.Add(findAll);
 
+        var findTip = new ToolTip { AutoPopDelay = 20000, InitialDelay = 300 };
+        findTip.SetToolTip(findAll,
+            "Finds every stat line at once - life, mana and shield - by looking for those"
+            + Environment.NewLine
+            + "words in the corners of the game. Nothing to drag, and it reads each one"
+            + Environment.NewLine
+            + "back and tells you what it will be watching."
+            + Environment.NewLine + Environment.NewLine
+            + "Run it with the game on screen and the numbers showing. This is the whole"
+            + Environment.NewLine
+            + "setup; the Numbers... buttons on the panels are only for what it misses.");
+
 
         var upd = new CheckBox
         {

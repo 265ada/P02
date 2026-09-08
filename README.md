@@ -44,7 +44,19 @@ numbers read off the screen pick between them, and failing that it watches which
 one moves.
 
 **Numbers on screen** - press **Find numbers** and it locates them itself, then
-reads each one back and tells you what it will be watching. That last part
+reads each one back and tells you what it will be watching.
+
+There are two buttons and they do different things:
+
+| Button | Where | What it does |
+|---|---|---|
+| **Find numbers** | bottom of the main window | Finds life, mana and shield all at once, by looking for those words in the corners of the game. Nothing to drag. This is the whole setup. |
+| **Numbers…** | on a panel | Box **one line only** - that stat's word and its numbers, nothing above or below. One per stat. Only needed for what Find numbers misses. |
+
+A box that spans several lines is not fatal, since the line is chosen by its
+label, but a tight one is more reliable and faster to read. The shield's box is
+separate from life's and only matters if **Also fire for energy shield** is
+ticked. That last part
 matters: a box a few pixels out lands on the line below, and life reading the
 shield value looks perfectly healthy right up until it kills you. Two stats
 reading the same numbers is called out as well. The
