@@ -21,5 +21,6 @@
     <Compile Include="..\..\src\P02\TextOcr.cs" />
     <Compile Include="..\..\src\P02\GameMemory.cs" />
     <Compile Include="..\..\src\P02\FireTrail.cs" />
+    <Compile Include="..\..\src\P02\BarFinder.cs" />
   </ItemGroup>
 </Project>

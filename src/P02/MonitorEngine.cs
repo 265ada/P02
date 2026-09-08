@@ -418,6 +418,12 @@ public sealed class MonitorEngine : IDisposable
 
                 RefindLostNumbers(t0, focused);
 
+                // Decoration, and rate limited inside, so it can never compete
+                // with the reading that decides whether to press a key.
+                if (_cfg.OverlayFollowBar && _cfg.OverlayOn && focused
+                    && Native.FindWindowRect(_cfg.WindowMatch) is { } client)
+                    _bar.Look(client);
+
                 AdoptChangedMax("Life", _cfg.Life);
                 AdoptChangedMax("Mana", _cfg.Mana);
                 AdoptChangedMax("Shield", _cfg.Shield);
@@ -505,6 +511,12 @@ public sealed class MonitorEngine : IDisposable
             shield.Cap.Dispose();
         }
     }
+
+    /// <summary>The floating bar over the character, when anyone is asking.</summary>
+    private readonly BarFinder _bar = new();
+
+    /// <summary>Where the character's own life bar is, or empty if it is not up.</summary>
+    public Rectangle CharacterBar => _bar.Visible ? _bar.Bar : Rectangle.Empty;
 
     /// <summary>The run-up to each press, kept so one can be explained later.</summary>
     private readonly FireTrail _trail = new();

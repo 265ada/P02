@@ -28,6 +28,57 @@ public static class Theme
     public static readonly Font Title = new("Segoe UI Semibold", 10.5f);
     public static readonly Font Big = new("Segoe UI Semibold", 12f);
 
+    /// <summary>
+    /// Draws a checkbox over the top of the system one.
+    ///
+    /// Ticked is a filled accent box with a white check; unticked is an empty
+    /// outline. The difference has to survive being glanced at over a game.
+    /// </summary>
+    private static void DrawTick(CheckBox cb, Graphics g)
+    {
+        const int Size = 15;
+        var box = new Rectangle(0, (cb.Height - Size) / 2, Size, Size);
+
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+        using (var clear = new SolidBrush(cb.BackColor))
+            g.FillRectangle(clear, new Rectangle(box.X, 0, box.Width + 2, cb.Height));
+
+        using (var back = new SolidBrush(cb.Checked ? Accent : Field))
+        using (var path = RoundRect(box, 3))
+            g.FillPath(back, path);
+
+        using (var edge = new Pen(cb.Checked ? Accent : Line, 1.4f))
+        using (var path = RoundRect(box, 3))
+            g.DrawPath(edge, path);
+
+        if (!cb.Checked) return;
+
+        using var tick = new Pen(Color.White, 2f)
+        {
+            StartCap = System.Drawing.Drawing2D.LineCap.Round,
+            EndCap = System.Drawing.Drawing2D.LineCap.Round,
+        };
+        g.DrawLines(tick,
+        [
+            new PointF(box.X + 3.5f, box.Y + 7.5f),
+            new PointF(box.X + 6f, box.Y + 10.5f),
+            new PointF(box.X + 11.5f, box.Y + 4.5f),
+        ]);
+    }
+
+    private static System.Drawing.Drawing2D.GraphicsPath RoundRect(Rectangle r, int radius)
+    {
+        var path = new System.Drawing.Drawing2D.GraphicsPath();
+        int d = radius * 2;
+        path.AddArc(r.X, r.Y, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
+    }
+
     /// <summary>Styles a control and everything inside it.</summary>
     public static void Apply(Control root)
     {
@@ -48,18 +99,21 @@ public static class Theme
 
                 case CheckBox cb:
                     cb.FlatStyle = FlatStyle.Flat;
-                    cb.FlatAppearance.BorderColor = Line;
-                    // A flat checkbox fills its box with its own BackColor, so
-                    // a transparent one came out white on a dark card - and a
-                    // white square reads the same whether it is ticked or not.
-                    // Matching the card makes it a box again; the accent fill
-                    // is what says checked, at a glance and from across a room.
+                    cb.FlatAppearance.BorderSize = 0;
                     cb.BackColor = root.BackColor;
-                    cb.FlatAppearance.CheckedBackColor = Accent;
-                    cb.FlatAppearance.MouseOverBackColor = Field;
                     cb.ForeColor = Text;
                     cb.Font = Ui;
                     cb.Cursor = Cursors.Hand;
+
+                    // The system glyph on a dark card is a pale square that
+                    // looks the same ticked or not, and tinting its background
+                    // only made it a slightly different pale square. Drawn over
+                    // instead: an empty outline, or a filled box with a tick in
+                    // it, which is legible across a room.
+                    cb.Paint += (sender, e) => DrawTick((CheckBox)sender!, e.Graphics);
+                    cb.CheckedChanged += (sender, _) => ((CheckBox)sender!).Invalidate();
+                    cb.MouseEnter += (sender, _) => ((CheckBox)sender!).Invalidate();
+                    cb.MouseLeave += (sender, _) => ((CheckBox)sender!).Invalidate();
                     break;
 
                 case NumericUpDown n:

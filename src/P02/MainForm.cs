@@ -77,15 +77,37 @@ public sealed class MainForm : Form
             Bounds = new Rectangle(392, 8, 190, 22),
             Checked = cfg.OverlaySnap,
         };
+        Controls.Add(snap);
+        Tips.On(snap, Tips.OverlaySnap);
+
+        var follow = new CheckBox
+        {
+            Text = "Follow my character's bar",
+            Bounds = new Rectangle(588, 8, 176, 22),
+            Checked = cfg.OverlayFollowBar,
+        };
+        follow.CheckedChanged += (_, _) =>
+        {
+            _cfg.OverlayFollowBar = follow.Checked;
+            if (follow.Checked) { _cfg.OverlaySnap = false; snap.Checked = false; }
+            Save();
+            if (_overlay is { IsDisposed: false })
+                _overlay.Locked = _cfg.OverlaySnap || _cfg.OverlayFollowBar;
+            PlaceOverlay();
+        };
+        Controls.Add(follow);
+        Tips.On(follow, Tips.FollowBar);
+
+        // Two ways to be anchored, and they cannot both be it.
         snap.CheckedChanged += (_, _) =>
         {
             _cfg.OverlaySnap = snap.Checked;
+            if (snap.Checked) { _cfg.OverlayFollowBar = false; follow.Checked = false; }
             Save();
-            if (_overlay is { IsDisposed: false }) _overlay.Locked = snap.Checked;
+            if (_overlay is { IsDisposed: false })
+                _overlay.Locked = _cfg.OverlaySnap || _cfg.OverlayFollowBar;
             PlaceOverlay();
         };
-        Controls.Add(snap);
-        Tips.On(snap, Tips.OverlaySnap);
 
         var autoHide = new CheckBox
         {
@@ -247,23 +269,7 @@ public sealed class MainForm : Form
         diagBtn.Click += (_, _) => ExportDiagnostics();
         Controls.Add(diagBtn);
 
-        var shareBtn = new Button
-        {
-            Text = "Share settings",
-            Bounds = new Rectangle(diagBtn.Right + 8, diagBtn.Top, 116, 26),
-        };
-        shareBtn.Click += (_, _) => ShareSettings();
-        Controls.Add(shareBtn);
-        Tips.On(shareBtn, Tips.ShareSettings);
 
-        var applyBtn = new Button
-        {
-            Text = "Apply shared",
-            Bounds = new Rectangle(diagBtn.Right + 130, diagBtn.Top, 110, 26),
-        };
-        applyBtn.Click += (_, _) => ApplyShared();
-        Controls.Add(applyBtn);
-        Tips.On(applyBtn, Tips.ApplyShared);
         Tips.On(diagBtn, Tips.Diagnostics);
 
         var sound = new CheckBox
@@ -405,6 +411,25 @@ public sealed class MainForm : Form
         Controls.Add(mem);
         Tips.On(mem, Tips.Memory);
 
+
+        y += 32;
+        var shareBtn = new Button
+        {
+            Text = "Share settings",
+            Bounds = new Rectangle(12, y, 130, 26),
+        };
+        shareBtn.Click += (_, _) => ShareSettings();
+        Controls.Add(shareBtn);
+        Tips.On(shareBtn, Tips.ShareSettings);
+
+        var applyBtn = new Button
+        {
+            Text = "Apply shared",
+            Bounds = new Rectangle(150, y, 130, 26),
+        };
+        applyBtn.Click += (_, _) => ApplyShared();
+        Controls.Add(applyBtn);
+        Tips.On(applyBtn, Tips.ApplyShared);
 
         y += 32;
         _live.SetBounds(12, y, 876, 20);
@@ -661,7 +686,7 @@ public sealed class MainForm : Form
                 };
             }
 
-            _overlay.Locked = _cfg.OverlaySnap;
+            _overlay.Locked = _cfg.OverlaySnap || _cfg.OverlayFollowBar;
             PlaceOverlay();
             _overlay.SetArmed(_engine.Armed);
             _overlay.Show();
@@ -696,6 +721,20 @@ public sealed class MainForm : Form
         // is a fixed part of the HUD and already tracked, so it follows the
         // readout it is describing rather than a remembered screen position
         // that is wrong the moment a window moves or a monitor changes.
+        // Following the character's own bar wins, being the most specific
+        // request: sit just under it and go where it goes.
+        if (!forceDefault && _cfg.OverlayFollowBar && _engine.CharacterBar is { Width: > 0 } bar)
+        {
+            int x = bar.X + bar.Width / 2 - _overlay.Width / 2;
+            int yy = bar.Bottom + 8;
+            var screen = Screen.FromPoint(new Point(bar.X, bar.Y)).WorkingArea;
+            if (yy + _overlay.Height > screen.Bottom) yy = bar.Y - _overlay.Height - 8;
+            _overlay.Location = new Point(
+                Math.Clamp(x, screen.Left, screen.Right - _overlay.Width),
+                Math.Clamp(yy, screen.Top, screen.Bottom - _overlay.Height));
+            return;
+        }
+
         if (!forceDefault && _cfg.OverlaySnap && _cfg.Life.TextRegion.IsValid)
         {
             var box = _cfg.Life.TextRegion.ToRect();
@@ -752,6 +791,11 @@ public sealed class MainForm : Form
                     bool blind = life.Note == "numbers not on screen";
                     bool wanted = !_cfg.OverlayAutoHide || (!blind && focused);
 
+                    // Following the bar means sharing its fate: when the game
+                    // stops drawing it, there is nothing to sit under.
+                    if (_cfg.OverlayFollowBar)
+                        wanted = focused && _engine.CharacterBar.Width > 0;
+
                     if (_cfg.OverlayOn && wanted != _overlay.Visible)
                     {
                         if (wanted) _overlay.Show(); else _overlay.Hide();
@@ -761,7 +805,7 @@ public sealed class MainForm : Form
                     {
                         _overlay.Show(life, mana, _cfg.Life.Threshold, _cfg.Mana.Threshold);
                         _overlay.SetFightCount(_engine.FiresThisFight, _engine.InCombat);
-                        if (_cfg.OverlaySnap) PlaceOverlay();
+                        if (_cfg.OverlaySnap || _cfg.OverlayFollowBar) PlaceOverlay();
                     }
                 }
 
@@ -1041,16 +1085,17 @@ public sealed class MainForm : Form
         bool wasTop = TopMost;
         TopMost = true;
 
-        MessageBox.Show(this,
-            $"{Updater.Critical} fixes something that can get you killed:"
-            + Environment.NewLine + Environment.NewLine
-            + Updater.CriticalWhy
-            + Environment.NewLine + Environment.NewLine
-            + "Your game has been paused. It will update itself now and be back "
-            + "in a moment, still armed if it was armed.",
-            "Critical update", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        // Told, not asked. A dialog with an OK button is a prompt however it is
+        // worded, and a prompt behind a paused game waits for somebody to come
+        // back to the keyboard - which is exactly the state this was supposed to
+        // stop. It says what it is doing on the way past instead.
+        _tray.BalloonTipTitle = $"Updating to {Updater.Critical}";
+        _tray.BalloonTipText = Updater.CriticalWhy + Environment.NewLine
+                               + "Your game is paused; P02 will be back in a moment.";
+        _tray.BalloonTipIcon = ToolTipIcon.Warning;
+        try { _tray.ShowBalloonTip(6000); } catch { /* notifications may be off */ }
 
-        TopMost = wasTop;
+        Log.Write($"update: {Updater.Critical} - {Updater.CriticalWhy}");
 
         // It installs itself from here. A release that fixes a way to die
         // quietly is the one that most needs installing, not the one that most

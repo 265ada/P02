@@ -546,4 +546,28 @@ internal static class Tips
         "Your regions and maxima are left exactly as they are. It restarts",
         "afterwards, and comes back disarmed.",
     ];
+
+    public static readonly string[] FollowBar =
+    [
+        "Sits the readout under the floating bar over your character and goes",
+        "where it goes - and, more to the point, disappears with it.",
+        "",
+        "That bar is only drawn while you are in the world and not in a menu, a",
+        "shop or the passive tree - which is exactly when the readout would",
+        "otherwise be sitting on top of whatever you just opened. Following it",
+        "means never being in the way, without anything having to work out what",
+        "is covering what.",
+        "",
+        "That bar is not at a fixed place and is not drawn much of the time, so",
+        "it is looked for rather than remembered. What makes it findable is the",
+        "pair: the shield bar sits directly on the life bar, and blue above green",
+        "in a long thin run is not something the world happens to contain.",
+        "",
+        "It searches near where it last saw it, a few times a second, and only",
+        "sweeps the middle of the screen when it has lost it - so it cannot",
+        "compete with the reading that decides whether to press a key.",
+        "",
+        "Dragging is off while this is on, and it replaces snapping to the HUD",
+        "numbers.",
+    ];
 }

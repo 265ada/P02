@@ -350,6 +350,15 @@ public sealed class AppConfig
     public bool OverlaySnap { get; set; }
 
     /// <summary>
+    /// Follow the floating bar over your character, and go with it.
+    ///
+    /// Unlike everything else here that is not a fixed place - it moves, and it
+    /// is not drawn at all much of the time. So it is looked for rather than
+    /// remembered, and when it is not there neither is the readout.
+    /// </summary>
+    public bool OverlayFollowBar { get; set; }
+
+    /// <summary>
     /// Hide the readout whenever the game's numbers are not on screen.
     ///
     /// A shop, the passive tree or an inventory covers the HUD, and the
