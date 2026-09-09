@@ -518,6 +518,8 @@ public sealed class MonitorEngine : IDisposable
 
     private void Loop(CancellationToken ct)
     {
+        _started = Environment.TickCount64;
+
         var life = new State();
         var mana = new State();
         var shield = new State();
@@ -681,6 +683,11 @@ public sealed class MonitorEngine : IDisposable
 
     /// <summary>The run-up to each press, kept so one can be explained later.</summary>
     private readonly FireTrail _trail = new();
+
+    /// <summary>How long the loop has been running, for checks that need warming up.</summary>
+    public long UptimeMs => _started == 0 ? 0 : Environment.TickCount64 - _started;
+
+    private long _started;
 
     /// <summary>Whether memory has an address it is willing to read from.</summary>
     public bool MemoryLocked => _lifeMemConfirmed;

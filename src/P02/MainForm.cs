@@ -1423,10 +1423,22 @@ public sealed class MainForm : Form
             how.ShowDialog(this);
         }
 
-        var wrong = SelfCheck.Run(_cfg, _engine, Version);
-        if (wrong.Any(f => f.Stops))
-            MessageBox.Show(this, SelfCheck.Describe(wrong), "P02 is not ready",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        // Asked once, a few seconds in, rather than the instant the window
+        // appears. Nothing has read anything yet at that point, so it always
+        // found a fault and said so - every launch, on a setup that was fine.
+        var settle = new System.Windows.Forms.Timer { Interval = 8000 };
+        settle.Tick += (_, _) =>
+        {
+            settle.Stop();
+            settle.Dispose();
+            if (IsDisposed) return;
+
+            var wrong = SelfCheck.Run(_cfg, _engine, Version);
+            if (wrong.Any(f => f.Stops))
+                MessageBox.Show(this, SelfCheck.Describe(wrong), "P02 is not ready",
+                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        };
+        settle.Start();
         // With unattended installs on, the launch check has nothing to ask
         // about: the countdown below handles it a few seconds later, in one
         // place, and having waited for a fight to end.

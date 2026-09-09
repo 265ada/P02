@@ -30,9 +30,15 @@ internal static class SelfCheck
             Say(0, "Nothing is being watched.",
                 "Tick \"Watch my life\" on the Life panel.");
 
+        // With the game shut, most of what follows cannot be judged at all -
+        // nothing can be read from a window that is not there - so it says the
+        // one true thing and stops.
         if (Native.FindWindowRect(cfg.WindowMatch) is null)
+        {
             Say(1, $"No window titled \"{cfg.WindowMatch}\" is open.",
                 "Start the game. Nothing can be read or sent until it is running.");
+            return found;
+        }
 
         if (!engine.TextAvailable)
             Say(0, "Windows cannot read text on this machine, so the numbers are out.",
@@ -48,7 +54,12 @@ internal static class SelfCheck
                 Say(0, $"{name} has nothing exact to read.",
                     "Press \"Set it up for me\" with the game on screen.");
 
-            if (numbers && engine.TextAvailable && !engine.NumbersReading(name))
+            // Not before it has had a chance. Reading takes a second or two to
+            // start, and asking at launch always answered "nothing is coming
+            // back" - which is how a working setup was accused of being broken
+            // every single time it opened.
+            if (numbers && engine.TextAvailable && engine.UptimeMs > 6000
+                && !engine.NumbersReading(name))
                 Say(0, $"{name}'s numbers are set up but nothing is coming back from them.",
                     "Press \"Set it up for me\" while standing somewhere safe with the "
                     + "numbers on screen. They are not drawn in menus or on the death screen.");
