@@ -140,9 +140,16 @@ internal sealed class BarFinder : IDisposable
         while (bottom < h - 1 && IsLife(At(px, stride, mid, bottom + 1))) bottom++;
         if (bottom - top + 1 > MaxThick) return false;
 
+        // Above or below. Which side the shield bar sits on is not something
+        // worth being certain about - it differs by build and by how the game
+        // stacks them - and insisting on above meant simply never finding the
+        // bar for anyone whose shield draws under it.
         bool shield = false;
-        for (int dy = 1; dy <= 8 && top - dy >= 0; dy++)
-            if (IsShield(At(px, stride, mid, top - dy))) { shield = true; break; }
+        for (int dy = 1; dy <= 9 && !shield; dy++)
+        {
+            if (top - dy >= 0 && IsShield(At(px, stride, mid, top - dy))) shield = true;
+            if (bottom + dy < h && IsShield(At(px, stride, mid, bottom + dy))) shield = true;
+        }
 
         // A dark frame used to be accepted as proof on its own. Every bar in
         // the game has one, so that proved nothing and let a totem win.

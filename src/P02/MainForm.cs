@@ -1222,8 +1222,12 @@ public sealed class MainForm : Form
 
                     // Following the bar means sharing its fate: when the game
                     // stops drawing it, there is nothing to sit under.
+                    // Shown while the bar is, and only that. Tying it to focus
+                    // as well made it disappear every time you looked at this
+                    // window - which is exactly when somebody is trying to see
+                    // whether the setting did anything.
                     if (_cfg.OverlayFollowBar)
-                        wanted = focused && _engine.CharacterBar.Width > 0;
+                        wanted = _engine.CharacterBar.Width > 0;
 
                     if (_cfg.OverlayOn && wanted != _overlay.Visible)
                     {

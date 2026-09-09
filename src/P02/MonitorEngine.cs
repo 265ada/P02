@@ -578,7 +578,12 @@ public sealed class MonitorEngine : IDisposable
 
                 // Decoration, and rate limited inside, so it can never compete
                 // with the reading that decides whether to press a key.
-                if ((_cfg.OverlayFollowBar || _cfg.SlotAuto) && _cfg.OverlayOn && focused
+                // Not "while the game has focus". The game keeps drawing while
+                // you look at something else, and a screen capture does not
+                // care what is focused - so requiring it meant the bar was
+                // never looked for the moment you alt-tabbed, and the readout
+                // vanished because nothing had found it.
+                if ((_cfg.OverlayFollowBar || _cfg.SlotAuto) && _cfg.OverlayOn
                     && Native.FindWindowRect(_cfg.WindowMatch) is { } client)
                     _bar.Look(client);
 
