@@ -459,6 +459,7 @@ public sealed class MonitorEngine : IDisposable
         public bool HadGoodSource;
         public double LastGoodFrac;
         public bool UberUsed;
+        public long ZeroSinceMs;
         public bool LastDitchUsed;
         public long BackoffUntilMs;
         public bool Blind;
@@ -722,6 +723,30 @@ public sealed class MonitorEngine : IDisposable
 
             double memFrac = name == "Life" ? ms.LifeFraction : ms.ManaFraction;
 
+            // A current of zero beside an intact maximum is a dead pointer, not
+            // a dead character - the game frees and rebuilds that structure on
+            // a zone change, and the address then reads 0/1,190 forever. It is
+            // also the one reading that can never be worth acting on: at zero
+            // you are already dead and no flask changes that.
+            if (cur <= 0 && max > 0)
+            {
+                if (st.ZeroSinceMs == 0) st.ZeroSinceMs = now;
+
+                if (now - st.ZeroSinceMs > 1500)
+                {
+                    st.ZeroSinceMs = 0;
+                    _memConfirmed = false;
+                    Log.Write($"{name}: memory has read 0 of {max:N0} for over a second - "
+                              + "the address has gone stale, searching again");
+                    _mem.Rescan();
+                }
+
+                textRaw = $"memory reads 0/{max:N0} - stale address, ignored";
+                goto pastMemory;
+            }
+
+            st.ZeroSinceMs = 0;
+
             // Every lock is provisional until the numbers have vouched for it
             // once. The old check only ran while an OCR reading was fresh, and
             // between those moments a wrong address had free rein - twenty
@@ -848,6 +873,8 @@ public sealed class MonitorEngine : IDisposable
                 }
             }
         }
+
+        pastMemory:
 
         // The numbers are only drawn on the gameplay screen. Losing them for
         // more than a moment means an inventory, the passive tree, a vendor or
@@ -1007,11 +1034,19 @@ public sealed class MonitorEngine : IDisposable
                     + $"below={st.Below} sinceFire={now - st.LastFireMs}ms "
                     + $"backoff={Math.Max(0, st.BackoffUntilMs - now)}ms uberUsed={st.UberUsed}");
 
-        if (sourceLost || textLost || blind)
+        // Zero is never worth acting on. Either you are dead, in which case a
+        // flask is beside the point, or something has broken - a freed address,
+        // a misread, a globe behind a loading screen - in which case pressing
+        // is worse than doing nothing. Both his machine and mine have spent an
+        // evening firing at "0".
+        bool zero = frac <= 0.0005;
+
+        if (sourceLost || textLost || blind || zero)
         {
             st.Below = 0;
             string why = textLost ? "numbers not on screen"
                        : sourceLost ? "no exact reading yet"
+                       : zero ? "reads zero - dead, or the reading has broken"
                        : "cannot read the globe";
             return new GlobeReading(name, frac, true, why, fromText, textRaw);
         }
