@@ -79,7 +79,10 @@ internal static class SelfCheck
                     + "it says.");
         }
 
-        if (cfg.UseMemory && !engine.MemoryLocked)
+        if (cfg.UseMemory && !engine.MemoryLocked && engine.MemoryStatus.Length > 0)
+            Say(1, $"Memory: {engine.MemoryStatus}",
+                "Stand at full life and mana and press Re-scan.");
+        else if (cfg.UseMemory && !engine.MemoryLocked)
             Say(1, "Memory is switched on but has not found your character.",
                 "Stand at full life and mana and press Re-scan. A full pool is the one "
                 + "hint that needs nothing read off the screen.");

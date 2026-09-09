@@ -545,6 +545,16 @@ public sealed class MonitorEngine : IDisposable
                 // no reason to withhold what we know about it.
                 if (_cfg.UseMemory)
                 {
+                    // The process behind the window we already found, so a
+                    // standalone or Epic install is attached to as readily as
+                    // the Steam one.
+                    nint gameWnd = Native.FindWindowHandle(_cfg.WindowMatch);
+                    if (gameWnd != 0)
+                    {
+                        Native.GetWindowThreadProcessId(gameWnd, out uint gamePid);
+                        if (gamePid != 0) _mem.PreferredPid = (int)gamePid;
+                    }
+
                     _mem.HintMaxHp = ExpectedMax("Life", _cfg.Life, 0);
                     _mem.HintMaxMp = ExpectedMax("Mana", _cfg.Mana, 0);
 

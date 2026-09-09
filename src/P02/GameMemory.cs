@@ -81,6 +81,18 @@ internal sealed class GameMemory : IDisposable
     /// <summary>Process name to attach to, without ".exe".</summary>
     public string ProcessName { get; set; } = "PathOfExileSteam";
 
+    /// <summary>
+    /// The process that owns the game window, when one has been found.
+    ///
+    /// Matching on a name meant matching on "PathOfExileSteam", so memory
+    /// simply never attached on a standalone or Epic install - the checkbox was
+    /// on, the search never ran, and the machine fell back to reading the
+    /// screen forever. The window is already located by its title for the
+    /// firing rules; the process behind it is the right answer and needs no
+    /// list of names to guess from.
+    /// </summary>
+    public volatile int PreferredPid;
+
     /// <summary>Hint from the screen, used to pick between candidates.</summary>
     public volatile int HintMaxHp;
     public volatile int HintMaxMp;
@@ -140,7 +152,7 @@ internal sealed class GameMemory : IDisposable
             {
                 if (!EnsureAttached())
                 {
-                    Status = $"{ProcessName} is not running";
+                    Status = "the game does not seem to be running";
                     _stop.Token.WaitHandle.WaitOne(2000);
                     continue;
                 }
@@ -187,6 +199,33 @@ internal sealed class GameMemory : IDisposable
         }
     }
 
+    private Process? FromWindow()
+    {
+        int pid = PreferredPid;
+        if (pid <= 0) return null;
+
+        try
+        {
+            var p = Process.GetProcessById(pid);
+            return p.HasExited ? null : p;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Every name this game ships under, not only the Steam one.</summary>
+    private Process? ByName()
+    {
+        foreach (string name in new[]
+                 { ProcessName, "PathOfExileSteam", "PathOfExile", "PathOfExile_x64",
+                   "PathOfExileEGS", "PathOfExile2", "PathOfExile2Steam" })
+        {
+            var p = Process.GetProcessesByName(name).FirstOrDefault();
+            if (p is not null) return p;
+        }
+
+        return null;
+    }
+
     private bool EnsureAttached()
     {
         if (_handle != 0)
@@ -200,7 +239,7 @@ internal sealed class GameMemory : IDisposable
             Detach();
         }
 
-        var proc = Process.GetProcessesByName(ProcessName).FirstOrDefault();
+        var proc = FromWindow() ?? ByName();
         if (proc is null) return false;
 
         _handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, proc.Id);
@@ -211,7 +250,7 @@ internal sealed class GameMemory : IDisposable
         }
         _pid = proc.Id;
         _address = 0;
-        Log.Write($"memory: attached to {ProcessName} pid {proc.Id}");
+        Log.Write($"memory: attached to {proc.ProcessName} pid {proc.Id}");
         return true;
     }
 

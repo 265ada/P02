@@ -76,7 +76,8 @@ public sealed class GlobePanel : Card
         _bar.SetBounds(14, y, 200, 18);
         Controls.Add(_bar);
         Tips.On(_bar, "This pool as it is right now, with your trigger marked.");
-        _pct.SetBounds(222, y, 90, 18);
+        _pct.SetBounds(222, y, 150, 18);
+        _pct.Font = Theme.UiBold;
         _pct.Text = "--";
         Controls.Add(_pct);
         Tips.On(_pct, "The fraction being compared against your trigger.");
@@ -625,6 +626,21 @@ public sealed class GlobePanel : Card
     /// and finding nothing there reads as nothing to find.
     /// </summary>
     /// <summary>A ready-made label given the same explanation as its field.</summary>
+    /// <summary>The bare current/maximum out of whatever a source reported.</summary>
+    private static string Numbers(string raw)
+    {
+        int slash = raw.IndexOf('/');
+        if (slash < 0) return "";
+
+        int from = slash;
+        while (from > 0 && (char.IsDigit(raw[from - 1]) || raw[from - 1] == ',')) from--;
+
+        int to = slash + 1;
+        while (to < raw.Length && (char.IsDigit(raw[to]) || raw[to] == ',')) to++;
+
+        return to - from > 3 ? raw[from..to] : "";
+    }
+
     private static Label Cap2(Label l, string[] tip)
     {
         Tips.On(l, tip);
@@ -1313,7 +1329,13 @@ public sealed class GlobePanel : Card
         }
         _bar.Value = r.Fraction;
         _bar.Below = r.Fraction < _cfg.Threshold;
-        _pct.Text = $"{r.Fraction * 100:0.0} %";
+        // The percentage, and what it is a percentage of. "60.1 %" on its own
+        // is the number nobody could check, and checking it is what every
+        // argument about this came down to.
+        string exact = Numbers(r.TextRaw);
+        _pct.Text = exact.Length > 0
+            ? $"{r.Fraction * 100:0.0} %      {exact}"
+            : $"{r.Fraction * 100:0.0} %";
 
         if (r.FromText && r.TextRaw.Length > 0)
         {
