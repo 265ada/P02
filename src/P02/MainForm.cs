@@ -1237,13 +1237,25 @@ public sealed class MainForm : Form
         // Then memory, which needs both maxima to have anything to search for.
         if (_cfg.UseMemory) _engine.RescanMemory();
 
-        bool lifeOk = _cfg.Life.TextRegion.IsValid;
+        // Whether life is set up is decided by reading it, not by a region
+        // being non-empty. It told him it was reading his life from the numbers
+        // while it had found only mana, because a region left over from before
+        // counted as success.
+        string lifeSays = "";
+        bool lifeOk = false;
+        if (_cfg.Life.TextRegion.IsValid)
+        {
+            lifeSays = _engine.ProbeText(_cfg.Life.TextRegion.ToRect(), out var pic);
+            pic?.Dispose();
+            lifeOk = TextOcr.TryParse(lifeSays, out _, out int lifeMax) && lifeMax > 0;
+        }
+
         var said = new System.Text.StringBuilder();
 
         said.AppendLine(lifeOk
-            ? "Set up. It is reading your life from the numbers beside the globe, "
-              + "which is exact."
-            : "It could not find your life numbers.");
+            ? $"Set up. It is reading your life as {lifeSays.Trim()} from the numbers "
+              + "beside the globe, which is exact."
+            : "It could NOT read your life numbers, so it is not protecting you yet.");
         said.AppendLine();
         said.AppendLine(found);
         said.AppendLine();

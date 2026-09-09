@@ -263,6 +263,22 @@ public sealed class MonitorEngine : IDisposable
         if (!hits.ContainsKey("Mana"))
             foreach (var (k, v) in Bands(area, left, ["Mana"])) hits[k] = v;
 
+        // Still no life. Its word will not read on some machines at all, and
+        // its neighbour's did not either, so fall back to the shape of the
+        // block: in that corner, stacked pairs of numbers sharing a left edge
+        // are life, shield and ward, in that order. Nothing else down there is
+        // written that way.
+        if (!hits.ContainsKey("Life"))
+        {
+            var stack = _ocr.FindStackedPairs(left);
+            if (stack.Count > 0)
+            {
+                hits["Life"] = stack[0];
+                Log.Write($"placed Life at {stack[0]} - the top of {stack.Count} stacked "
+                          + "number pairs in that corner; no label could be read");
+            }
+        }
+
         var done = new List<string>();
         foreach (var (label, cfg) in new[]
                  { ("Life", _cfg.Life), ("Mana", _cfg.Mana), ("Shield", _cfg.Shield) })

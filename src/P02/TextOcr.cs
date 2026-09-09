@@ -629,6 +629,51 @@ internal sealed partial class TextOcr : IDisposable
         return found;
     }
 
+    /// <summary>
+    /// The stack of "current/maximum" pairs in a corner, top to bottom.
+    ///
+    /// A last resort that needs no labels at all. Life, shield and ward are the
+    /// only things in that corner written as a pair of numbers, stacked, all
+    /// starting at the same left edge - chat and item names are not. So when
+    /// none of the words can be read, the block can still be found by its
+    /// shape, and the top line of it is life.
+    /// </summary>
+    public List<Rectangle> FindStackedPairs(Rectangle search)
+    {
+        var seen = new List<Seen>();
+        foreach (int cut in new[] { 0, 170, 200 })
+            foreach (int scale in new[] { 2, 3 })
+                Collect(search, scale, cut, seen);
+
+        // A pair of numbers is not enough on its own - a flask counter reads
+        // "1/1" and sits in the same corner. A pool has a maximum worth having.
+        var pairs = new List<Seen>();
+        foreach (var o in seen)
+        {
+            if (o.IsWord || !PairPattern().IsMatch(o.Text)) continue;
+            if (!TryParse(o.Text, out _, out int max) || max < 50) continue;
+            pairs.Add(o);
+        }
+
+        // The same line read by several preparations comes back several times.
+        var rows = new List<Rectangle>();
+        foreach (var p in pairs.OrderBy(o => o.Where.Y))
+        {
+            int i = rows.FindIndex(r => Math.Abs(r.Y - p.Where.Y) <= p.Where.Height);
+            if (i < 0) rows.Add(p.Where);
+            else rows[i] = Rectangle.Union(rows[i], p.Where);
+        }
+
+        // Only rows that line up with each other: a stack shares a left edge.
+        if (rows.Count > 1)
+        {
+            int edge = rows.Min(r => r.X);
+            rows = rows.Where(r => r.X - edge <= 40).ToList();
+        }
+
+        return rows.OrderBy(r => r.Y).ToList();
+    }
+
     /// <summary>Adds everything one preparation could read to the pile.</summary>
     private void Collect(Rectangle search, int scale, int cut, List<Seen> into)
     {
