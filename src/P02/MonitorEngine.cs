@@ -583,7 +583,7 @@ public sealed class MonitorEngine : IDisposable
                 // care what is focused - so requiring it meant the bar was
                 // never looked for the moment you alt-tabbed, and the readout
                 // vanished because nothing had found it.
-                if ((_cfg.OverlayFollowBar || _cfg.SlotAuto) && _cfg.OverlayOn
+                if (_cfg.SlotAuto && _cfg.OverlayOn
                     && Native.FindWindowRect(_cfg.WindowMatch) is { } client)
                     _bar.Look(client);
 

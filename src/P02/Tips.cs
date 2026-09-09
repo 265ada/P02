@@ -568,17 +568,20 @@ internal static class Tips
 
     public static readonly string[] FollowBar =
     [
-        "Ties the readout to the floating bar over your character: it shows",
-        "while that bar does, and hides while it does not.",
+        "Moves the readout between your three saved spots as your character",
+        "moves.",
         "",
-        "That is the useful half. The bar is only drawn while you are in the",
-        "world, so this gets the readout out of the way of a shop or the passive",
-        "tree without anything having to work out what is covering what.",
+        "Opening your inventory slides him one way, the character sheet slides",
+        "him the other, and closing both puts him back - so one saved spot is in",
+        "the wrong place two thirds of the time.",
         "",
-        "It does not chase the bar around. Drag it where you want it and it",
-        "stays there - what is remembered is where that is relative to the bar,",
-        "so it moves only when the view moves, which is what opening the",
-        "inventory does.",
+        "Set the three up once: Ctrl and right-click the readout, pick Left,",
+        "Middle or Right, then drag it where you want it for that layout. It",
+        "remembers the spot and where your character was standing at the time,",
+        "and from then on it picks whichever of the three matches where he is.",
+        "",
+        "It does not chase him around - it only ever sits in one of the three",
+        "places you chose.",
     ];
 
     public static readonly string[] NumbersOnly =

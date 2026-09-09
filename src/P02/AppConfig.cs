@@ -402,6 +402,17 @@ public sealed class AppConfig
 
     public int[] SlotY { get; set; } = [-1, -1, -1];
 
+    /// <summary>
+    /// Where the character was standing when each spot was set.
+    ///
+    /// Thirds of the screen was too blunt: opening a panel slides him a few
+    /// hundred pixels, not a third of a monitor, so all three layouts landed in
+    /// the same third and nothing ever switched. Recording where he actually
+    /// was when you placed each spot means the three are told apart by the
+    /// distance that really separates them, whatever that turns out to be.
+    /// </summary>
+    public int[] SlotBarX { get; set; } = [-1, -1, -1];
+
     /// <summary>Which of the three is in use: 0 left, 1 middle, 2 right.</summary>
     public int Slot { get; set; } = 1;
 

@@ -104,9 +104,10 @@ internal sealed class HowToForm : Form
         where you want it, and it is remembered there. Do that three times,
         once per layout.
 
-        "Follow the panels" then chooses between them on its own, by where
-        your character actually is. Nothing needs to know about the game's
-        windows; his own floating bar moves when he does.
+        Each spot also remembers where your character was standing when you
+        set it. From then on, "Move it as my character does" picks whichever
+        of the three matches where he is now - so it follows your panels
+        without knowing anything about them, and without chasing him around.
 
         Also there: lock it in place, and let clicks pass straight through
         into the game. Hold Ctrl to make it solid again while click-through

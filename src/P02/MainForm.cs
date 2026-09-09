@@ -82,17 +82,15 @@ public sealed class MainForm : Form
 
         var follow = new CheckBox
         {
-            Text = "Follow my character's bar",
+            Text = "Move it as my character does",
             AutoSize = true,
-            Checked = cfg.OverlayFollowBar,
+            Checked = cfg.SlotAuto,
         };
         follow.CheckedChanged += (_, _) =>
         {
-            _cfg.OverlayFollowBar = follow.Checked;
-            if (follow.Checked) { _cfg.OverlaySnap = false; snap.Checked = false; }
+            _cfg.SlotAuto = follow.Checked;
             Save();
-            if (_overlay is { IsDisposed: false })
-                ApplyOverlayOptions();
+            ApplyOverlayOptions();
             PlaceOverlay();
         };
         Controls.Add(follow);
@@ -104,7 +102,7 @@ public sealed class MainForm : Form
         snap.CheckedChanged += (_, _) =>
         {
             _cfg.OverlaySnap = snap.Checked;
-            if (snap.Checked) { _cfg.OverlayFollowBar = false; follow.Checked = false; }
+            if (snap.Checked) { _cfg.SlotAuto = false; follow.Checked = false; }
             Save();
             if (_overlay is { IsDisposed: false })
                 ApplyOverlayOptions();
@@ -998,20 +996,17 @@ public sealed class MainForm : Form
 
                     // While following, a drag is choosing where it sits
                     // relative to the bar rather than on the screen.
-                    if (_cfg.OverlayFollowBar
-                        && _engine.CharacterBar is { Width: > 0 } at)
-                    {
-                        _cfg.FollowOffsetX = _overlay.Location.X - at.X;
-                        _cfg.FollowOffsetY = _overlay.Location.Y - at.Y;
-                    }
-                    else
-                    {
-                        // A drag is how a position is set, so it lands in
-                        // whichever of the three is currently chosen.
-                        int slot = Math.Clamp(_cfg.Slot, 0, 2);
-                        _cfg.SlotX[slot] = _overlay.Location.X;
-                        _cfg.SlotY[slot] = _overlay.Location.Y;
-                    }
+                    // A drag is how a position is set, so it lands in whichever
+                    // of the three is currently chosen - along with where the
+                    // character was standing at the time, which is what tells
+                    // the three apart later.
+                    int slot = Math.Clamp(_cfg.Slot, 0, 2);
+                    _cfg.SlotX[slot] = _overlay.Location.X;
+                    _cfg.SlotY[slot] = _overlay.Location.Y;
+
+                    var here = _engine.CharacterBar;
+                    if (here.Width > 0 && _cfg.SlotBarX.Length == 3)
+                        _cfg.SlotBarX[slot] = here.X + here.Width / 2;
 
                     _cfg.Save();
                 };
@@ -1052,31 +1047,7 @@ public sealed class MainForm : Form
         // is a fixed part of the HUD and already tracked, so it follows the
         // readout it is describing rather than a remembered screen position
         // that is wrong the moment a window moves or a monitor changes.
-        // Following the character's bar does not mean chasing it. The readout
-        // stays exactly where it was dropped - what is remembered is where that
-        // was relative to the bar, so it only actually moves when the view
-        // does, which is what opening the inventory does to it. Chasing every
-        // twitch of a bar that is redrawn constantly was unusable.
-        if (!forceDefault && _cfg.OverlayFollowBar && _engine.CharacterBar is { Width: > 0 } bar)
-        {
-            if (_cfg.FollowOffsetX == int.MinValue)
-            {
-                // Nothing chosen yet: under the bar, and that becomes the
-                // offset the moment it is dragged anywhere else.
-                _cfg.FollowOffsetX = -_overlay.Width / 2 + bar.Width / 2;
-                _cfg.FollowOffsetY = bar.Height + 8;
-            }
-
-            var screen = Screen.FromPoint(new Point(bar.X, bar.Y)).WorkingArea;
-            _overlay.Location = new Point(
-                Math.Clamp(bar.X + _cfg.FollowOffsetX, screen.Left,
-                           screen.Right - _overlay.Width),
-                Math.Clamp(bar.Y + _cfg.FollowOffsetY, screen.Top,
-                           screen.Bottom - _overlay.Height));
-            return;
-        }
-
-        if (!forceDefault && !_cfg.OverlaySnap && !_cfg.OverlayFollowBar)
+        if (!forceDefault && !_cfg.OverlaySnap)
         {
             int slot = Math.Clamp(_cfg.Slot, 0, 2);
             if (_cfg.SlotX.Length == 3 && _cfg.SlotY.Length == 3
@@ -1156,15 +1127,40 @@ public sealed class MainForm : Form
     /// </summary>
     private void FollowPanels()
     {
-        if (!_cfg.SlotAuto || _cfg.OverlaySnap || _cfg.OverlayFollowBar) return;
+        if (!_cfg.SlotAuto || _cfg.OverlaySnap) return;
 
         var bar = _engine.CharacterBar;
         if (bar.Width <= 0) return;
         if (Native.FindWindowRect(_cfg.WindowMatch) is not { } game || game.Width < 200) return;
 
-        int centre = bar.X + bar.Width / 2 - game.X;
-        int third = game.Width / 3;
-        int wanted = centre < third ? 0 : centre < third * 2 ? 1 : 2;
+        int barX = bar.X + bar.Width / 2;
+
+        // Whichever spot was set with the character nearest to where he is now.
+        // Each one was placed for a particular layout, so the position he
+        // stands in for that layout is the thing that identifies it - no
+        // knowledge of the game's panels required, and no assumption about how
+        // far a panel pushes him.
+        int wanted = -1;
+        int nearest = int.MaxValue;
+
+        if (_cfg.SlotBarX.Length == 3)
+            for (int i = 0; i < 3; i++)
+            {
+                if (_cfg.SlotBarX[i] < 0) continue;
+                int away = Math.Abs(_cfg.SlotBarX[i] - barX);
+                if (away < nearest) { nearest = away; wanted = i; }
+            }
+
+        // Nothing recorded yet - the first time, or before any spot has been
+        // dragged into place. Thirds of the window is a poor guess but it is
+        // better than sitting still, and it stops mattering the moment a spot
+        // is actually set.
+        if (wanted < 0)
+        {
+            int across = barX - game.X;
+            int third = game.Width / 3;
+            wanted = across < third ? 0 : across < third * 2 ? 1 : 2;
+        }
 
         if (wanted == _cfg.Slot) return;
 
@@ -1222,12 +1218,6 @@ public sealed class MainForm : Form
 
                     // Following the bar means sharing its fate: when the game
                     // stops drawing it, there is nothing to sit under.
-                    // Shown while the bar is, and only that. Tying it to focus
-                    // as well made it disappear every time you looked at this
-                    // window - which is exactly when somebody is trying to see
-                    // whether the setting did anything.
-                    if (_cfg.OverlayFollowBar)
-                        wanted = _engine.CharacterBar.Width > 0;
 
                     if (_cfg.OverlayOn && wanted != _overlay.Visible)
                     {
@@ -1240,7 +1230,7 @@ public sealed class MainForm : Form
                                          _cfg.Mana.Enabled ? _cfg.Mana.Key.ToUpperInvariant() : "");
                         _overlay.Show(life, mana, _cfg.Life.Threshold, _cfg.Mana.Threshold);
                         _overlay.SetFightCount(_engine.FiresThisFight, _engine.InCombat);
-                        if (_cfg.OverlaySnap || _cfg.OverlayFollowBar) PlaceOverlay();
+                        if (_cfg.OverlaySnap) PlaceOverlay();
                         else FollowPanels();
                     }
                 }
