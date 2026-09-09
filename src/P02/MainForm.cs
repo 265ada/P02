@@ -87,7 +87,8 @@ public sealed class MainForm : Form
             if (follow.Checked) { _cfg.OverlaySnap = false; snap.Checked = false; }
             Save();
             if (_overlay is { IsDisposed: false })
-                _overlay.Locked = _cfg.OverlaySnap;
+                _overlay.Locked = _cfg.OverlaySnap || _cfg.OverlayLocked;
+            _overlay.ClickThrough = _cfg.OverlayClickThrough;
             PlaceOverlay();
         };
         Controls.Add(follow);
@@ -685,6 +686,13 @@ public sealed class MainForm : Form
                 _overlay = new OverlayForm();
                 // Remember where it was dropped, so it comes back there rather
                 // than only being saved when the app closes.
+                _overlay.ResetAsked += ResetOverlay;
+                _overlay.OptionsChanged += (locked, through) =>
+                {
+                    _cfg.OverlayLocked = locked;
+                    _cfg.OverlayClickThrough = through;
+                    Save();
+                };
                 _overlay.Moved += () =>
                 {
                     if (_overlay is not { IsDisposed: false }) return;
@@ -795,9 +803,27 @@ public sealed class MainForm : Form
     }
 
     /// <summary>Brings the overlay back to a known spot, however it was lost.</summary>
+    /// <summary>
+    /// The way back from anything done to the readout.
+    ///
+    /// Click-through is the one setting that can hide its own undo: once the
+    /// readout ignores the mouse, its menu cannot be opened again. So this
+    /// clears it, along with the lock and the position.
+    /// </summary>
     private void ResetOverlay()
     {
+        _cfg.OverlayClickThrough = false;
+        _cfg.OverlayLocked = false;
+        _cfg.FollowOffsetX = int.MinValue;
+        _cfg.FollowOffsetY = int.MinValue;
+
         ToggleOverlay(true);
+        if (_overlay is { IsDisposed: false })
+        {
+            _overlay.ClickThrough = false;
+            _overlay.Locked = _cfg.OverlaySnap;
+        }
+
         PlaceOverlay(forceDefault: true);
         _overlay?.BringToFront();
         Save();

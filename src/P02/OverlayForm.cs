@@ -43,6 +43,12 @@ public sealed class OverlayForm : Form
     /// <summary>Raised when a drag finishes, so the position can be saved.</summary>
     public event Action? Moved;
 
+    /// <summary>Raised when the menu changes something worth remembering.</summary>
+    public event Action<bool, bool>? OptionsChanged;
+
+    /// <summary>Raised when the menu asks for the default position back.</summary>
+    public event Action? ResetAsked;
+
     /// <summary>
     /// Set while the readout is anchored to something in the game, so a drag
     /// cannot quietly fight the thing that keeps putting it back.
@@ -51,6 +57,22 @@ public sealed class OverlayForm : Form
     [System.ComponentModel.DesignerSerializationVisibility(
         System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool Locked { get; set; }
+
+    /// <summary>Whether the mouse passes straight through to the game.</summary>
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(
+        System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool ClickThrough
+    {
+        get => _clickThrough;
+        set
+        {
+            _clickThrough = value;
+            if (IsHandleCreated) Native.ClickThrough(Handle, value);
+        }
+    }
+
+    private bool _clickThrough;
 
     public OverlayForm()
     {
@@ -79,8 +101,17 @@ public sealed class OverlayForm : Form
             Location = new Point(_wasAt.X + now.X - _grabbedAt.X,
                                  _wasAt.Y + now.Y - _grabbedAt.Y);
         };
-        MouseUp += (_, _) =>
+        // Ctrl and right-click, deliberately. The readout sits over a game
+        // where every ordinary click belongs to the game, and a menu that opens
+        // on a plain right-click would open by accident all evening.
+        MouseUp += (_, e) =>
         {
+            if (e.Button == MouseButtons.Right && ModifierKeys == Keys.Control)
+            {
+                ShowMenu(e.Location);
+                return;
+            }
+
             if (!_dragging) return;
             _dragging = false;
             Cursor = Cursors.Default;
@@ -155,6 +186,47 @@ public sealed class OverlayForm : Form
         _fade.Start();
     }
 
+    private void ShowMenu(Point at)
+    {
+        var menu = new ContextMenuStrip { ShowImageMargin = false };
+
+        var lockItem = new ToolStripMenuItem("Lock position")
+        {
+            Checked = Locked,
+            CheckOnClick = true,
+            ToolTipText = "Stops it being dragged by accident.",
+        };
+        lockItem.Click += (_, _) =>
+        {
+            Locked = lockItem.Checked;
+            OptionsChanged?.Invoke(Locked, ClickThrough);
+        };
+
+        var throughItem = new ToolStripMenuItem("Click through")
+        {
+            Checked = ClickThrough,
+            CheckOnClick = true,
+            ToolTipText = "Clicks land in the game instead of on the readout. "
+                          + "Right-click the P button on the main window to undo it - "
+                          + "this menu cannot be reached once it is on.",
+        };
+        throughItem.Click += (_, _) =>
+        {
+            ClickThrough = throughItem.Checked;
+            OptionsChanged?.Invoke(Locked, ClickThrough);
+        };
+
+        var reset = new ToolStripMenuItem("Move back to the corner");
+        reset.Click += (_, _) => ResetAsked?.Invoke();
+
+        menu.Items.Add(lockItem);
+        menu.Items.Add(throughItem);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(reset);
+        menu.Closed += (_, _) => menu.Dispose();
+        menu.Show(this, at);
+    }
+
     /// <summary>A globe that is not watched has nothing to say, so it takes no room.</summary>
     private bool ManaShown => !(_mana.Note == "off" && !_mana.Ok);
 
@@ -169,6 +241,7 @@ public sealed class OverlayForm : Form
     {
         base.OnHandleCreated(e);
         Native.ExcludeFromCapture(Handle, false);
+        Native.ClickThrough(Handle, _clickThrough);
         Render();
     }
 

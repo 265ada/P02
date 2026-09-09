@@ -304,7 +304,16 @@ internal static class Tips
         "and a count of presses in the current fight.",
         "",
         "It has no background - only the readouts show - so drag it by any part",
-        "of it. Right-click this button to bring it back if it goes missing.",
+        "of it.",
+        "",
+        "Ctrl and right-click on the readout itself opens its own options: lock",
+        "its position, or let clicks pass straight through it into the game.",
+        "Ctrl deliberately, because a plain right-click over a game belongs to",
+        "the game.",
+        "",
+        "Right-click this button to bring it back, unlocked and clickable - which",
+        "is the way out of click-through, since nothing on the readout can be",
+        "clicked while that is on.",
     ];
 
     public static readonly string[] HideCapture =

@@ -369,6 +369,17 @@ public sealed class AppConfig
 
     public int FollowOffsetY { get; set; } = int.MinValue;
 
+    /// <summary>Pinned in place, so a stray drag cannot move the readout.</summary>
+    public bool OverlayLocked { get; set; }
+
+    /// <summary>
+    /// The readout ignores the mouse, so clicks land in the game behind it.
+    ///
+    /// Nothing can be clicked on the readout while this is on, itself included,
+    /// so the way back out is right-clicking the pin button on the main window.
+    /// </summary>
+    public bool OverlayClickThrough { get; set; }
+
     /// <summary>
     /// Hide the readout whenever the game's numbers are not on screen.
     ///

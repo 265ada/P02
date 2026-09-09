@@ -353,4 +353,31 @@ internal static class Native
             if (attached) AttachThreadInput(ours, theirs, false);
         }
     }
+
+    // --- click-through ----------------------------------------------------
+
+    public const int GWL_EXSTYLE = -20;
+    public const int WS_EX_TRANSPARENT = 0x00000020;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    public static extern nint GetWindowLongPtr(nint hWnd, int index);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    public static extern nint SetWindowLongPtr(nint hWnd, int index, nint value);
+
+    /// <summary>
+    /// Makes a window ignore the mouse entirely, so clicks land on whatever is
+    /// behind it.
+    ///
+    /// There is no way back through the window itself once this is on - it
+    /// cannot receive the click that would turn it off - so whatever switches
+    /// it on must leave a way out somewhere else.
+    /// </summary>
+    public static void ClickThrough(nint hWnd, bool on)
+    {
+        if (hWnd == 0) return;
+        nint style = GetWindowLongPtr(hWnd, GWL_EXSTYLE);
+        nint wanted = on ? style | WS_EX_TRANSPARENT : style & ~(nint)WS_EX_TRANSPARENT;
+        if (wanted != style) SetWindowLongPtr(hWnd, GWL_EXSTYLE, wanted);
+    }
 }
