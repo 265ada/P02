@@ -634,14 +634,26 @@ public sealed class MonitorEngine : IDisposable
             return new GlobeReading(name, 0, false, "off");
         }
 
-        if (!c.Region.IsValid)
-            return new GlobeReading(name, 0, false, "no region");
-
-        if (!st.Cap.Grab(c.Region.ToRect()))
-            return new GlobeReading(name, 0, false, "capture failed");
-
-        double frac = OrbDetector.Fraction(st.Cap.Buffer, st.Cap.Width, st.Cap.Height, c);
         long now = clock.ElapsedMilliseconds;
+
+        // The globe is the fallback, not a requirement. Without a region this
+        // used to stop dead - "no region" - even with the numbers set up and
+        // reading perfectly, which is a watcher switched off by the absence of
+        // the worst of its three sources.
+        bool haveGlobe = c.Region.IsValid;
+        double frac = 0;
+
+        if (haveGlobe)
+        {
+            if (!st.Cap.Grab(c.Region.ToRect()))
+                return new GlobeReading(name, 0, false, "capture failed");
+
+            frac = OrbDetector.Fraction(st.Cap.Buffer, st.Cap.Width, st.Cap.Height, c);
+        }
+        else if (!c.UseText && !_cfg.UseMemory)
+        {
+            return new GlobeReading(name, 0, false, "no region");
+        }
 
         // The numbers beside the globe are exact. When there is a recent
         // reading, it decides; the pixels stay as the fallback for the gaps

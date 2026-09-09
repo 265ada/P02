@@ -1232,8 +1232,36 @@ public sealed class MainForm : Form
         Hide();
         Thread.Sleep(350);
         string found;
+
         try { found = _engine.FindAllNumbers(); }
-        finally { Show(); }
+        catch { Show(); throw; }
+
+        // Then the globes, where one is missing. They are only the fallback,
+        // but "no region" stops a watcher dead - and this button is supposed to
+        // leave nothing for anyone to go and find another button for.
+        var area = Native.FindWindowRect(_cfg.WindowMatch)
+                   ?? (Screen.PrimaryScreen ?? Screen.AllScreens[0]).Bounds;
+
+        foreach (var (cfg, blue) in new[] { (_cfg.Life, false), (_cfg.Mana, true) })
+        {
+            if (cfg.Region.IsValid) continue;
+
+            int gw = (int)(area.Width * 0.25);
+            int gh = (int)(area.Height * 0.36);
+            var look = blue
+                ? new Rectangle(area.Right - gw, area.Bottom - gh, gw, gh)
+                : new Rectangle(area.Left, area.Bottom - gh, gw, gh);
+
+            var globe = OrbDetector.AutoLocate(look, blue, margin: 18, minV: 45);
+            if (globe is null) continue;
+
+            cfg.Region = Box.From(globe.Value);
+            cfg.FullRow = 0;
+            cfg.EmptyRow = 0;
+            Log.Write($"setup: {(blue ? "mana" : "life")} globe found at {globe.Value}");
+        }
+
+        Show();
 
         Save();
         _life.RefreshFromConfig();
