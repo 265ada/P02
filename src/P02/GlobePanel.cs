@@ -142,14 +142,14 @@ public sealed class GlobePanel : Card
         Controls.Add(_tuned);
         Tips.On(_tuned, "What the colour tuning worked out, and whether it can "
             + "separate a full globe from an empty one at all.");
-        y += 34;
+        y += 30;
 
-        _warn.SetBounds(14, y, 338, 32);
+        _warn.SetBounds(14, y, 338, 30);
         _warn.ForeColor = Color.FromArgb(190, 60, 0);
         Controls.Add(_warn);
         Tips.On(_warn, "Anything about this setup that could let a drained globe read "
             + "as full - the failure that looks like nothing at all.");
-        y += 34;
+        y += 32;
 
         Controls.Add(Lab("Fire below", 14, y + 4, Tips.FireBelow));
         _threshold.SetBounds(90, y, 62, 24);
@@ -1328,6 +1328,37 @@ public sealed class GlobePanel : Card
                 x += c.Width + gap;
             }
         }
+    }
+
+    /// <summary>
+    /// Follows the width it is given.
+    ///
+    /// The insides were laid out at typed coordinates for a 382-wide card, so
+    /// widening the window left everything huddled against the left edge with
+    /// a growing empty strip beside it. The things that should span the card
+    /// now do, and the button rows repack themselves.
+    /// </summary>
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        if (_bar is null) return;
+
+        int pad = 14;
+        int wide = Math.Max(120, Width - pad * 2);
+
+        foreach (var full in new Control[] { _warn, _numbers, _effect, _burstTime,
+                                             _shieldRead, _region })
+            if (full is not null) full.Width = Math.Max(60, Width - full.Left - pad);
+
+        // The level bar takes what the reading beside it does not need.
+        int reading = Math.Max(150, (int)(wide * 0.42));
+        _bar.Width = Math.Max(80, wide - reading - 8);
+        _pct.Left = _bar.Right + 8;
+        _pct.Width = Width - _pct.Left - pad;
+
+        _tuned.Width = Math.Max(80, Width - _tuned.Left - pad);
+
+        FitRows();
     }
 
     public void RefreshFromConfig()

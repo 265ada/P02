@@ -39,11 +39,15 @@ public static class Theme
     // but does not touch type handed to a control explicitly, so scaling the
     // window while leaving these alone shrank every button around its own
     // label - which is how "Auto-find" became "Auto-fi".
-    public static readonly Font Ui = new("Segoe UI", 7.5f);
-    public static readonly Font UiBold = new("Segoe UI", 7.5f, FontStyle.Bold);
-    public static readonly Font Small = new("Segoe UI", 7f);
-    public static readonly Font Title = new("Segoe UI Semibold", 8.5f);
-    public static readonly Font Big = new("Segoe UI Semibold", 9.75f);
+    // Readable first. Making the window smaller by shrinking the words is a
+    // false economy - it was 7.5pt and unreadable, which is a smaller window
+    // that nobody can use. The size comes out of the spacing instead, and out
+    // of controls being sized to their text rather than to a guess.
+    public static readonly Font Ui = new("Segoe UI", 9f);
+    public static readonly Font UiBold = new("Segoe UI", 9f, FontStyle.Bold);
+    public static readonly Font Small = new("Segoe UI", 8.25f);
+    public static readonly Font Title = new("Segoe UI Semibold", 10f);
+    public static readonly Font Big = new("Segoe UI Semibold", 11f);
 
     /// <summary>
     /// Draws a checkbox over the top of the system one.
@@ -99,7 +103,7 @@ public static class Theme
     /// <summary>Styles a control and everything inside it.</summary>
     public static void Apply(Control root)
     {
-        foreach (Control c in root.Controls)
+        foreach (Control c in root.Controls.Cast<Control>().ToArray())
         {
             switch (c)
             {
@@ -212,7 +216,7 @@ public static class Theme
     {
         using var g = root.CreateGraphics();
 
-        foreach (Control c in root.Controls)
+        foreach (Control c in root.Controls.Cast<Control>().ToArray())
         {
             if (c.HasChildren) FitText(c);
             if (c is not (Button or CheckBox or Label) || c.AutoSize) continue;

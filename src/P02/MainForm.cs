@@ -156,7 +156,7 @@ public sealed class MainForm : Form
         int y = Math.Max(_life.Bottom, _mana.Bottom) + 16;
 
         _arm.SetBounds(12, y, 208, 60);
-        _arm.Font = new Font("Segoe UI Semibold", 12.5f);
+        _arm.Font = new Font("Segoe UI Semibold", 14f);
         _arm.FlatStyle = FlatStyle.Flat;
         _arm.Click += (_, _) => _engine.Toggle();
         Controls.Add(_arm);
@@ -164,7 +164,7 @@ public sealed class MainForm : Form
             "", "It starts disarmed every launch, on purpose.");
 
         _status.SetBounds(234, y + 8, 460, 24);
-        _status.Font = new Font("Segoe UI Semibold", 9.5f);
+        _status.Font = new Font("Segoe UI Semibold", 10.5f);
         Controls.Add(_status);
         Tips.On(_status, Tips.Status);
 
@@ -573,13 +573,17 @@ public sealed class MainForm : Form
         BackColor = Theme.Bg;
         ForeColor = Theme.Text;
         Font = Theme.Ui;
-        Regroup(new Control[] { findAll, checkBtn, howBtn, updBtn, upd, diagBtn, logBtn },
-                new Control[] { numbersOnly, mem, rescan, pollLbl, _pollHz },
-                new Control[] { winLbl, _window, clearBtn, armKeyLbl, _hotkey,
-                                sendLbl, method, postedNote, testBtn },
-                new Control[] { sound, disarmedDing, oftenLbl, gap, msLbl,
-                                volLbl, vol, dbLbl },
-                new Control[] { shareBtn, applyBtn, hide });
+        // Rows, written out, rather than a bag of controls packed until they
+        // wrap. Wrapping put a spin box under a checkbox and a unit label at
+        // the start of a line; saying which things belong on a line together
+        // is the whole of the difference between tidy and ragged.
+        Regroup(
+            [[findAll, checkBtn], [howBtn, updBtn], [upd], [diagBtn, logBtn]],
+            [[numbersOnly], [mem], [rescan], [pollLbl, _pollHz]],
+            [[winLbl], [_window, clearBtn], [armKeyLbl, _hotkey],
+             [sendLbl, method], [postedNote], [testBtn]],
+            [[sound, disarmedDing], [oftenLbl, gap, msLbl], [volLbl, vol, dbLbl]],
+            [[shareBtn, applyBtn], [hide]]);
 
         Theme.Apply(this);
 
@@ -617,7 +621,7 @@ public sealed class MainForm : Form
 
         // Fit the contents, then fit the screen. Whichever is smaller wins, and
         // what does not fit scrolls rather than falling off the bottom.
-        int deepest = Controls.Cast<Control>().Max(c => c.Bottom);
+        int deepest = Controls.Cast<Control>().ToArray().Max(c => c.Bottom);
         var room = (Screen.FromControl(this) ?? Screen.PrimaryScreen!).WorkingArea;
 
         MinimumSize = new Size(S(760), S(420));
@@ -659,16 +663,26 @@ public sealed class MainForm : Form
     /// tooltips were carrying alone.
     /// </summary>
     /// <summary>How much of the original size the window is drawn at.</summary>
-    private const float UiScale = 0.8f;
+    private const float UiScale = 0.92f;
 
     private static int S(int v) => (int)Math.Round(v * UiScale);
 
-    private Control[][]? _groups;
+    private Control[][][]? _groups;
     private readonly List<Card> _groupCards = [];
+
+    private bool _laying;
 
     private void Relayout()
     {
         if (_groups is null) return;
+
+        // Laying out changes control sizes, which raises more resize events.
+        // Without this the rebuild re-entered itself and tore the collection
+        // apart underneath its own enumeration - "collection was modified".
+        if (_laying) return;
+        _laying = true;
+        try
+        {
 
         // The pair of pool cards share the width evenly, with the same margin
         // outside them as between them. They were two fixed 382-wide panels at
@@ -687,10 +701,12 @@ public sealed class MainForm : Form
                          ClientSize.Width - _arm.Right - S(26), _focus.Height);
 
         Regroup(_groups[0], _groups[1], _groups[2], _groups[3], _groups[4]);
+        }
+        finally { _laying = false; }
     }
 
-    private void Regroup(Control[] setup, Control[] reading, Control[] firing,
-                         Control[] sound, Control[] sharing)
+    private void Regroup(Control[][] setup, Control[][] reading, Control[][] firing,
+                         Control[][] sound, Control[][] sharing)
     {
         _groups = [setup, reading, firing, sound, sharing];
 
@@ -720,6 +736,7 @@ public sealed class MainForm : Form
         var contents = new[] { setup, reading, firing, sound, sharing };
 
         int x = Edge, rowTop = top, rowBottom = top, column = 0;
+        var row = new List<Card>();
 
         for (int i = 0; i < titles.Length; i++)
         {
@@ -730,6 +747,7 @@ public sealed class MainForm : Form
 
             var card = Group(titles[i], x, rowTop, w, contents[i]);
             _groupCards.Add(card);
+            row.Add(card);
             rowBottom = Math.Max(rowBottom, card.Bottom);
 
             if (++column < columns && i < titles.Length - 1)
@@ -738,6 +756,12 @@ public sealed class MainForm : Form
             }
             else
             {
+                // Every card on a row ends level with its neighbours. Cards of
+                // three different heights side by side is what made the bottom
+                // half look like it had been assembled from spare parts.
+                foreach (var c in row) c.Height = rowBottom - c.Top;
+                row.Clear();
+
                 column = 0;
                 x = Edge;
                 rowTop = rowBottom + Gap;
@@ -751,32 +775,54 @@ public sealed class MainForm : Form
     /// One titled group, filled left to right and wrapped, so a longer label
     /// pushes its neighbour along instead of landing on top of it.
     /// </summary>
-    private Card Group(string title, int x, int y, int width, Control[] items)
+    /// <summary>
+    /// One titled group, a row at a time.
+    ///
+    /// Each row is written out at the call site, so things that belong
+    /// together stay together and nothing wraps into a line of its own. A row
+    /// that is too wide for the card still wraps rather than running off the
+    /// edge, but that is a last resort rather than the layout.
+    /// </summary>
+    private Card Group(string title, int x, int y, int width, Control[][] rows)
     {
         var card = new Card { Text = title, Bounds = new Rectangle(x, y, width, S(40)) };
         Controls.Add(card);
         card.SendToBack();
 
-        int Pad = S(12), Line = S(30);
-        int cx = Pad, cy = S(34);
+        int pad = S(12), line = S(30);
+        int cy = S(34);
 
-        foreach (var item in items)
+        foreach (var row in rows)
         {
-            item.Parent = card;
-            if (item is Label or CheckBox) item.AutoSize = true;
-            item.PerformLayout();
+            int cx = pad;
+            int tallest = 0;
 
-            int w = item.Width;
-            if (cx > Pad && cx + w > width - Pad) { cx = Pad; cy += Line; }
+            foreach (var item in row)
+            {
+                item.Parent = card;
+                if (item is Label or CheckBox) item.AutoSize = true;
+                item.PerformLayout();
 
-            // Labels sit on the baseline of the boxes they name rather than the
-            // top of them, which is where they read as captions.
-            int lift = item is Label ? (S(26) - item.Height) / 2 : 0;
-            item.Location = new Point(cx, cy + lift);
-            cx += w + (item is Label ? S(8) : S(12));
+                if (cx > pad && cx + item.Width > width - pad)
+                {
+                    cx = pad;
+                    cy += line;
+                    tallest = 0;
+                }
+
+                // Labels sit on the middle of the boxes they name rather than
+                // the top of them, which is where they read as captions.
+                int lift = item is Label ? (S(24) - item.Height) / 2 : 0;
+                item.Location = new Point(cx, cy + lift);
+
+                cx += item.Width + (item is Label ? S(6) : S(10));
+                tallest = Math.Max(tallest, item.Height);
+            }
+
+            cy += Math.Max(line, tallest + S(6));
         }
 
-        card.Height = cy + Line + S(6);
+        card.Height = cy + S(4);
         return card;
     }
 
