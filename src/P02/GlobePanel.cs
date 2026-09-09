@@ -408,6 +408,15 @@ public sealed class GlobePanel : Card
         if (_blind) return;
         if (!_cfg.Region.IsValid) { _warn.Text = ""; return; }
 
+        // The globe is the fallback. Once the numbers are set up, or memory is
+        // reading, none of the colour advice below applies to anything that
+        // decides whether to fire - and a red line about calibration on a
+        // working setup reads as a fault, which is worse than saying nothing.
+        if (_cfg.TextRegion.IsValid) { _warn.Text = ""; return; }
+
+        // Nor does any of it matter for a pool nobody asked to watch.
+        if (!_cfg.Enabled) { _warn.Text = ""; return; }
+
         if (!_cfg.TextRegion.IsValid && _probe.Available)
             _warn.Text = "No numbers set. Press Numbers... - it is exact, needs no "
                        + "calibration, and stops it acting on menu screens.";
