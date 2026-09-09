@@ -1399,7 +1399,17 @@ public sealed class MainForm : Form
         _mana.RefreshFromConfig();
 
         // Then memory, which needs both maxima to have anything to search for.
-        if (_cfg.UseMemory) _engine.RescanMemory();
+        // Give it a moment before the verdict, or it is always reported as
+        // still looking - it is asked to search several gigabytes.
+        if (_cfg.UseMemory)
+        {
+            _engine.RescanMemory();
+            for (int waited = 0; waited < 60 && !_engine.MemoryLocked; waited++)
+            {
+                Application.DoEvents();
+                Thread.Sleep(100);
+            }
+        }
 
         // Whether life is set up is decided by reading it, not by a region
         // being non-empty. It told him it was reading his life from the numbers
@@ -1451,9 +1461,19 @@ public sealed class MainForm : Form
                             + "Stand in a town with them visible and press it again.");
         }
 
+        // The same check the button beside it runs, so setup finishes by saying
+        // whether it worked rather than what it did.
+        var left = SelfCheck.Run(_cfg, _engine, Version);
+        if (left.Count > 0)
+        {
+            said.AppendLine();
+            said.AppendLine(SelfCheck.Describe(left));
+        }
+
         MessageBox.Show(this, said.ToString().TrimEnd(), "Set it up",
                         MessageBoxButtons.OK,
-                        lifeOk ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                        lifeOk && !left.Any(f => f.Stops)
+                            ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
     private void FindAllNumbers()

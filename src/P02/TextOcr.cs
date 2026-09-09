@@ -50,6 +50,9 @@ internal sealed partial class TextOcr : IDisposable
 
         /// <summary>Which preparation last produced a pair; tried first next time.</summary>
         public int Cut;
+
+        /// <summary>Reads in a row that produced no pair.</summary>
+        public int Fails;
     }
 
     private readonly Dictionary<string, Slot> _slots = new();
@@ -219,7 +222,16 @@ internal sealed partial class TextOcr : IDisposable
         try
         {
             using var shot = ToBitmap(slot.Cap.Buffer, slot.Cap.Width, slot.Cap.Height);
-            foreach (int cut in Cuts(slot.Cut))
+            // A read that is going to fail costs as much as one that succeeds,
+            // and on a box that has stopped working it fails several times a
+            // second, four preparations deep. That is the machine hitching. So
+            // once it is failing, only the preparation that last worked is
+            // tried, and the full sweep is spent one attempt in eight - often
+            // enough to notice the day it starts working again, rarely enough
+            // to cost nothing while it does not.
+            bool sweep = slot.Fails == 0 || slot.Fails % 8 == 0;
+
+            foreach (int cut in sweep ? Cuts(slot.Cut) : [slot.Cut])
             {
                 using var prepared = cut == 0 ? null : Threshold(shot, cut);
                 using var big = Upscale(prepared ?? shot, 3);
@@ -227,6 +239,8 @@ internal sealed partial class TextOcr : IDisposable
 
                 if (PairPattern().IsMatch(text)) { slot.Cut = cut; break; }
             }
+
+            slot.Fails = PairPattern().IsMatch(text) ? 0 : slot.Fails + 1;
         }
         finally { Interlocked.Decrement(ref _readersWaiting); }
 
