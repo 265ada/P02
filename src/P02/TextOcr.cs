@@ -560,35 +560,73 @@ internal sealed partial class TextOcr : IDisposable
     /// anyone to drag boxes around text: look in the corners of the game for
     /// the word "Life", and the numbers beside it are the region.
     /// </summary>
+    /// <summary>What one recognise pass saw, in screen coordinates.</summary>
+    private readonly record struct Seen(string Text, Rectangle Where, bool IsWord);
+
+    /// <summary>
+    /// Locates stat lines by their labels.
+    ///
+    /// The label and its numbers do not arrive together. Over a game the raw
+    /// crop gives up the word and loses the pale digits, while the thresholded
+    /// one gives up the digits and loses the word - and even within one pass
+    /// they come back as separate lines, because the HUD leaves a wide gap
+    /// between them. Insisting on both in one line matched nothing at all:
+    ///
+    ///   raw         -> [Shield]
+    ///   thresholded -> [2,065/2,065]
+    ///
+    /// So every pass contributes what it saw and the answer is assembled from
+    /// all of it by position: a word that names a stat, and the nearest pair of
+    /// numbers sharing its line. Which pass each came from stops mattering.
+    /// </summary>
     public Dictionary<string, Rectangle> FindLabelled(Rectangle search,
                                                       IEnumerable<string> labels)
     {
         var want = labels.ToArray();
-        var found = new Dictionary<string, Rectangle>(StringComparer.OrdinalIgnoreCase);
+        var seen = new List<Seen>();
 
-        // One magnification was not enough. The engine ignores text below a
-        // certain size and gets confused above another, and where those limits
-        // fall depends on the size of the glyphs and of the crop - which is why
-        // Mana on the right was found every single time at 2x while Life and
-        // Shield in the other corner were never found at all. The per-region
-        // reader has always swept several; this did not.
         foreach (int cut in new[] { 0, 170, 200 })
-        {
             foreach (int scale in new[] { 2, 3, 4 })
-            {
-                FindAt(search, want, found, scale, cut);
-                if (want.All(found.ContainsKey)) break;
-            }
+                Collect(search, scale, cut, seen);
 
-            if (want.All(found.ContainsKey)) break;
+        var found = new Dictionary<string, Rectangle>(StringComparer.OrdinalIgnoreCase);
+        var pairs = seen.Where(o => !o.IsWord && PairPattern().IsMatch(o.Text)).ToList();
+
+        foreach (string label in want)
+        {
+            var word = seen.Where(o => o.IsWord && HasLabel(o.Text, label))
+                           .OrderBy(o => o.Where.Y)
+                           .Select(o => (Seen?)o)
+                           .FirstOrDefault();
+            if (word is null) continue;
+
+            var w = word.Value.Where;
+            int mid = w.Y + w.Height / 2;
+
+            // The pair on the same line. Same line means its vertical middle
+            // sits inside the word's own height - one line down is a different
+            // stat, and reading shield as life is the dangerous direction.
+            var pair = pairs
+                .Where(o => Math.Abs(o.Where.Y + o.Where.Height / 2 - mid) <= w.Height)
+                .OrderBy(o => Math.Abs(o.Where.Y + o.Where.Height / 2 - mid))
+                .Select(o => (Seen?)o)
+                .FirstOrDefault();
+            if (pair is null) continue;
+
+            var box = Rectangle.Union(w, pair.Value.Where);
+            box.Inflate(12, 10);
+            box.Intersect(search);
+            found[label] = box;
+            Log.Write($"found {label} at {box} - word \"{word.Value.Text}\" with "
+                      + $"\"{pair.Value.Text}\"");
         }
 
         Infer(search, found);
         return found;
     }
 
-    private void FindAt(Rectangle search, string[] labels,
-                        Dictionary<string, Rectangle> found, int scale, int cut)
+    /// <summary>Adds everything one preparation could read to the pile.</summary>
+    private void Collect(Rectangle search, int scale, int cut, List<Seen> into)
     {
         if (_engine is null) return;
 
@@ -623,42 +661,21 @@ internal sealed partial class TextOcr : IDisposable
 
         foreach (var line in result.Lines)
         {
-            // Only a line that carries a pair of numbers is a stat line; the
-            // word alone appears in plenty of other places.
-            if (!PairPattern().IsMatch(line.Text)) continue;
-
-            foreach (string label in labels)
+            Rectangle? bounds = null;
+            foreach (var word in line.Words)
             {
-                if (found.ContainsKey(label)) continue;
-                if (!HasLabel(line.Text, label)) continue;
-
-                double l = double.MaxValue, t = double.MaxValue, r = 0, b = 0;
-                foreach (var w in line.Words)
-                {
-                    l = Math.Min(l, w.BoundingRect.X);
-                    t = Math.Min(t, w.BoundingRect.Y);
-                    r = Math.Max(r, w.BoundingRect.X + w.BoundingRect.Width);
-                    b = Math.Max(b, w.BoundingRect.Y + w.BoundingRect.Height);
-                }
-                if (r <= l || b <= t) continue;
-
-                // Back to screen coordinates, with a little room around it so
-                // the glyphs are not clipped on the next read.
-                // Generous, because the box is read back at other
-                // magnifications where the glyphs land differently, and a tight
-                // crop is what made a re-read come back with the word and none
-                // of the numbers.
-                const int pad = 12;
-                found[label] = new Rectangle(
-                    search.X + (int)(l / scale) - pad,
-                    search.Y + (int)(t / scale) - pad,
-                    (int)((r - l) / scale) + pad * 2,
-                    (int)((b - t) / scale) + pad * 2);
-                Log.Write($"found \"{label}\" at {found[label]} reading \"{line.Text}\"");
+                var at = Screen(word.BoundingRect, search, scale);
+                into.Add(new Seen(word.Text, at, true));
+                bounds = bounds is null ? at : Rectangle.Union(bounds.Value, at);
             }
-        }
 
+            if (bounds is not null) into.Add(new Seen(line.Text, bounds.Value, false));
+        }
     }
+
+    private static Rectangle Screen(Windows.Foundation.Rect r, Rectangle search, int scale) =>
+        new(search.X + (int)(r.X / scale), search.Y + (int)(r.Y / scale),
+            Math.Max(1, (int)(r.Width / scale)), Math.Max(1, (int)(r.Height / scale)));
 
     /// <summary>
     /// Fills in a line that was not read from one that was.

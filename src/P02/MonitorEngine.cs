@@ -114,6 +114,34 @@ public sealed class MonitorEngine : IDisposable
     /// for long enough to rule out a misread, take it: update the setting,
     /// point the search at the new value and say so.
     /// </summary>
+    /// <summary>
+    /// Sweeps a corner in overlapping bands, stopping when it has what it came
+    /// for. Bottom first, because that is where the stat block sits and the
+    /// chat is above it.
+    /// </summary>
+    private Dictionary<string, Rectangle> Bands(Rectangle window, Rectangle corner,
+                                                string[] labels)
+    {
+        var found = new Dictionary<string, Rectangle>(StringComparer.OrdinalIgnoreCase);
+
+        int band = Math.Max(110, (int)(window.Height * 0.09));
+        int step = band / 2;
+
+        for (int bottom = corner.Bottom; bottom > corner.Top; bottom -= step)
+        {
+            int top = Math.Max(corner.Top, bottom - band);
+            var strip = new Rectangle(corner.X, top, corner.Width, bottom - top);
+            if (strip.Height < 24) continue;
+
+            foreach (var (k, v) in _ocr.FindLabelled(strip, labels))
+                if (!found.ContainsKey(k)) found[k] = v;
+
+            if (labels.All(found.ContainsKey)) break;
+        }
+
+        return found;
+    }
+
     private long _refoundAtMs = long.MinValue / 2;
     private long _textOkAtMs;
 
@@ -199,13 +227,20 @@ public sealed class MonitorEngine : IDisposable
         var left = new Rectangle(area.Left, area.Bottom - h, w, h);
         var right = new Rectangle(area.Right - w, area.Bottom - h, w, h);
 
-        var hits = _ocr.FindLabelled(left, ["Life", "Shield"]);
-        foreach (var (k, v) in _ocr.FindLabelled(right, ["Mana"])) hits[k] = v;
+        // In bands, from the bottom up, rather than as one tall corner.
+        //
+        // The chat window lives in the same corner as life, shield and ward,
+        // and it is full of text. Handed the whole corner at once, the engine
+        // came back with three lines of somebody selling an ascendancy and
+        // nothing else - the stat lines are small and pale and simply lost
+        // among it. A band a few lines tall cannot be drowned that way.
+        var hits = Bands(area, left, ["Life", "Shield"]);
+        foreach (var (k, v) in Bands(area, right, ["Mana"])) hits[k] = v;
 
         // Some layouts put them all together; if mana was not on the right,
         // look where life was.
         if (!hits.ContainsKey("Mana"))
-            foreach (var (k, v) in _ocr.FindLabelled(left, ["Mana"])) hits[k] = v;
+            foreach (var (k, v) in Bands(area, left, ["Mana"])) hits[k] = v;
 
         var done = new List<string>();
         foreach (var (label, cfg) in new[]
