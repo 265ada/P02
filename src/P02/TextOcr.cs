@@ -481,12 +481,32 @@ internal sealed partial class TextOcr : IDisposable
     public Dictionary<string, Rectangle> FindLabelled(Rectangle search,
                                                       IEnumerable<string> labels)
     {
+        var want = labels.ToArray();
         var found = new Dictionary<string, Rectangle>(StringComparer.OrdinalIgnoreCase);
-        if (_engine is null) return found;
 
-        const int scale = 2;
+        // One magnification was not enough. The engine ignores text below a
+        // certain size and gets confused above another, and where those limits
+        // fall depends on the size of the glyphs and of the crop - which is why
+        // Mana on the right was found every single time at 2x while Life and
+        // Shield in the other corner were never found at all. The per-region
+        // reader has always swept several; this did not.
+        foreach (int scale in new[] { 2, 3, 4 })
+        {
+            FindAt(search, want, found, scale);
+            if (want.All(found.ContainsKey)) break;
+        }
+
+        Infer(search, found);
+        return found;
+    }
+
+    private void FindAt(Rectangle search, string[] labels,
+                        Dictionary<string, Rectangle> found, int scale)
+    {
+        if (_engine is null) return;
+
         using var cap = new ScreenCapture();
-        if (!cap.Grab(search)) return found;
+        if (!cap.Grab(search)) return;
 
         using var shot = ToBitmap(cap.Buffer, cap.Width, cap.Height);
         using var big = Upscale(shot, scale);
@@ -507,7 +527,7 @@ internal sealed partial class TextOcr : IDisposable
         catch (Exception ex)
         {
             Log.Write($"find numbers failed: {ex.Message}");
-            return found;
+            return;
         }
 
         foreach (var line in result.Lines)
@@ -543,14 +563,19 @@ internal sealed partial class TextOcr : IDisposable
             }
         }
 
-        // Life, Shield and Ward are one stacked block in the same corner, the
-        // same width, evenly spaced. So finding any of them locates the others
-        // whether or not their own word came back readable - and Life is the
-        // one that keeps not coming back, because it sits at the top of the
-        // block where the capture edge cuts closest to the glyphs.
-        //
-        // Geometry, not guesswork: the box is placed where the found line says
-        // it must be, and only when nothing was found for it directly.
+    }
+
+    /// <summary>
+    /// Fills in a line that was not read from one that was.
+    ///
+    /// Life, Shield and Ward are one stacked block: same corner, same width,
+    /// evenly spaced. Finding any of them locates the others whether or not
+    /// their own word came back readable - and Life is the one that keeps not
+    /// coming back, sitting at the top of the block where the capture edge cuts
+    /// closest to the glyphs.
+    /// </summary>
+    private static void Infer(Rectangle search, Dictionary<string, Rectangle> found)
+    {
         if (!found.ContainsKey("Life") && found.TryGetValue("Shield", out var shield))
         {
             var life = new Rectangle(shield.X, shield.Y - shield.Height,
@@ -562,8 +587,6 @@ internal sealed partial class TextOcr : IDisposable
                           + "found; its own word did not come back readable");
             }
         }
-
-        return found;
     }
 
     /// <summary>
