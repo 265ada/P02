@@ -47,6 +47,9 @@ internal sealed partial class TextOcr : IDisposable
         public int DisagreeMax;
         public int DisagreeCount;
         public int Suggested;
+
+        /// <summary>Which preparation last produced a pair; tried first next time.</summary>
+        public int Cut;
     }
 
     private readonly Dictionary<string, Slot> _slots = new();
@@ -140,6 +143,16 @@ internal sealed partial class TextOcr : IDisposable
             return _slots.TryGetValue(name, out var slot) ? slot.Suggested : 0;
     }
 
+    /// <summary>
+    /// The preparations to try, best-known first.
+    /// </summary>
+    private static IEnumerable<int> Cuts(int known)
+    {
+        yield return known;
+        foreach (int cut in new[] { 0, 170, 200, 140 })
+            if (cut != known) yield return cut;
+    }
+
     private int _intervalMs = 160;
 
     /// <summary>How often to read, in milliseconds.</summary>
@@ -182,10 +195,22 @@ internal sealed partial class TextOcr : IDisposable
         if (r.Width < 8 || r.Height < 4) return;
         if (!slot.Cap.Grab(r)) return;
 
-        string text;
+        // The running read gets the same treatment as the setup one, or a line
+        // over bright ground reads once when it is set up and never again.
+        // Which preparation worked last time is remembered and tried first, so
+        // the common case is still a single recognise.
+        string text = "";
         using (var shot = ToBitmap(slot.Cap.Buffer, slot.Cap.Width, slot.Cap.Height))
-        using (var big = Upscale(shot, 3))
-            text = Recognise(big);
+        {
+            foreach (int cut in Cuts(slot.Cut))
+            {
+                using var prepared = cut == 0 ? null : Threshold(shot, cut);
+                using var big = Upscale(prepared ?? shot, 3);
+                text = Recognise(big);
+
+                if (PairPattern().IsMatch(text)) { slot.Cut = cut; break; }
+            }
+        }
 
         if (text.Length == 0) return;
 
@@ -445,6 +470,51 @@ internal sealed partial class TextOcr : IDisposable
     }
 
     /// <summary>Windows OCR ignores text this small until it is scaled up.</summary>
+    /// <summary>
+    /// Black text on white, from bright text on whatever the world is.
+    ///
+    /// This is the difference between the two corners. Mana is drawn over dark
+    /// water and reads first time; Life over bright cobblestone comes back as
+    /// the word alone, because the pale digits are barely lighter than the
+    /// ground behind them. The engine wants document contrast and the game
+    /// gives it none.
+    ///
+    /// The HUD text is close to white, so everything near white becomes text
+    /// and everything else becomes page. Nothing is guessed at - it either
+    /// separates cleanly or the raw image is used instead.
+    /// </summary>
+    private static Bitmap Threshold(Bitmap src, int cut)
+    {
+        var flat = new Bitmap(src.Width, src.Height, PixelFormat.Format32bppArgb);
+
+        var box = new Rectangle(0, 0, src.Width, src.Height);
+        var from = src.LockBits(box, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        var to = flat.LockBits(box, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            int count = src.Width * src.Height;
+            var line = new byte[count * 4];
+            System.Runtime.InteropServices.Marshal.Copy(from.Scan0, line, 0, line.Length);
+
+            for (int i = 0; i < line.Length; i += 4)
+            {
+                int lum = (line[i + 2] * 30 + line[i + 1] * 59 + line[i] * 11) / 100;
+                byte v = lum >= cut ? (byte)0 : (byte)255;
+                line[i] = line[i + 1] = line[i + 2] = v;
+                line[i + 3] = 255;
+            }
+
+            System.Runtime.InteropServices.Marshal.Copy(line, 0, to.Scan0, line.Length);
+        }
+        finally
+        {
+            src.UnlockBits(from);
+            flat.UnlockBits(to);
+        }
+
+        return flat;
+    }
+
     private static Bitmap Upscale(Bitmap src, int scale)
     {
         var big = new Bitmap(src.Width * scale, src.Height * scale,
@@ -490,9 +560,14 @@ internal sealed partial class TextOcr : IDisposable
         // Mana on the right was found every single time at 2x while Life and
         // Shield in the other corner were never found at all. The per-region
         // reader has always swept several; this did not.
-        foreach (int scale in new[] { 2, 3, 4 })
+        foreach (int cut in new[] { 0, 170, 200 })
         {
-            FindAt(search, want, found, scale);
+            foreach (int scale in new[] { 2, 3, 4 })
+            {
+                FindAt(search, want, found, scale, cut);
+                if (want.All(found.ContainsKey)) break;
+            }
+
             if (want.All(found.ContainsKey)) break;
         }
 
@@ -501,7 +576,7 @@ internal sealed partial class TextOcr : IDisposable
     }
 
     private void FindAt(Rectangle search, string[] labels,
-                        Dictionary<string, Rectangle> found, int scale)
+                        Dictionary<string, Rectangle> found, int scale, int cut)
     {
         if (_engine is null) return;
 
@@ -509,7 +584,8 @@ internal sealed partial class TextOcr : IDisposable
         if (!cap.Grab(search)) return;
 
         using var shot = ToBitmap(cap.Buffer, cap.Width, cap.Height);
-        using var big = Upscale(shot, scale);
+        using var prepared = cut == 0 ? null : Threshold(shot, cut);
+        using var big = Upscale(prepared ?? shot, scale);
 
         OcrResult result;
         try
