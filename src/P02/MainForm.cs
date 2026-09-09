@@ -1123,7 +1123,9 @@ public sealed class MainForm : Form
         var bar = _engine.CharacterBar;
         if (bar.Width <= 0)
         {
-            _overlay.SetAlert("Cannot see your character - stand where you can be seen");
+            // It hunts a few times a second, so it may simply not have looked
+            // yet - and the message has to say what to do, not what failed.
+            _overlay.SetAlert("Cannot find your character - move him, then try again");
             return;
         }
 
@@ -1294,6 +1296,10 @@ public sealed class MainForm : Form
                     {
                         if (wanted) _overlay.Show(); else _overlay.Hide();
                     }
+
+                    _engine.OverlayBounds = _overlay.Visible
+                        ? Rectangle.Inflate(_overlay.Bounds, 8, 8)
+                        : Rectangle.Empty;
 
                     if (_overlay.Visible)
                     {

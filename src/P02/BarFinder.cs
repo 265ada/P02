@@ -40,6 +40,15 @@ internal sealed class BarFinder : IDisposable
     /// because this is decoration - it must never compete with the reading that
     /// decides whether to press a key.
     /// </summary>
+    /// <summary>
+    /// Where not to look: the readout's own window.
+    ///
+    /// It draws a green bar with a blue one under it, over the character, which
+    /// is precisely the thing being searched for - so it was covering the real
+    /// bar and offering itself as a replacement.
+    /// </summary>
+    public Rectangle Ignore { get; set; }
+
     public void Look(Rectangle window, int everyMs = 80)
     {
         long now = _clock.ElapsedMilliseconds;
@@ -103,7 +112,8 @@ internal sealed class BarFinder : IDisposable
                 if (life) { run++; continue; }
 
                 if (run >= MinRun
-                    && Confirm(px, stride, w, h, x - run, y, run, area, out var hit))
+                    && Confirm(px, stride, w, h, x - run, y, run, area, out var hit)
+                    && !Ignore.IntersectsWith(hit))
                 {
                     int mx = x - run / 2, my = hit.Y - area.Y;
                     long cost = (long)(mx - cx) * (mx - cx) + (long)(my - cy) * (my - cy);

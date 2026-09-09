@@ -166,6 +166,9 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>Where our own window is, so we never read ourselves.</summary>
     public Rectangle OwnWindow { get; set; }
 
+    /// <summary>Where the readout is, so its own bars are never mistaken for the game's.</summary>
+    public Rectangle OverlayBounds { get; set; }
+
     private static bool Overlaps(Rectangle a, Rectangle b) =>
         a.Width > 0 && a.Height > 0 && a.IntersectsWith(b);
 
@@ -583,9 +586,17 @@ public sealed class MonitorEngine : IDisposable
                 // care what is focused - so requiring it meant the bar was
                 // never looked for the moment you alt-tabbed, and the readout
                 // vanished because nothing had found it.
-                if (_cfg.SlotAuto && _cfg.OverlayOn
+                // Whenever the readout is up, not only while it is following
+                // something. Saving a spot needs to know where the character
+                // is, and saving a spot is what switches the following on - so
+                // requiring it first meant the very first attempt could never
+                // work.
+                if (_cfg.OverlayOn
                     && Native.FindWindowRect(_cfg.WindowMatch) is { } client)
+                {
+                    _bar.Ignore = OverlayBounds;
                     _bar.Look(client);
+                }
 
                 AdoptChangedMax("Life", _cfg.Life);
                 AdoptChangedMax("Mana", _cfg.Mana);
