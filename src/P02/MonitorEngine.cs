@@ -628,7 +628,13 @@ public sealed class MonitorEngine : IDisposable
                 // thing. Reading them several times a second for that is what
                 // makes a machine hitch: each read is a screen grab and a
                 // recognise. Once a second is plenty to police a liar.
-                _ocr.SetInterval(_lifeMemConfirmed ? 900 : nearTrouble ? 60 : 160);
+                // Once memory is locked it decides everything and the numbers
+                // have one job left: noticing if it is ever pointed at the
+                // wrong thing. That is a check, not a reading, and a check does
+                // not need doing several times a second - every five is plenty
+                // and costs nothing. Until it is locked, they are what is
+                // keeping you alive, so they are read hard.
+                _ocr.SetInterval(_lifeMemConfirmed ? 5000 : nearTrouble ? 60 : 160);
 
                 bool fighting = t0 - lastDropMs < _cfg.CombatGraceMs;
                 if (fighting != InCombat)

@@ -628,7 +628,9 @@ public sealed class OverlayForm : Form
               _armed ? Theme.Armed : Theme.Dim, Theme.UiBold, Pad, y);
 
         string detail = _detail.Length > 22 ? _detail[..22] : _detail;
-        var detailColour = _life.Note.Length > 0 || !_life.FromText ? Theme.Warn : Theme.Dim;
+        var detailColour = _life.Note.Length > 0 || !_life.FromText ? Theme.Warn
+                         : detail == "memory" ? Theme.Good
+                         : Theme.Dim;
         Glyph(g, detail, detailColour, Theme.Small, Pad + 62, y + 1);
 
         if (_dragging)
