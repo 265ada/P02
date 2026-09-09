@@ -380,4 +380,14 @@ internal static class Native
         nint wanted = on ? style | WS_EX_TRANSPARENT : style & ~(nint)WS_EX_TRANSPARENT;
         if (wanted != style) SetWindowLongPtr(hWnd, GWL_EXSTYLE, wanted);
     }
+
+    private const int VK_CONTROL = 0x11;
+
+    /// <summary>
+    /// Whether Ctrl is held right now, regardless of what has focus.
+    ///
+    /// ModifierKeys reflects the calling thread's input state, which for a
+    /// window sitting behind a game is not the answer to this question.
+    /// </summary>
+    public static bool CtrlHeld => (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
 }

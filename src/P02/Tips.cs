@@ -311,9 +311,10 @@ internal static class Tips
         "Ctrl deliberately, because a plain right-click over a game belongs to",
         "the game.",
         "",
-        "Right-click this button to bring it back, unlocked and clickable - which",
-        "is the way out of click-through, since nothing on the readout can be",
-        "clicked while that is on.",
+        "Click-through has its own way back: hold Ctrl and the readout is solid",
+        "again for as long as you hold it, so Ctrl and right-click always reaches",
+        "the menu. Right-clicking this button also brings it back, unlocked and",
+        "clickable, wherever it has got to.",
     ];
 
     public static readonly string[] HideCapture =

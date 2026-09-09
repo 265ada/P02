@@ -68,11 +68,34 @@ public sealed class OverlayForm : Form
         set
         {
             _clickThrough = value;
-            if (IsHandleCreated) Native.ClickThrough(Handle, value);
+            if (value) _ctrlWatch.Start(); else _ctrlWatch.Stop();
+            ApplyClickThrough();
         }
     }
 
+    private void ApplyClickThrough()
+    {
+        if (!IsHandleCreated) return;
+
+        bool wanted = _clickThrough && !Native.CtrlHeld;
+        if (wanted == _throughNow) return;
+
+        _throughNow = wanted;
+        Native.ClickThrough(Handle, wanted);
+    }
+
     private bool _clickThrough;
+    private bool _throughNow;
+
+    /// <summary>
+    /// Watches for Ctrl while clicks are passing through.
+    ///
+    /// A window that ignores the mouse cannot be told to stop ignoring it, so
+    /// the escape has to come from outside the mouse. Holding Ctrl makes it
+    /// solid again for as long as it is held, which is enough to right-click
+    /// the menu and turn the whole thing off.
+    /// </summary>
+    private readonly System.Windows.Forms.Timer _ctrlWatch = new();
 
     public OverlayForm()
     {
@@ -82,6 +105,9 @@ public sealed class OverlayForm : Form
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
         ClientSize = new Size(292, 100);
+
+        _ctrlWatch.Interval = 120;
+        _ctrlWatch.Tick += (_, _) => ApplyClickThrough();
 
         _fade.Interval = 260;
         _fade.Tick += (_, _) => { _fade.Stop(); _firing = false; Render(); };
@@ -217,8 +243,8 @@ public sealed class OverlayForm : Form
             {
                 CheckOnClick = true,
                 ToolTipText = "Clicks land in the game instead of on the readout. "
-                              + "Right-click the P button on the main window to undo it - "
-                              + "this menu cannot be reached once it is on.",
+                              + "Hold Ctrl to make it solid again for as long as you hold "
+                              + "it, which is how you get back to this menu.",
             };
             _throughItem.Click += (_, _) =>
             {
@@ -255,7 +281,9 @@ public sealed class OverlayForm : Form
     {
         base.OnHandleCreated(e);
         Native.ExcludeFromCapture(Handle, false);
-        Native.ClickThrough(Handle, _clickThrough);
+        _throughNow = false;
+        ApplyClickThrough();
+        if (_clickThrough) _ctrlWatch.Start();
         Render();
     }
 
@@ -495,6 +523,7 @@ public sealed class OverlayForm : Form
         if (disposing)
         {
             _fade.Dispose();
+            _ctrlWatch.Dispose();
             _menu?.Dispose();
         }
         base.Dispose(disposing);
