@@ -57,10 +57,10 @@ public class Card : Panel
         // it reads as belonging to the words rather than boxing them.
         using var title = new SolidBrush(Theme.Text);
         var size = g.MeasureString(Text, Theme.Title);
-        g.DrawString(Text, Theme.Title, title, 14, 9);
+        g.DrawString(Text, Theme.Title, title, 11, 7);
 
         using var rule = new SolidBrush(_accent);
-        g.FillRectangle(rule, 14, 11 + (int)size.Height, Math.Max(28, (int)size.Width - 4), 2);
+        g.FillRectangle(rule, 11, 9 + (int)size.Height, Math.Max(22, (int)size.Width - 4), 2);
     }
 
     private static GraphicsPath Rounded(Rectangle r, int radius)

@@ -596,12 +596,19 @@ public sealed class MainForm : Form
 
         // Same again for the window itself: fit the contents rather than
         // assume them.
+        // Everything above was laid out at a comfortable desktop size, which is
+        // more room than this needs - it is a monitor, not a document. Scaling
+        // the built window is the honest way to shrink it: every control keeps
+        // its proportions and its relationship to its neighbours, where
+        // retyping four hundred coordinates would not.
+        Scale(new SizeF(UiScale, UiScale));
+
         // Fit the contents, then fit the screen. Whichever is smaller wins, and
         // what does not fit scrolls rather than falling off the bottom.
         int deepest = Controls.Cast<Control>().Max(c => c.Bottom);
         var room = (Screen.FromControl(this) ?? Screen.PrimaryScreen!).WorkingArea;
 
-        MinimumSize = new Size(760, 420);
+        MinimumSize = new Size(S(760), S(420));
 
         int wantW = _cfg.WindowW > 0 ? _cfg.WindowW : ClientSize.Width;
         int wantH = _cfg.WindowH > 0 ? _cfg.WindowH : deepest + 12;
@@ -639,6 +646,11 @@ public sealed class MainForm : Form
     /// sound, and moving a setup between machines. The headings do the work the
     /// tooltips were carrying alone.
     /// </summary>
+    /// <summary>How much of the original size the window is drawn at.</summary>
+    private const float UiScale = 0.8f;
+
+    private static int S(int v) => (int)Math.Round(v * UiScale);
+
     private Control[][]? _groups;
     private readonly List<Card> _groupCards = [];
 
@@ -650,17 +662,17 @@ public sealed class MainForm : Form
         // outside them as between them. They were two fixed 382-wide panels at
         // fixed coordinates, so any other window width left them off-centre
         // with a growing empty strip down one side.
-        const int Edge = 12, Gap = 10;
+        int Edge = S(12), Gap = S(10);
         int half = (ClientSize.Width - Edge * 2 - Gap) / 2;
 
         _life.SetBounds(Edge, _life.Top, half, _life.Height);
         _mana.SetBounds(Edge + half + Gap, _mana.Top, half, _mana.Height);
 
         // The arm button keeps its size; the status beside it takes the rest.
-        _status.SetBounds(_arm.Right + 14, _status.Top,
-                          ClientSize.Width - _arm.Right - 26, _status.Height);
-        _focus.SetBounds(_arm.Right + 14, _focus.Top,
-                         ClientSize.Width - _arm.Right - 26, _focus.Height);
+        _status.SetBounds(_arm.Right + S(14), _status.Top,
+                          ClientSize.Width - _arm.Right - S(26), _status.Height);
+        _focus.SetBounds(_arm.Right + S(14), _focus.Top,
+                         ClientSize.Width - _arm.Right - S(26), _focus.Height);
 
         Regroup(_groups[0], _groups[1], _groups[2], _groups[3], _groups[4]);
     }
@@ -681,14 +693,14 @@ public sealed class MainForm : Form
         }
         _groupCards.Clear();
 
-        int top = Math.Max(_arm.Bottom, _focus.Bottom) + 14;
-        const int Gap = 10, Edge = 12;
+        int top = Math.Max(_arm.Bottom, _focus.Bottom) + S(14);
+        int Gap = S(10), Edge = S(12);
 
         // Three columns where there is room for them, two where there is not.
         // A narrow window with three columns is three columns of wrapped
         // single words.
         int usable = ClientSize.Width - Edge * 2;
-        int columns = usable >= 780 ? 3 : 2;
+        int columns = usable >= S(780) ? 3 : 2;
         int wide = (usable - Gap * (columns - 1)) / columns;
 
         var titles = new[] { "Getting started", "What it reads", "When it may fire",
@@ -720,7 +732,7 @@ public sealed class MainForm : Form
             }
         }
 
-        _live.SetBounds(Edge, rowBottom + Gap, ClientSize.Width - Edge * 2, 20);
+        _live.SetBounds(Edge, rowBottom + Gap, ClientSize.Width - Edge * 2, S(20));
     }
 
     /// <summary>
@@ -729,12 +741,12 @@ public sealed class MainForm : Form
     /// </summary>
     private Card Group(string title, int x, int y, int width, Control[] items)
     {
-        var card = new Card { Text = title, Bounds = new Rectangle(x, y, width, 40) };
+        var card = new Card { Text = title, Bounds = new Rectangle(x, y, width, S(40)) };
         Controls.Add(card);
         card.SendToBack();
 
-        const int Pad = 12, Line = 30;
-        int cx = Pad, cy = 34;
+        int Pad = S(12), Line = S(30);
+        int cx = Pad, cy = S(34);
 
         foreach (var item in items)
         {
@@ -747,12 +759,12 @@ public sealed class MainForm : Form
 
             // Labels sit on the baseline of the boxes they name rather than the
             // top of them, which is where they read as captions.
-            int lift = item is Label ? (26 - item.Height) / 2 : 0;
+            int lift = item is Label ? (S(26) - item.Height) / 2 : 0;
             item.Location = new Point(cx, cy + lift);
-            cx += w + (item is Label ? 8 : 12);
+            cx += w + (item is Label ? S(8) : S(12));
         }
 
-        card.Height = cy + Line + 6;
+        card.Height = cy + Line + S(6);
         return card;
     }
 
