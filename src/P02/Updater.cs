@@ -282,15 +282,44 @@ internal static class Updater
             TidyOldDownloads();
 
             Log.Write($"update: downloading {expected} bytes to {tmp}");
+
+            // Sixty megabytes with the app paused behind it. A window that says
+            // nothing for half a minute is indistinguishable from one that has
+            // hung, and the unattended kind arrives mid-game without being
+            // asked for.
+            using var progress = new UpdateProgressForm(newer[0].Tag);
+            progress.Show();
+            progress.Step("Connecting...", 0, 0);
+
             using (var req = new HttpRequestMessage(HttpMethod.Get, assetUrl))
             {
                 req.Headers.Accept.Clear();
                 req.Headers.Accept.ParseAdd("application/octet-stream");
                 using var dl = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
                 dl.EnsureSuccessStatusCode();
+
+                long total = dl.Content.Headers.ContentLength ?? expected;
+                await using var body = await dl.Content.ReadAsStreamAsync();
                 await using var fs = File.Create(tmp);
-                await dl.Content.CopyToAsync(fs);
+
+                var chunk = new byte[128 * 1024];
+                long done = 0;
+                long saidAt = 0;
+                int read;
+                while ((read = await body.ReadAsync(chunk)) > 0)
+                {
+                    await fs.WriteAsync(chunk.AsMemory(0, read));
+                    done += read;
+
+                    // Every quarter megabyte. Repainting per chunk would spend
+                    // more time drawing a bar than moving bytes.
+                    if (done - saidAt < 262_144 && done != total) continue;
+                    saidAt = done;
+                    progress.Step("Downloading", done, total);
+                }
             }
+
+            progress.Step("Checking the download...", expected, expected);
 
             long got = new FileInfo(tmp).Length;
             if (expected > 0 && got != expected)
@@ -305,6 +334,7 @@ internal static class Updater
                 return;
             }
             Log.Write($"update: downloaded {got} bytes ok");
+            progress.Step("Restarting...", expected, expected);
 
             SwapAndRestart(tmp, beforeExit);
         }
