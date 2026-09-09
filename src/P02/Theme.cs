@@ -35,14 +35,15 @@ public static class Theme
 
     public static readonly Color Armed = Color.FromArgb(158, 44, 40);
 
-    // Full size on purpose. Scaling the window already brings the type down
-    // with it; shrinking these as well applied the reduction twice and left
-    // labels smaller than the boxes they name.
-    public static readonly Font Ui = new("Segoe UI", 9f);
-    public static readonly Font UiBold = new("Segoe UI", 9f, FontStyle.Bold);
-    public static readonly Font Small = new("Segoe UI", 8.25f);
-    public static readonly Font Title = new("Segoe UI Semibold", 10.5f);
-    public static readonly Font Big = new("Segoe UI Semibold", 12f);
+    // Sized to the window they sit in. Control.Scale moves and resizes boxes
+    // but does not touch type handed to a control explicitly, so scaling the
+    // window while leaving these alone shrank every button around its own
+    // label - which is how "Auto-find" became "Auto-fi".
+    public static readonly Font Ui = new("Segoe UI", 7.5f);
+    public static readonly Font UiBold = new("Segoe UI", 7.5f, FontStyle.Bold);
+    public static readonly Font Small = new("Segoe UI", 7f);
+    public static readonly Font Title = new("Segoe UI Semibold", 8.5f);
+    public static readonly Font Big = new("Segoe UI Semibold", 9.75f);
 
     /// <summary>
     /// Draws a checkbox over the top of the system one.
@@ -197,5 +198,31 @@ public static class Theme
         b.ForeColor = Color.FromArgb(18, 20, 23);
         b.Font = new Font("Segoe UI Semibold", 9.5f);
         b.Cursor = Cursors.Hand;
+    }
+
+    /// <summary>
+    /// Grows anything whose words no longer fit inside it.
+    ///
+    /// A window laid out by hand in pixels and then scaled has no way of
+    /// knowing that "Export diagnostics" needs more room than "Open log", so
+    /// the long ones came out clipped mid-word. Measuring is the only honest
+    /// answer: whatever the text actually needs, the control gets.
+    /// </summary>
+    public static void FitText(Control root)
+    {
+        using var g = root.CreateGraphics();
+
+        foreach (Control c in root.Controls)
+        {
+            if (c.HasChildren) FitText(c);
+            if (c is not (Button or CheckBox or Label) || c.AutoSize) continue;
+            if (c.Text.Length == 0) continue;
+
+            // A checkbox has its box to fit as well as its words.
+            int extra = c is CheckBox ? 22 : c is Button ? 16 : 6;
+            int needs = (int)Math.Ceiling(g.MeasureString(c.Text, c.Font).Width) + extra;
+
+            if (needs > c.Width) c.Width = needs;
+        }
     }
 }

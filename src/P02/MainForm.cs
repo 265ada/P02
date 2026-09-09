@@ -156,7 +156,7 @@ public sealed class MainForm : Form
         int y = Math.Max(_life.Bottom, _mana.Bottom) + 16;
 
         _arm.SetBounds(12, y, 208, 60);
-        _arm.Font = new Font("Segoe UI Semibold", 15f);
+        _arm.Font = new Font("Segoe UI Semibold", 12.5f);
         _arm.FlatStyle = FlatStyle.Flat;
         _arm.Click += (_, _) => _engine.Toggle();
         Controls.Add(_arm);
@@ -164,7 +164,7 @@ public sealed class MainForm : Form
             "", "It starts disarmed every launch, on purpose.");
 
         _status.SetBounds(234, y + 8, 460, 24);
-        _status.Font = new Font("Segoe UI Semibold", 11f);
+        _status.Font = new Font("Segoe UI Semibold", 9.5f);
         Controls.Add(_status);
         Tips.On(_status, Tips.Status);
 
@@ -606,6 +606,14 @@ public sealed class MainForm : Form
         // its proportions and its relationship to its neighbours, where
         // retyping four hundred coordinates would not.
         Scale(new SizeF(UiScale, UiScale));
+
+        // Scaling cannot know that "Export diagnostics" needs more room than
+        // "Open log", so anything whose words no longer fit is grown to fit
+        // them. Measured, not guessed at.
+        Theme.FitText(this);
+        _life.FitRows();
+        _mana.FitRows();
+        Relayout();
 
         // Fit the contents, then fit the screen. Whichever is smaller wins, and
         // what does not fit scrolls rather than falling off the bottom.

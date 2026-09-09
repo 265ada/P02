@@ -41,6 +41,9 @@ public sealed class GlobePanel : Card
     private readonly LevelBar _bar = new();
     private readonly Label _pct = new();
 
+    /// <summary>Rows of buttons that sit side by side and must not collide.</summary>
+    private readonly List<Control[]> _rows = [];
+
     /// <summary>How tall this card needs to be for its own contents.</summary>
     public int MinimumHeight { get; private set; }
 
@@ -110,6 +113,7 @@ public sealed class GlobePanel : Card
         prevBtn.Click += (_, _) => Preview();
         Controls.Add(prevBtn);
         Tips.On(prevBtn, Tips.Check);
+        _rows.Add([setBtn, autoBtn, calBtn, prevBtn]);
         y += 30;
 
         var numBtn = new Button { Text = "Numbers...", Bounds = new Rectangle(296, y, 76, 26) };
@@ -1297,6 +1301,35 @@ public sealed class GlobePanel : Card
     }
 
     /// <summary>Re-reads settings that something else has changed.</summary>
+    /// <summary>
+    /// Lays each row of buttons out from its own widths.
+    ///
+    /// They were placed at typed coordinates that assumed how wide each label
+    /// would come out. Once the window was scaled and the text measured, the
+    /// assumption stopped holding and they overlapped - so each row is packed
+    /// left to right from where it starts, with the same gap between every
+    /// pair, which is also what makes them line up.
+    /// </summary>
+    public void FitRows()
+    {
+        foreach (var row in _rows)
+        {
+            if (row.Length == 0) continue;
+
+            // Right-aligned to the card, as they were, so the panel keeps its
+            // shape rather than drifting left.
+            int gap = 6;
+            int total = row.Sum(c => c.Width) + gap * (row.Length - 1);
+            int x = Math.Max(14, Width - 14 - total);
+
+            foreach (var c in row)
+            {
+                c.Left = x;
+                x += c.Width + gap;
+            }
+        }
+    }
+
     public void RefreshFromConfig()
     {
         _region.Text = _cfg.Region.ToString();
