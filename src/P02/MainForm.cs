@@ -1120,72 +1120,84 @@ public sealed class MainForm : Form
     {
         if (_overlay is not { IsDisposed: false }) return;
 
-        // The readout is meant to end up over the bars, so by the time anybody
-        // saves a spot it is very likely covering the thing that identifies it.
-        // Blink it out for a moment and look properly.
+        // Blink out and look. The readout is meant to end up over the bars, so
+        // by the time anybody saves a spot it is very likely covering the thing
+        // that identifies it - and one glance is not enough, because the game
+        // is still drawing and the character is rarely perfectly still.
         var bar = _engine.CharacterBar;
         if (bar.Width <= 0)
         {
+            var wasBounds = _engine.OverlayBounds;
             _engine.OverlayBounds = Rectangle.Empty;
             _overlay.Hide();
-            Application.DoEvents();
-            Thread.Sleep(140);
 
-            bar = _engine.FindCharacterNow();
+            for (int look = 0; look < 6 && bar.Width <= 0; look++)
+            {
+                Application.DoEvents();
+                Thread.Sleep(120);
+                bar = _engine.FindCharacterNow();
+            }
 
             _overlay.Show();
             _overlay.BringToFront();
-            _engine.OverlayBounds = Rectangle.Inflate(_overlay.Bounds, 8, 8);
+            _engine.OverlayBounds = wasBounds;
         }
 
-        if (bar.Width <= 0)
-        {
-            // It hunts a few times a second, so it may simply not have looked
-            // yet - and the message has to say what to do, not what failed.
-            _overlay.SetAlert("Cannot find your character - move him, then try again");
-            return;
-        }
-
-        int barX = bar.X + bar.Width / 2;
+        int barX = bar.Width > 0 ? bar.X + bar.Width / 2 : -1;
         int slot = -1;
 
         // The one already claimed by roughly this position, if there is one.
-        for (int i = 0; i < 3 && slot < 0; i++)
-            if (_cfg.SlotBarX[i] >= 0 && Math.Abs(_cfg.SlotBarX[i] - barX) < 90) slot = i;
+        if (barX >= 0)
+            for (int i = 0; i < 3 && slot < 0; i++)
+                if (_cfg.SlotBarX[i] >= 0 && Math.Abs(_cfg.SlotBarX[i] - barX) < 90) slot = i;
 
-        // Otherwise a spare.
+        // Otherwise one with nothing in it.
         for (int i = 0; i < 3 && slot < 0; i++)
-            if (_cfg.SlotBarX[i] < 0) slot = i;
+            if (_cfg.SlotX[i] < 0) slot = i;
 
-        // All three taken and none of them near: replace the nearest, since
+        // All three used and none of them here: replace the nearest, since
         // three layouts is all there are and one of them has moved.
-        if (slot < 0)
+        if (slot < 0 && barX >= 0)
         {
             int nearest = int.MaxValue;
             for (int i = 0; i < 3; i++)
             {
+                if (_cfg.SlotBarX[i] < 0) continue;
                 int away = Math.Abs(_cfg.SlotBarX[i] - barX);
                 if (away < nearest) { nearest = away; slot = i; }
             }
         }
 
+        if (slot < 0) slot = Math.Clamp(_cfg.Slot, 0, 2);
+
+        // The position is saved either way. Refusing to save it because the
+        // character could not be seen loses the one thing this was asked to
+        // do, over a detail it can learn later.
         _cfg.Slot = slot;
         _cfg.SlotX[slot] = _overlay.Location.X;
         _cfg.SlotY[slot] = _overlay.Location.Y;
-        _cfg.SlotBarX[slot] = barX;
-        _cfg.SlotAuto = true;
+        if (barX >= 0) _cfg.SlotBarX[slot] = barX;
+        if (barX >= 0) _cfg.SlotAuto = true;
         Save();
 
         _overlay.Slot = slot;
-        int set = _cfg.SlotBarX.Count(v => v >= 0);
-        _overlay.SetAlert(set < 3
-            ? $"Saved. {3 - set} more: open a panel and do it again"
-            : "Saved. All three set");
 
-        Log.Write($"overlay: spot {slot + 1} saved at {_overlay.Location} "
-                  + $"for character x={barX}");
+        // Counted honestly: a spot with a position but no character attached to
+        // it is not one of the three that can be switched between.
+        int linked = 0;
+        for (int i = 0; i < 3; i++)
+            if (_cfg.SlotX[i] >= 0 && _cfg.SlotBarX[i] >= 0) linked++;
 
-        var clear = new System.Windows.Forms.Timer { Interval = 4000 };
+        _overlay.SetAlert(barX < 0
+            ? "Spot saved, but I could not see your character - move him and save again"
+            : linked >= 3
+                ? "Saved. All three are set"
+                : $"Saved {linked} of 3 - open a panel and save another");
+
+        Log.Write($"overlay: spot {slot + 1} saved at {_overlay.Location}, "
+                  + $"character x={barX}, {linked} of 3 linked");
+
+        var clear = new System.Windows.Forms.Timer { Interval = 5000 };
         clear.Tick += (_, _) =>
         {
             clear.Stop();

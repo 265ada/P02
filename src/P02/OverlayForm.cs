@@ -381,7 +381,20 @@ public sealed class OverlayForm : Form
     {
         int h = Pad + RowH + (ManaShown ? RowH : 0) + 26
                 + (_alert.Length > 0 ? 22 : 0) + Pad;
-        if (ClientSize.Height != h) ClientSize = new Size(ClientSize.Width, h);
+
+        // Wide enough for whatever it has to say. An alert is a sentence, not a
+        // label, and it was being cut off mid-word by a window sized for the
+        // bars above it - "move him, then t".
+        int w = 292;
+        if (_alert.Length > 0)
+        {
+            using var g = CreateGraphics();
+            w = Math.Max(w, (int)Math.Ceiling(g.MeasureString(_alert, Theme.Small).Width)
+                            + Pad * 2 + 14);
+        }
+
+        if (ClientSize.Height != h || ClientSize.Width != w)
+            ClientSize = new Size(w, h);
     }
 
     protected override void OnHandleCreated(EventArgs e)
