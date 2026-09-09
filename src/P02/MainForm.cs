@@ -356,7 +356,24 @@ public sealed class MainForm : Form
             Text = "Re-scan",
             Bounds = new Rectangle(766, y + 32, 96, 26),
         };
-        rescan.Click += (_, _) => { _engine.RescanMemory(); Log.Write("memory: manual rescan"); };
+        rescan.Click += (_, _) =>
+        {
+            if (MessageBox.Show(this,
+                    "Stand at full life and mana before this runs." + Environment.NewLine
+                    + Environment.NewLine
+                    + "A full pool is the one hint that needs nothing read off the screen: "
+                    + "at full, your current value IS your maximum, and that is what it "
+                    + "looks for. It is how this can find you on a machine where the "
+                    + "numbers will not read at all."
+                    + Environment.NewLine + Environment.NewLine
+                    + "Ready?",
+                    "Re-scan", MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Information) != DialogResult.OK)
+                return;
+
+            Log.Write("memory: manual rescan, at full");
+            _engine.RescanMemory();
+        };
         Controls.Add(rescan);
         Tips.On(rescan, Tips.Rescan);
 

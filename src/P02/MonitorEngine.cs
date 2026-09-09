@@ -585,7 +585,12 @@ public sealed class MonitorEngine : IDisposable
                     || (mr.Ok && _cfg.Mana.Enabled && mr.Fraction < _cfg.Mana.Threshold + 0.15)
                     || (sr.Ok && _cfg.Shield.Enabled
                         && sr.Fraction < _cfg.Shield.Threshold + 0.15);
-                _ocr.SetInterval(nearTrouble ? 60 : 160);
+                // Once memory is confirmed it decides everything, and the
+                // numbers are only there to catch it pointing at the wrong
+                // thing. Reading them several times a second for that is what
+                // makes a machine hitch: each read is a screen grab and a
+                // recognise. Once a second is plenty to police a liar.
+                _ocr.SetInterval(_memConfirmed ? 900 : nearTrouble ? 60 : 160);
 
                 bool fighting = t0 - lastDropMs < _cfg.CombatGraceMs;
                 if (fighting != InCombat)
@@ -856,6 +861,21 @@ public sealed class MonitorEngine : IDisposable
             // is a wrong address, whatever its current value looks like - and
             // "reading HP 754/1217" beside a game saying 0/1,151 is exactly
             // that.
+            // A confirmed address whose maximum has moved is a level, not a
+            // wrong address - the structure does not move when you level. Take
+            // the new value from it and carry on; nothing needs reading and
+            // nothing needs finding again.
+            if (_memConfirmed && max > 0 && expectedMax > 0 && max != expectedMax
+                && ocrMax <= 0)
+            {
+                Log.Write($"{name}: maximum is now {max:N0} where it was {expectedMax:N0} - "
+                          + "taken from the address already locked");
+                c.KnownMax = max;
+                expectedMax = max;
+                _cfg.Save();
+                MaxAdopted?.Invoke(name, expectedMax, max);
+            }
+
             if (ocrMax > 0 && max > 0 && max != ocrMax)
             {
                 if (_memConfirmed)

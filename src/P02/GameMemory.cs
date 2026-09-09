@@ -380,12 +380,18 @@ internal sealed class GameMemory : IDisposable
                 }
                 else
                 {
-                    // Nothing to check against. There is no scoring scheme that
-                    // rescues this: the heap holds thousands of integers beside
-                    // a maximum and any of them can look reasonable. Guessing
-                    // the best-looking one produced a life of 240 out of 1,490
-                    // and then defended it, twice. Wait for the numbers instead.
-                    continue;
+                    // No reading from the screen to check against - which is the
+                    // usual state on a machine where the numbers will not read,
+                    // and precisely the machine that needs memory most. Waiting
+                    // for the numbers there means waiting forever.
+                    //
+                    // A full pool is its own hint, and needs nobody to read
+                    // anything: at full, current IS the maximum. So the search
+                    // asks for that instead. It costs the person standing at
+                    // full life while it looks, which they usually are.
+                    if (curHp != wantHp) continue;
+                    if (wantMp > 0 && curMp != wantMp) continue;
+                    score = 0;
                 }
 
                 if (score >= bestScore) continue;
@@ -408,8 +414,8 @@ internal sealed class GameMemory : IDisposable
 
         Status = hintCurHp > 0
             ? "found the maxima but no current beside them matching the screen"
-            : "found the maxima - waiting for the numbers to say what your "
-              + "current life is, so the right one can be picked";
+            : "found the maxima but nothing beside them at full - stand at full "
+              + "life and mana and press Re-scan";
         return 0;
     }
 
@@ -432,9 +438,23 @@ internal sealed class GameMemory : IDisposable
     }
 
     /// <summary>The maxima must still be the ones we searched for.</summary>
+    /// <summary>
+    /// Whether a locked address is still the one we found.
+    ///
+    /// Not by an exact maximum. A maximum changes every level and every gear
+    /// swap, and the structure does not move when it does - so demanding the
+    /// old value threw the lock away at exactly the moment everything else was
+    /// changing too, and the search then needed the numbers to rebuild it. That
+    /// is the level-up breakage.
+    ///
+    /// A pool that has become half or double what it was is a different pool;
+    /// anything nearer than that is the same one, levelled.
+    /// </summary>
     private bool Matches(Stats s) =>
-        (HintMaxHp <= 0 || s.MaxHp == HintMaxHp)
-        && (HintMaxMp <= 0 || s.MaxMp == HintMaxMp);
+        Near(s.MaxHp, HintMaxHp) && Near(s.MaxMp, HintMaxMp);
+
+    private static bool Near(int now, int hint) =>
+        hint <= 0 || (now > 0 && now * 2 >= hint && now <= hint * 2);
 
     private bool ReadInt(long addr, out int value)
     {
