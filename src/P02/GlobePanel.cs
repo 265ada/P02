@@ -1239,8 +1239,12 @@ public sealed class GlobePanel : Card
         }
         else if (_cfg.TextRegion.IsValid)
         {
-            _numbers.Text = "Deciding: globe pixels (numbers set but not readable)";
-            _numbers.ForeColor = Theme.Warn;
+            // Not "deciding" - it is refusing to decide. The numbers are set up
+            // and silent, so nothing is being acted on at all, and saying
+            // "globe pixels" read as though they were in charge.
+            _numbers.Text = "Holding fire: your numbers are set but cannot be read - "
+                            + "press Set it up for me";
+            _numbers.ForeColor = Theme.Bad;
         }
         else
         {

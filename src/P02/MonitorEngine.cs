@@ -163,6 +163,12 @@ public sealed class MonitorEngine : IDisposable
         return found;
     }
 
+    /// <summary>Where our own window is, so we never read ourselves.</summary>
+    public Rectangle OwnWindow { get; set; }
+
+    private static bool Overlaps(Rectangle a, Rectangle b) =>
+        a.Width > 0 && a.Height > 0 && a.IntersectsWith(b);
+
     private long _refoundAtMs = long.MinValue / 2;
     private long _textOkAtMs;
 
@@ -182,11 +188,20 @@ public sealed class MonitorEngine : IDisposable
     /// </summary>
     private void RefindLostNumbers(long now, bool focused)
     {
-        if (!focused || !_ocr.Available) return;
+        if (!_ocr.Available) return;
 
-        bool configured = (_cfg.Life.UseText && _cfg.Life.TextRegion.IsValid)
-                          || (_cfg.Mana.UseText && _cfg.Mana.TextRegion.IsValid);
-        if (!configured) return;
+        // Not "only while the game has focus". Somebody with a broken setup is
+        // looking at this window, which means the game does not have focus,
+        // which means the one thing that would repair it never ran. Reading the
+        // screen does not need focus - it needs the game to be drawn and not
+        // covered by us.
+        if (Native.FindWindowRect(_cfg.WindowMatch) is not { } game) return;
+        if (Overlaps(OwnWindow, game)) return;
+
+        // Never set up at all is exactly as worth repairing as set up and
+        // broken - more so, since nothing has ever worked.
+        bool anythingToDo = _cfg.Life.UseText || _cfg.Mana.UseText;
+        if (!anythingToDo) return;
 
         bool reading = (_ocr.TryGet("Life", out var l) && _ocr.NowMs - l.AtMs < 5000)
                        || (_ocr.TryGet("Mana", out var m) && _ocr.NowMs - m.AtMs < 5000);

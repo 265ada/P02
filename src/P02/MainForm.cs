@@ -446,6 +446,11 @@ public sealed class MainForm : Form
         Controls.Add(_live);
         Tips.On(_live, Tips.Live);
 
+        // So the engine never re-reads our own window instead of the game.
+        Move += (_, _) => _engine.OwnWindow = Bounds;
+        Resize += (_, _) => _engine.OwnWindow = Bounds;
+        VisibleChanged += (_, _) => _engine.OwnWindow = Visible ? Bounds : Rectangle.Empty;
+
         _engine.Sampled += OnSampled;
         _engine.ArmedChanged += _ => BeginInvoke(RefreshArmUi);
         _engine.Fired += (_, _) =>
@@ -1248,6 +1253,15 @@ public sealed class MainForm : Form
             lifeSays = _engine.ProbeText(_cfg.Life.TextRegion.ToRect(), out var pic);
             pic?.Dispose();
             lifeOk = TextOcr.TryParse(lifeSays, out _, out int lifeMax) && lifeMax > 0;
+
+            // A maximum typed on some earlier evening is the single most
+            // common thing left wrong, and it is wrong the moment you level.
+            if (lifeOk && _cfg.Life.KnownMax != lifeMax)
+            {
+                _cfg.Life.KnownMax = lifeMax;
+                _life.RefreshFromConfig();
+                Log.Write($"setup: maximum life set to {lifeMax} from the numbers");
+            }
         }
 
         var said = new System.Text.StringBuilder();
