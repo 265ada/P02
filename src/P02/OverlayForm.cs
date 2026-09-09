@@ -186,45 +186,59 @@ public sealed class OverlayForm : Form
         _fade.Start();
     }
 
+    private ContextMenuStrip? _menu;
+    private ToolStripMenuItem? _lockItem;
+    private ToolStripMenuItem? _throughItem;
+
+    /// <summary>
+    /// The options menu, built once and kept.
+    ///
+    /// It used to be built on each open and disposed from its own Closed event
+    /// - which runs before the click that closed it has finished being
+    /// handled, so choosing anything from it crashed on the disposed menu. A
+    /// menu is cheap to keep and nothing is saved by throwing it away.
+    /// </summary>
     private void ShowMenu(Point at)
     {
-        var menu = new ContextMenuStrip { ShowImageMargin = false };
-
-        var lockItem = new ToolStripMenuItem("Lock position")
+        if (_menu is null)
         {
-            Checked = Locked,
-            CheckOnClick = true,
-            ToolTipText = "Stops it being dragged by accident.",
-        };
-        lockItem.Click += (_, _) =>
-        {
-            Locked = lockItem.Checked;
-            OptionsChanged?.Invoke(Locked, ClickThrough);
-        };
+            _lockItem = new ToolStripMenuItem("Lock position")
+            {
+                CheckOnClick = true,
+                ToolTipText = "Stops it being dragged by accident.",
+            };
+            _lockItem.Click += (_, _) =>
+            {
+                Locked = _lockItem.Checked;
+                OptionsChanged?.Invoke(Locked, ClickThrough);
+            };
 
-        var throughItem = new ToolStripMenuItem("Click through")
-        {
-            Checked = ClickThrough,
-            CheckOnClick = true,
-            ToolTipText = "Clicks land in the game instead of on the readout. "
-                          + "Right-click the P button on the main window to undo it - "
-                          + "this menu cannot be reached once it is on.",
-        };
-        throughItem.Click += (_, _) =>
-        {
-            ClickThrough = throughItem.Checked;
-            OptionsChanged?.Invoke(Locked, ClickThrough);
-        };
+            _throughItem = new ToolStripMenuItem("Click through")
+            {
+                CheckOnClick = true,
+                ToolTipText = "Clicks land in the game instead of on the readout. "
+                              + "Right-click the P button on the main window to undo it - "
+                              + "this menu cannot be reached once it is on.",
+            };
+            _throughItem.Click += (_, _) =>
+            {
+                ClickThrough = _throughItem.Checked;
+                OptionsChanged?.Invoke(Locked, ClickThrough);
+            };
 
-        var reset = new ToolStripMenuItem("Move back to the corner");
-        reset.Click += (_, _) => ResetAsked?.Invoke();
+            var reset = new ToolStripMenuItem("Move back to the corner");
+            reset.Click += (_, _) => ResetAsked?.Invoke();
 
-        menu.Items.Add(lockItem);
-        menu.Items.Add(throughItem);
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add(reset);
-        menu.Closed += (_, _) => menu.Dispose();
-        menu.Show(this, at);
+            _menu = new ContextMenuStrip { ShowImageMargin = false };
+            _menu.Items.Add(_lockItem);
+            _menu.Items.Add(_throughItem);
+            _menu.Items.Add(new ToolStripSeparator());
+            _menu.Items.Add(reset);
+        }
+
+        _lockItem!.Checked = Locked;
+        _throughItem!.Checked = ClickThrough;
+        _menu.Show(this, at);
     }
 
     /// <summary>A globe that is not watched has nothing to say, so it takes no room.</summary>
@@ -478,7 +492,11 @@ public sealed class OverlayForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) _fade.Dispose();
+        if (disposing)
+        {
+            _fade.Dispose();
+            _menu?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }
