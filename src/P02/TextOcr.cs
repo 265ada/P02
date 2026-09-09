@@ -215,8 +215,10 @@ internal sealed partial class TextOcr : IDisposable
         // Which preparation worked last time is remembered and tried first, so
         // the common case is still a single recognise.
         string text = "";
-        using (var shot = ToBitmap(slot.Cap.Buffer, slot.Cap.Width, slot.Cap.Height))
+        Interlocked.Increment(ref _readersWaiting);
+        try
         {
+            using var shot = ToBitmap(slot.Cap.Buffer, slot.Cap.Width, slot.Cap.Height);
             foreach (int cut in Cuts(slot.Cut))
             {
                 using var prepared = cut == 0 ? null : Threshold(shot, cut);
@@ -226,6 +228,7 @@ internal sealed partial class TextOcr : IDisposable
                 if (PairPattern().IsMatch(text)) { slot.Cut = cut; break; }
             }
         }
+        finally { Interlocked.Decrement(ref _readersWaiting); }
 
         if (text.Length == 0) return;
 
@@ -474,6 +477,18 @@ internal sealed partial class TextOcr : IDisposable
     /// </summary>
     private static readonly object Recogniser = new();
 
+    /// <summary>
+    /// How many live readings are waiting for the recogniser.
+    ///
+    /// The search that looks for the stat lines works on a whole corner of the
+    /// screen, and a corner blown up four times is a picture of several million
+    /// pixels - one such pass can take a second or more on its own. The reading
+    /// that decides whether to press a key was queueing behind those, so on a
+    /// machine where the numbers keep needing to be found again, life updated
+    /// once every second or three. This lets the search stand aside.
+    /// </summary>
+    private static int _readersWaiting;
+
     private string Recognise(Bitmap bmp)
     {
         lock (Recogniser)
@@ -693,6 +708,15 @@ internal sealed partial class TextOcr : IDisposable
     private void Collect(Rectangle search, int scale, int cut, List<Seen> into)
     {
         if (_engine is null) return;
+
+        // A crop this size at this magnification is minutes of work for
+        // nothing: the engine has an upper limit and the cost is quadratic. The
+        // small magnifications find these lines anyway.
+        if ((long)search.Width * scale > 3000 || (long)search.Height * scale > 3000) return;
+
+        // Let anything reading a live pool go first.
+        for (int waited = 0; Volatile.Read(ref _readersWaiting) > 0 && waited < 40; waited++)
+            Thread.Sleep(5);
 
         using var cap = new ScreenCapture();
         if (!cap.Grab(search)) return;

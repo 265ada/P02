@@ -169,6 +169,7 @@ public sealed class MonitorEngine : IDisposable
     private static bool Overlaps(Rectangle a, Rectangle b) =>
         a.Width > 0 && a.Height > 0 && a.IntersectsWith(b);
 
+    private int _refinding;
     private long _refoundAtMs = long.MinValue / 2;
     private long _textOkAtMs;
 
@@ -212,10 +213,32 @@ public sealed class MonitorEngine : IDisposable
         if (now - _refoundAtMs < 60000) return;
 
         _refoundAtMs = now;
-        Log.Write("numbers: nothing read for 20 seconds - looking for the lines again");
-        string what = FindAllNumbers();
-        Log.Write($"numbers: {what.Replace(Environment.NewLine, " / ")}");
         _textOkAtMs = now;
+
+        // On its own thread. This searches whole corners of the screen at
+        // several magnifications and takes seconds, and it was running inside
+        // the poll loop - so every reading, memory included, stopped dead for
+        // as long as it took. On a machine where the numbers need finding
+        // often, that is the life value updating once every second or three.
+        if (Interlocked.Exchange(ref _refinding, 1) == 1) return;
+
+        Task.Run(() =>
+        {
+            try
+            {
+                Log.Write("numbers: nothing read for 20 seconds - looking for the lines again");
+                string what = FindAllNumbers();
+                Log.Write($"numbers: {what.Replace(Environment.NewLine, " / ")}");
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"numbers: looking again failed - {ex.Message}");
+            }
+            finally
+            {
+                Volatile.Write(ref _refinding, 0);
+            }
+        });
     }
 
     private void AdoptChangedMax(string name, WatcherConfig c)
