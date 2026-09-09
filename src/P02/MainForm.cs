@@ -230,6 +230,11 @@ public sealed class MainForm : Form
         Controls.Add(updBtn);
         Tips.On(updBtn, Tips.CheckUpdates);
 
+        var histBtn = new Button { Text = "History", Bounds = new Rectangle(0, 0, 70, 24) };
+        histBtn.Click += (_, _) => { using var h = new HistoryForm(Version); h.ShowDialog(this); };
+        Controls.Add(histBtn);
+        Tips.On(histBtn, Tips.History);
+
         var findAll = new Button
         {
             Text = "Set it up for me",
@@ -578,7 +583,7 @@ public sealed class MainForm : Form
         // the start of a line; saying which things belong on a line together
         // is the whole of the difference between tidy and ragged.
         Regroup(
-            [[findAll, checkBtn], [howBtn, updBtn], [upd], [diagBtn, logBtn]],
+            [[findAll, checkBtn], [howBtn], [updBtn, histBtn, upd], [diagBtn, logBtn]],
             [[numbersOnly], [mem], [rescan], [pollLbl, _pollHz]],
             [[winLbl], [_window, clearBtn], [armKeyLbl, _hotkey],
              [sendLbl, method], [postedNote], [testBtn]],

@@ -641,4 +641,15 @@ internal static class Tips
         "",
         "It opens by itself the first time, when nothing has been set up yet.",
     ];
+
+    public static readonly string[] History =
+    [
+        "Every release, newest first, with what each one was for.",
+        "",
+        "The changelog only ever appeared while an update was waiting, and only",
+        "covered the versions between where you were and the newest. Once",
+        "installed, a release had no way of telling you what it had changed.",
+        "",
+        "The one you are running is marked.",
+    ];
 }

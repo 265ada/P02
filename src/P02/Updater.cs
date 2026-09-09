@@ -109,6 +109,44 @@ internal static class Updater
         return "it fixes something that can get you killed";
     }
 
+    /// <summary>One release, as the history window shows it.</summary>
+    public readonly record struct Release(string Tag, DateTime When, string Summary,
+                                          string Notes);
+
+    /// <summary>
+    /// Every release, newest first, each with the line that says what it was
+    /// for.
+    ///
+    /// The changelog only ever appeared while an update was waiting, and only
+    /// covered the hops between two versions. Anything already installed had
+    /// no way of telling you what it had changed - which, after fifty
+    /// releases, is most of what there is to know about it.
+    /// </summary>
+    public static async Task<List<Release>> HistoryAsync()
+    {
+        var found = new List<Release>();
+
+        using var http = MakeClient();
+        var url = $"https://api.github.com/repos/{Owner}/{Repo}/releases?per_page=100";
+        using var resp = await http.GetAsync(url);
+        if (!resp.IsSuccessStatusCode) return found;
+
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+        foreach (var rel in doc.RootElement.EnumerateArray())
+        {
+            if (rel.TryGetProperty("draft", out var d) && d.GetBoolean()) continue;
+
+            string tag = rel.GetProperty("tag_name").GetString() ?? "";
+            string body = rel.TryGetProperty("body", out var b) ? b.GetString() ?? "" : "";
+            var when = rel.TryGetProperty("published_at", out var p)
+                       && p.TryGetDateTime(out var at) ? at.ToLocalTime() : DateTime.MinValue;
+
+            found.Add(new Release(tag, when, FirstLine(body), body.Trim()));
+        }
+
+        return found;
+    }
+
     public static async Task CheckAsync(IWin32Window owner, bool silent,
                                         Action? beforeExit = null, bool ui = true,
                                         bool install = false)
