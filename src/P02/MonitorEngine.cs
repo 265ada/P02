@@ -658,7 +658,9 @@ public sealed class MonitorEngine : IDisposable
         // used to stop dead - "no region" - even with the numbers set up and
         // reading perfectly, which is a watcher switched off by the absence of
         // the worst of its three sources.
-        bool haveGlobe = c.Region.IsValid;
+        // Numbers only means exactly that: the globe is not read, not used as a
+        // fallback, and its calibration stops mattering.
+        bool haveGlobe = c.Region.IsValid && !_cfg.NumbersOnly;
         double frac = 0;
 
         if (haveGlobe)
@@ -670,7 +672,8 @@ public sealed class MonitorEngine : IDisposable
         }
         else if (!c.UseText && !_cfg.UseMemory)
         {
-            return new GlobeReading(name, 0, false, "no region");
+            return new GlobeReading(name, 0, false,
+                _cfg.NumbersOnly ? "numbers not set up" : "no region");
         }
 
         // The numbers beside the globe are exact. When there is a recent
@@ -693,7 +696,7 @@ public sealed class MonitorEngine : IDisposable
         // read a poisoned globe - which turns green - as empty, which looks
         // like a killing blow. Falling back to them quietly is how a better
         // source turns into a worse one without saying so.
-        bool betterWanted = _cfg.UseMemory || textConfigured;
+        bool betterWanted = _cfg.UseMemory || textConfigured || _cfg.NumbersOnly;
         long textAge = long.MaxValue;
 
         if (textConfigured && _ocr.TryGet(name, out var tr))
@@ -716,7 +719,7 @@ public sealed class MonitorEngine : IDisposable
             // which is read from the same line and has to match. Only when
             // there is no maximum to check against is a second opinion worth
             // anything, and only then are the pixels asked for one.
-            bool pixelsMayObject = c.KnownMax <= 0;
+            bool pixelsMayObject = c.KnownMax <= 0 && haveGlobe;
             bool agrees = !pixelsMayObject || Math.Abs(tr.Fraction - frac) <= 0.40;
 
             if (textAge < 1200) ocrMax = tr.Max;

@@ -1182,6 +1182,23 @@ public sealed class GlobePanel : Card
     }
 
     /// <summary>Re-reads settings that something else has changed.</summary>
+    /// <summary>Whether the globe controls apply at all.</summary>
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(
+        System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool GlobeInUse
+    {
+        set
+        {
+            foreach (Control c in Controls)
+                if (c is Button b && GlobeButtons.Contains(b.Text))
+                    b.Enabled = value;
+        }
+    }
+
+    private static readonly string[] GlobeButtons =
+        ["Set…", "Set...", "Auto-find", "Full = 100%", "Check", "Tune colours"];
+
     public void RefreshFromConfig()
     {
         _region.Text = _cfg.Region.ToString();

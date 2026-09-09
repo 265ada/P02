@@ -573,4 +573,22 @@ internal static class Tips
         "so it moves only when the view moves, which is what opening the",
         "inventory does.",
     ];
+
+    public static readonly string[] NumbersOnly =
+    [
+        "Decide only from the numbers beside the globes, and from memory - never",
+        "from the globe colours.",
+        "",
+        "The globe was the original way and it is the worst of the three. It",
+        "cannot tell life from energy shield, because the shield is drawn over",
+        "the same globe. It reads a poisoned globe as empty, because that turns",
+        "green. It needs calibrating against a drained globe. And on plenty of",
+        "setups no calibration exists at all - drained and full are the same hue",
+        "at overlapping brightness, which is not something anyone can fix by",
+        "pressing Tune colours again.",
+        "",
+        "On by default. Turn it off only if the numbers cannot be read on your",
+        "machine and you would rather have a rough reading than none - and know",
+        "that a rough reading is what the misfires were.",
+    ];
 }

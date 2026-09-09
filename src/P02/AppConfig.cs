@@ -295,7 +295,7 @@ public sealed class AppConfig
     /// ignore them entirely because they never touch real keyboard state.
     /// Which works is a matter for testing, so both are here.
     /// </summary>
-    public string InputMethod { get; set; } = "sendinput";
+    public string InputMethod { get; set; } = "postmessage";
 
     /// <summary>
     /// Read life and mana from the game's memory instead of from the screen.
@@ -393,6 +393,21 @@ public sealed class AppConfig
     public bool CheckUpdatesOnStart { get; set; } = true;
 
     /// <summary>
+    /// Decide only from the numbers and memory, never from the globe colours.
+    ///
+    /// The globe was the original way and it is the worst of the three: it
+    /// cannot tell life from energy shield, it reads a poisoned globe as empty,
+    /// it needs calibrating against a drained globe, and on plenty of setups no
+    /// calibration exists at all - drained and full are the same hue at
+    /// overlapping brightness, which is not something anyone can fix by
+    /// retrying. The numbers have none of those problems.
+    ///
+    /// On by default. Switch it off only if the numbers cannot be read on your
+    /// machine and you would rather have a rough reading than none.
+    /// </summary>
+    public bool NumbersOnly { get; set; } = true;
+
+    /// <summary>
     /// Install an update without being asked, when only a few releases behind.
     ///
     /// Being behind is what killed this twice: fixes sat on a server while the
@@ -437,7 +452,7 @@ public sealed class AppConfig
         // file already stamped by an earlier release skipped every later fix -
         // which is how the label repair never ran, leaving the numbers picked
         // by position and reading ward as life.
-        const int Current = 6;
+        const int Current = 7;
         int was = SettingsVersion;
         if (was >= Current) return;
 
@@ -510,6 +525,20 @@ public sealed class AppConfig
                             + $"{1000 / Math.Max(1, PollHz)} ms of delay before a change is "
                             + "even looked at. Raised to 60.");
                 PollHz = 60;
+            }
+        }
+
+        if (was < 7)
+        {
+            // Posting to the window is what works for this game, and injected
+            // input was the default only because it was written first.
+            if (InputMethod.Equals("sendinput", StringComparison.OrdinalIgnoreCase))
+            {
+                Repairs.Add("Keys are now posted to the game window rather than injected "
+                            + "into the system. It reaches a window that does not have "
+                            + "focus, and it is what works here. Switch it back under "
+                            + "Send by if your setup preferred the old way.");
+                InputMethod = "postmessage";
             }
         }
 

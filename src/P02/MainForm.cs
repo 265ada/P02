@@ -390,6 +390,24 @@ public sealed class MainForm : Form
             ForeColor = SystemColors.GrayText,
         }, Tips.SendBy));
 
+        var numbersOnly = new CheckBox
+        {
+            Text = "Numbers only",
+            Bounds = new Rectangle(608, y - 26, 150, 22),
+            Checked = cfg.NumbersOnly,
+        };
+        numbersOnly.CheckedChanged += (_, _) =>
+        {
+            _cfg.NumbersOnly = numbersOnly.Checked;
+            Save();
+            _life.GlobeInUse = !numbersOnly.Checked;
+            _mana.GlobeInUse = !numbersOnly.Checked;
+            _life.RefreshFromConfig();
+            _mana.RefreshFromConfig();
+        };
+        Controls.Add(numbersOnly);
+        Tips.On(numbersOnly, Tips.NumbersOnly);
+
         var mem = new CheckBox
         {
             Text = "Read game memory",
@@ -542,6 +560,9 @@ public sealed class MainForm : Form
         _pin.Font = Theme.UiBold;
 
         SetupTray();
+        _life.GlobeInUse = !cfg.NumbersOnly;
+        _mana.GlobeInUse = !cfg.NumbersOnly;
+
         if (cfg.OverlayOn) ToggleOverlay(true);
 
         // Same again for the window itself: fit the contents rather than
