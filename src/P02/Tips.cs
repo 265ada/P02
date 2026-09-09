@@ -449,14 +449,16 @@ internal static class Tips
 
     public static readonly string[] FindNumbers =
     [
-        "Finds the printed numbers for both pools at once.",
+        "Does the whole setup, in the right order, and tells you what happened.",
         "",
-        "This is the single step everything else depends on: it sets both boxes,",
-        "fills in both maxima, keeps them up to date as you level, and gives the",
-        "memory search the two maxima it needs to find anything. One number",
-        "matches thousands of places in a heap; two pin it down.",
+        "It finds the life and mana lines beside your globes, fills in your",
+        "maxima from them, and points the memory search at those numbers. That",
+        "order matters and there is no reason you should have to know it.",
         "",
-        "Have the game up with the numbers visible, then press it.",
+        "Press it once with the game on screen and your numbers showing - in a",
+        "town or a hideout is ideal. Press it again any time something looks",
+        "wrong; it is the whole of the fix. It also runs itself after twenty",
+        "seconds of reading nothing.",
     ];
 
     public static readonly string[] DingDisarmed =

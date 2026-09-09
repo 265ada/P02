@@ -226,10 +226,10 @@ public sealed class MainForm : Form
 
         var findAll = new Button
         {
-            Text = "Find numbers",
-            Bounds = new Rectangle(298, y, 130, 26),
+            Text = "Set it up for me",
+            Bounds = new Rectangle(298, y, 150, 26),
         };
-        findAll.Click += (_, _) => FindAllNumbers();
+        findAll.Click += (_, _) => FixSetup();
         Controls.Add(findAll);
 
         Tips.On(findAll, Tips.FindNumbers);
@@ -1198,6 +1198,79 @@ public sealed class MainForm : Form
     /// One button for the whole setup: hide, look at the game, find every stat
     /// line by its label, and point the watchers at them.
     /// </summary>
+    /// <summary>
+    /// Does the whole setup, in order, and says in one paragraph what happened.
+    ///
+    /// There were four buttons and an order to press them in, and getting it
+    /// wrong left the app reading the globe pixels and saying so in language
+    /// only its author understood. Nobody should have to know that the numbers
+    /// must be found before the maximum can fill in before the memory search
+    /// has anything to look for. One button does it in the right order.
+    /// </summary>
+    private void FixSetup()
+    {
+        if (Native.FindWindowRect(_cfg.WindowMatch) is null)
+        {
+            MessageBox.Show(this,
+                "The game does not seem to be on screen." + Environment.NewLine
+                + Environment.NewLine
+                + "Start Path of Exile 2, stand somewhere safe with your life and mana "
+                + "numbers showing, then press this again.",
+                "Set it up", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        // The numbers first: everything else is built on them.
+        _cfg.Life.UseText = true;
+        _cfg.Mana.UseText = true;
+
+        Hide();
+        Thread.Sleep(350);
+        string found;
+        try { found = _engine.FindAllNumbers(); }
+        finally { Show(); }
+
+        Save();
+        _life.RefreshFromConfig();
+        _mana.RefreshFromConfig();
+
+        // Then memory, which needs both maxima to have anything to search for.
+        if (_cfg.UseMemory) _engine.RescanMemory();
+
+        bool lifeOk = _cfg.Life.TextRegion.IsValid;
+        var said = new System.Text.StringBuilder();
+
+        said.AppendLine(lifeOk
+            ? "Set up. It is reading your life from the numbers beside the globe, "
+              + "which is exact."
+            : "It could not find your life numbers.");
+        said.AppendLine();
+        said.AppendLine(found);
+        said.AppendLine();
+
+        if (lifeOk)
+        {
+            said.AppendLine($"It will press \"{_cfg.Life.Key}\" when life falls below "
+                            + $"{_cfg.Life.Threshold:P0}. Nothing is sent until you arm it.");
+            said.AppendLine();
+            said.AppendLine("Your maximum fills itself in and keeps up as you level, so "
+                            + "there is nothing to type. If it ever stops reading, this "
+                            + "button is the whole of the fix - and it also runs itself "
+                            + "after twenty seconds of not reading anything.");
+        }
+        else
+        {
+            said.AppendLine("The one thing that usually causes this: the numbers are only "
+                            + "drawn while you are actually playing. Not on the death "
+                            + "screen, not in a menu, and not while the game is paused. "
+                            + "Stand in a town with them visible and press it again.");
+        }
+
+        MessageBox.Show(this, said.ToString().TrimEnd(), "Set it up",
+                        MessageBoxButtons.OK,
+                        lifeOk ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+    }
+
     private void FindAllNumbers()
     {
         Hide();
