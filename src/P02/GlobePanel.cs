@@ -64,7 +64,7 @@ public sealed class GlobePanel : Card
 
         int y = 38;
 
-        _enabled.Text = "Watch this globe";
+        _enabled.Text = $"Watch my {title.ToLowerInvariant()}";
         _enabled.Checked = cfg.Enabled;
         _enabled.Font = new Font(Font, FontStyle.Bold);
         _enabled.SetBounds(14, y, 200, 24);

@@ -167,7 +167,8 @@ public sealed class MainForm : Form
         Tips.On(_focus, Tips.Focus);
 
         y += 66;
-        Controls.Add(Cap(new Label { Text = "Only fire while window title contains", Bounds = new Rectangle(12, y + 4, 220, 20) }, Tips.WindowMatch));
+        var winLbl = Cap(new Label { Text = "Only fire while the focused window is", AutoSize = true }, Tips.WindowMatch);
+        Controls.Add(winLbl);
         _window.SetBounds(236, y, 190, 24);
         _window.Text = cfg.WindowMatch;
         _window.TextChanged += (_, _) => { _cfg.WindowMatch = _window.Text; Save(); };
@@ -179,11 +180,8 @@ public sealed class MainForm : Form
         Controls.Add(clearBtn);
         Tips.On(clearBtn, Tips.AnyWindow);
 
-        Controls.Add(Cap(new Label
-        {
-            Text = "Polls/sec",
-            Bounds = new Rectangle(524, y + 4, 60, 20),
-        }, Tips.PollHz));
+        var pollLbl = Cap(new Label { Text = "Readings a second", AutoSize = true }, Tips.PollHz);
+        Controls.Add(pollLbl);
         _pollHz.SetBounds(586, y, 64, 24);
         _pollHz.Minimum = 5;
         _pollHz.Maximum = 250;
@@ -193,7 +191,8 @@ public sealed class MainForm : Form
         Controls.Add(_pollHz);
         Tips.On(_pollHz, Tips.PollHz);
 
-        Controls.Add(Cap(new Label { Text = "Arm key", Bounds = new Rectangle(658, y + 4, 50, 20) }, Tips.ArmKey));
+        var armKeyLbl = Cap(new Label { Text = "Arm key", AutoSize = true }, Tips.ArmKey);
+        Controls.Add(armKeyLbl);
         _hotkey.SetBounds(708, y, 52, 24);
         _hotkey.DropDownStyle = ComboBoxStyle.DropDownList;
         _hotkey.Items.AddRange(Enumerable.Range(1, 12).Select(i => (object)$"F{i}").ToArray());
@@ -296,11 +295,8 @@ public sealed class MainForm : Form
         Controls.Add(sound);
         Tips.On(sound, Tips.Ding);
 
-        Controls.Add(Cap(new Label
-        {
-            Text = "no more often than",
-            Bounds = new Rectangle(232, y + 38, 108, 20),
-        }, Tips.DingGap));
+        var oftenLbl = Cap(new Label { Text = "no more often than", AutoSize = true }, Tips.DingGap);
+        Controls.Add(oftenLbl);
         var gap = new NumericUpDown { Bounds = new Rectangle(342, y + 34, 62, 24) };
         gap.Minimum = 0;
         gap.Maximum = 120000;
@@ -309,11 +305,8 @@ public sealed class MainForm : Form
         gap.ValueChanged += (_, _) => { _cfg.SoundGapMs = (int)gap.Value; Save(); };
         Controls.Add(gap);
         Tips.On(gap, Tips.DingGap);
-        Controls.Add(Cap(new Label
-        {
-            Text = "ms",
-            Bounds = new Rectangle(408, y + 38, 26, 20),
-        }, Tips.DingGap));
+        var msLbl = Cap(new Label { Text = "ms", AutoSize = true }, Tips.DingGap);
+        Controls.Add(msLbl);
 
         var disarmedDing = new CheckBox
         {
@@ -326,11 +319,8 @@ public sealed class MainForm : Form
         Controls.Add(disarmedDing);
         Tips.On(disarmedDing, Tips.DingDisarmed);
 
-        Controls.Add(Cap(new Label
-        {
-            Text = "volume",
-            Bounds = new Rectangle(440, y + 38, 48, 20),
-        }, Tips.Volume));
+        var volLbl = Cap(new Label { Text = "volume", AutoSize = true }, Tips.Volume);
+        Controls.Add(volLbl);
         var vol = new NumericUpDown { Bounds = new Rectangle(490, y + 34, 56, 24) };
         vol.Minimum = -24;
         vol.Maximum = MonitorEngine.MaxGainDb;
@@ -344,11 +334,8 @@ public sealed class MainForm : Form
         };
         Controls.Add(vol);
         Tips.On(vol, Tips.Volume);
-        Controls.Add(Cap(new Label
-        {
-            Text = $"dB (max +{MonitorEngine.MaxGainDb})",
-            Bounds = new Rectangle(550, y + 38, 110, 20),
-        }, Tips.Volume));
+        var dbLbl = Cap(new Label { Text = $"dB (max +{MonitorEngine.MaxGainDb})", AutoSize = true }, Tips.Volume);
+        Controls.Add(dbLbl);
 
         y += 32;
         var rescan = new Button
@@ -383,7 +370,8 @@ public sealed class MainForm : Form
         Tips.On(testBtn, Tips.TestKeys);
 
         y += 32;
-        Controls.Add(Cap(new Label { Text = "Send by", Bounds = new Rectangle(12, y + 4, 50, 20) }, Tips.SendBy));
+        var sendLbl = Cap(new Label { Text = "Send keys by", AutoSize = true }, Tips.SendBy);
+        Controls.Add(sendLbl);
         var method = new ComboBox
         {
             Bounds = new Rectangle(64, y, 150, 24),
@@ -400,12 +388,8 @@ public sealed class MainForm : Form
         Controls.Add(method);
         Tips.On(method, Tips.SendBy);
 
-        Controls.Add(Cap(new Label
-        {
-            Text = "posted reaches an unfocused window; try it if injected is ignored",
-            Bounds = new Rectangle(220, y + 4, 380, 20),
-            ForeColor = SystemColors.GrayText,
-        }, Tips.SendBy));
+        var postedNote = Cap(new Label { Text = "Posting reaches a window that is not focused.", AutoSize = true, ForeColor = SystemColors.GrayText }, Tips.SendBy);
+        Controls.Add(postedNote);
 
         var numbersOnly = new CheckBox
         {
@@ -565,6 +549,14 @@ public sealed class MainForm : Form
         BackColor = Theme.Bg;
         ForeColor = Theme.Text;
         Font = Theme.Ui;
+        Regroup(new Control[] { findAll, updBtn, upd, diagBtn, logBtn },
+                new Control[] { numbersOnly, mem, rescan, pollLbl, _pollHz },
+                new Control[] { winLbl, _window, clearBtn, armKeyLbl, _hotkey,
+                                sendLbl, method, postedNote, testBtn },
+                new Control[] { sound, disarmedDing, oftenLbl, gap, msLbl,
+                                volLbl, vol, dbLbl },
+                new Control[] { shareBtn, applyBtn, hide });
+
         Theme.Apply(this);
 
         // After the general styling, or it would paint over them.
@@ -588,6 +580,75 @@ public sealed class MainForm : Form
 
         RefreshArmUi();
         _engine.Start();
+    }
+
+    /// <summary>
+    /// Puts the lower half into named groups.
+    ///
+    /// It had grown a row at a time over fifty releases, so related things sat
+    /// far apart and unrelated things sat together - the update checkbox beside
+    /// the capture one, the ding volume beside the send method. Nobody could
+    /// answer "where do I change how it reads?" by looking.
+    ///
+    /// Five groups, each a question somebody actually asks: getting started,
+    /// what it reads from, when it is allowed to fire, whether it makes a
+    /// sound, and moving a setup between machines. The headings do the work the
+    /// tooltips were carrying alone.
+    /// </summary>
+    private void Regroup(Control[] setup, Control[] reading, Control[] firing,
+                         Control[] sound, Control[] sharing)
+    {
+        int top = Math.Max(_arm.Bottom, _focus.Bottom) + 14;
+        const int Gap = 10, Edge = 12;
+        int wide = (ClientSize.Width - Edge * 2 - Gap * 2) / 3;
+
+        var a = Group("Getting started", Edge, top, wide, setup);
+        var b = Group("What it reads", a.Right + Gap, top, wide, reading);
+        var c = Group("When it may fire", b.Right + Gap, top,
+                      ClientSize.Width - Edge - (b.Right + Gap), firing);
+
+        int next = Math.Max(a.Bottom, Math.Max(b.Bottom, c.Bottom)) + Gap;
+        int half = (ClientSize.Width - Edge * 2 - Gap) / 2;
+
+        var d = Group("Sound", Edge, next, half, sound);
+        var e = Group("Moving this setup", d.Right + Gap, next,
+                      ClientSize.Width - Edge - (d.Right + Gap), sharing);
+
+        _live.SetBounds(Edge, Math.Max(d.Bottom, e.Bottom) + Gap,
+                        ClientSize.Width - Edge * 2, 20);
+    }
+
+    /// <summary>
+    /// One titled group, filled left to right and wrapped, so a longer label
+    /// pushes its neighbour along instead of landing on top of it.
+    /// </summary>
+    private Card Group(string title, int x, int y, int width, Control[] items)
+    {
+        var card = new Card { Text = title, Bounds = new Rectangle(x, y, width, 40) };
+        Controls.Add(card);
+        card.SendToBack();
+
+        const int Pad = 12, Line = 30;
+        int cx = Pad, cy = 34;
+
+        foreach (var item in items)
+        {
+            item.Parent = card;
+            if (item is Label or CheckBox) item.AutoSize = true;
+            item.PerformLayout();
+
+            int w = item.Width;
+            if (cx > Pad && cx + w > width - Pad) { cx = Pad; cy += Line; }
+
+            // Labels sit on the baseline of the boxes they name rather than the
+            // top of them, which is where they read as captions.
+            int lift = item is Label ? (26 - item.Height) / 2 : 0;
+            item.Location = new Point(cx, cy + lift);
+            cx += w + (item is Label ? 8 : 12);
+        }
+
+        card.Height = cy + Line + 6;
+        return card;
     }
 
     /// <summary>
