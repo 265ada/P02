@@ -209,7 +209,7 @@ public sealed class MainForm : Form
         Tips.On(_hotkey, Tips.ArmKey);
 
         y += 34;
-        var logBtn = new Button { Text = "Open log folder", Bounds = new Rectangle(12, y, 130, 26) };
+        var logBtn = new Button { Text = "Open log folder", Bounds = new Rectangle(508, y, 122, 28) };
         logBtn.Click += (_, _) =>
         {
             Directory.CreateDirectory(AppConfig.Dir);
@@ -218,7 +218,7 @@ public sealed class MainForm : Form
         Controls.Add(logBtn);
         Tips.On(logBtn, Tips.OpenLog);
 
-        var updBtn = new Button { Text = "Check for updates", Bounds = new Rectangle(150, y, 140, 26) };
+        var updBtn = new Button { Text = "Check for updates", Bounds = new Rectangle(182, y, 156, 28) };
         updBtn.Click += async (_, _) =>
             await Updater.CheckAsync(this, silent: false, beforeExit: _cfg.SaveNow);
         Controls.Add(updBtn);
@@ -227,7 +227,7 @@ public sealed class MainForm : Form
         var findAll = new Button
         {
             Text = "Set it up for me",
-            Bounds = new Rectangle(298, y, 150, 26),
+            Bounds = new Rectangle(12, y, 164, 28),
         };
         findAll.Click += (_, _) => FixSetup();
         Controls.Add(findAll);
@@ -238,7 +238,7 @@ public sealed class MainForm : Form
         var upd = new CheckBox
         {
             Text = "Check at launch",
-            Bounds = new Rectangle(586, y + 3, 118, 22),
+            Bounds = new Rectangle(640, y + 4, 118, 22),
             Checked = cfg.CheckUpdatesOnStart,
         };
         upd.CheckedChanged += (_, _) =>
@@ -249,7 +249,7 @@ public sealed class MainForm : Form
         var hide = new CheckBox
         {
             Text = "Hide from capture",
-            Bounds = new Rectangle(712, y + 3, 140, 22),
+            Bounds = new Rectangle(762, y + 4, 140, 22),
             Checked = cfg.HideFromCapture,
         };
         hide.CheckedChanged += (_, _) =>
@@ -273,7 +273,7 @@ public sealed class MainForm : Form
         var diagBtn = new Button
         {
             Text = "Export diagnostics",
-            Bounds = new Rectangle(436, y, 140, 26),
+            Bounds = new Rectangle(344, y, 158, 28),
         };
         diagBtn.Click += (_, _) => ExportDiagnostics();
         Controls.Add(diagBtn);
@@ -566,6 +566,10 @@ public sealed class MainForm : Form
         ForeColor = Theme.Text;
         Font = Theme.Ui;
         Theme.Apply(this);
+
+        // After the general styling, or it would paint over them.
+        Theme.Primary(findAll, Color.FromArgb(222, 170, 52));
+        Theme.Primary(updBtn, Color.FromArgb(76, 175, 96));
 
         _life.Accent = Theme.Bad;
         _mana.Accent = Theme.Accent;

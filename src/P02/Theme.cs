@@ -162,4 +162,24 @@ public static class Theme
             if (c.HasChildren) Apply(c);
         }
     }
+
+    /// <summary>
+    /// A button that is meant to be found rather than read past.
+    ///
+    /// Everything on that row looks the same, and two of them are the ones
+    /// anybody actually needs: the one that sets the whole thing up, and the
+    /// one that fetches a fix. Colour is how you find a button without reading
+    /// five labels first.
+    /// </summary>
+    public static void Primary(Button b, Color fill)
+    {
+        b.FlatStyle = FlatStyle.Flat;
+        b.FlatAppearance.BorderSize = 0;
+        b.FlatAppearance.MouseOverBackColor = ControlPaint.Light(fill, 0.25f);
+        b.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(fill, 0.1f);
+        b.BackColor = fill;
+        b.ForeColor = Color.FromArgb(18, 20, 23);
+        b.Font = new Font("Segoe UI Semibold", 9.5f);
+        b.Cursor = Cursors.Hand;
+    }
 }
