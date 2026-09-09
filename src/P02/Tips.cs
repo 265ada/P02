@@ -568,20 +568,16 @@ internal static class Tips
 
     public static readonly string[] FollowBar =
     [
-        "Moves the readout between your three saved spots as your character",
-        "moves.",
+        "Keeps the readout in the right one of your three saved spots as you",
+        "open and close panels.",
         "",
-        "Opening your inventory slides him one way, the character sheet slides",
-        "him the other, and closing both puts him back - so one saved spot is in",
-        "the wrong place two thirds of the time.",
+        "To set them up: put the readout where you want it, Ctrl and right-click",
+        "it, and choose \"Remember this spot\". Do that once with your panels",
+        "closed, once with the inventory open, and once with the character sheet",
+        "open.",
         "",
-        "Set the three up once: Ctrl and right-click the readout, pick Left,",
-        "Middle or Right, then drag it where you want it for that layout. It",
-        "remembers the spot and where your character was standing at the time,",
-        "and from then on it picks whichever of the three matches where he is.",
-        "",
-        "It does not chase him around - it only ever sits in one of the three",
-        "places you chose.",
+        "There is nothing to name and no order to get right - it works out which",
+        "spot is which from where your character is standing when you save it.",
     ];
 
     public static readonly string[] NumbersOnly =

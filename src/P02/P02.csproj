@@ -12,7 +12,7 @@
     <RootNamespace>P02</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
-    <Version>2.61.0</Version>
+    <Version>2.62.0</Version>
 
     <!-- One file, no runtime prerequisite: the whole app is the exe you share. -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>

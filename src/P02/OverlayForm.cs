@@ -52,6 +52,9 @@ public sealed class OverlayForm : Form
     /// <summary>Raised when the menu asks for the default position back.</summary>
     public event Action? ResetAsked;
 
+    /// <summary>Raised when this spot should be remembered for where the character is.</summary>
+    public event Action? RememberAsked;
+
     /// <summary>Raised when one of the three saved places is chosen.</summary>
     public event Action<int>? SlotChosen;
 
@@ -147,6 +150,7 @@ public sealed class OverlayForm : Form
             var now = Cursor.Position;
             Location = new Point(_wasAt.X + now.X - _grabbedAt.X,
                                  _wasAt.Y + now.Y - _grabbedAt.Y);
+            Render();
         };
         // Ctrl and right-click, deliberately. The readout sits over a game
         // where every ordinary click belongs to the game, and a menu that opens
@@ -195,11 +199,7 @@ public sealed class OverlayForm : Form
         _lifeTrigger = lifeTrigger;
         _manaTrigger = manaTrigger;
 
-        _detail = life.Note.Length > 0
-            ? life.Note
-            : life.TextRaw.Length > 0
-                ? life.TextRaw.Replace("memory, life ", "").Replace("numbers, ", "")
-                : "globe pixels";
+        _detail = life.Note.Length > 0 ? life.Note : Source(life.TextRaw);
 
         FitHeight();
         Render();
@@ -282,6 +282,15 @@ public sealed class OverlayForm : Form
                 OptionsChanged?.Invoke(Locked, ClickThrough);
             };
 
+            var remember = new ToolStripMenuItem("Remember this spot")
+            {
+                ToolTipText = "Saves where the readout is now, for wherever your "
+                              + "character is standing now. Do it once with your panels "
+                              + "closed, once with the inventory open, once with the "
+                              + "character sheet open - it works out which is which.",
+            };
+            remember.Click += (_, _) => RememberAsked?.Invoke();
+
             var reset = new ToolStripMenuItem("Move back to the corner");
             reset.Click += (_, _) => ResetAsked?.Invoke();
 
@@ -320,6 +329,8 @@ public sealed class OverlayForm : Form
             places.DropDownItems.AddRange(_slotItems);
 
             _menu = new ContextMenuStrip { ShowImageMargin = false };
+            _menu.Items.Add(remember);
+            _menu.Items.Add(new ToolStripSeparator());
             _menu.Items.Add(places);
             _menu.Items.Add(new ToolStripSeparator());
             _menu.Items.Add(_lockItem);
@@ -334,6 +345,19 @@ public sealed class OverlayForm : Form
         _autoItem!.Checked = SlotAuto;
         _menu.Show(this, at);
     }
+
+    /// <summary>
+    /// Which source decided, without repeating its numbers.
+    ///
+    /// The numbers are already drawn under the bar. Printing them again beside
+    /// "disarmed" said the same thing twice in a readout whose whole point is
+    /// being small.
+    /// </summary>
+    private static string Source(string raw) =>
+        raw.Length == 0 ? "globe pixels"
+        : raw.StartsWith("memory", StringComparison.Ordinal) ? "memory"
+        : raw.StartsWith("numbers", StringComparison.Ordinal) ? "numbers"
+        : raw;
 
     /// <summary>The bare current/maximum out of whatever the source reported.</summary>
     private static string Exact(string raw)
@@ -554,6 +578,13 @@ public sealed class OverlayForm : Form
         string detail = _detail.Length > 22 ? _detail[..22] : _detail;
         var detailColour = _life.Note.Length > 0 || !_life.FromText ? Theme.Warn : Theme.Dim;
         Glyph(g, detail, detailColour, Theme.Small, Pad + 62, y + 1);
+
+        if (_dragging)
+        {
+            Glyph(g, $"{Left}, {Top}", Theme.Accent, Theme.Small,
+                  Pad, y + 1);
+            return;
+        }
 
         if (_firing)
         {

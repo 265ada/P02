@@ -968,6 +968,7 @@ public sealed class MainForm : Form
                 // Remember where it was dropped, so it comes back there rather
                 // than only being saved when the app closes.
                 _overlay.ResetAsked += ResetOverlay;
+                _overlay.RememberAsked += RememberSpot;
                 _overlay.SlotChosen += which =>
                 {
                     _cfg.Slot = Math.Clamp(which, 0, 2);
@@ -1105,6 +1106,76 @@ public sealed class MainForm : Form
     /// click-through at all - so both were switched off again the moment
     /// anything toggled the readout.
     /// </summary>
+    /// <summary>
+    /// Saves where the readout is now, for wherever the character is now.
+    ///
+    /// Naming the three Left, Middle and Right made setting them up a puzzle:
+    /// you had to work out which name went with which layout, in advance, and
+    /// pick the right one before dragging. Nobody should have to. The character
+    /// is standing somewhere when you press this, and that is what identifies
+    /// the spot - so it goes to whichever of the three already belongs to that
+    /// position, or to a spare one if none does.
+    /// </summary>
+    private void RememberSpot()
+    {
+        if (_overlay is not { IsDisposed: false }) return;
+
+        var bar = _engine.CharacterBar;
+        if (bar.Width <= 0)
+        {
+            _overlay.SetAlert("Cannot see your character - stand where you can be seen");
+            return;
+        }
+
+        int barX = bar.X + bar.Width / 2;
+        int slot = -1;
+
+        // The one already claimed by roughly this position, if there is one.
+        for (int i = 0; i < 3 && slot < 0; i++)
+            if (_cfg.SlotBarX[i] >= 0 && Math.Abs(_cfg.SlotBarX[i] - barX) < 90) slot = i;
+
+        // Otherwise a spare.
+        for (int i = 0; i < 3 && slot < 0; i++)
+            if (_cfg.SlotBarX[i] < 0) slot = i;
+
+        // All three taken and none of them near: replace the nearest, since
+        // three layouts is all there are and one of them has moved.
+        if (slot < 0)
+        {
+            int nearest = int.MaxValue;
+            for (int i = 0; i < 3; i++)
+            {
+                int away = Math.Abs(_cfg.SlotBarX[i] - barX);
+                if (away < nearest) { nearest = away; slot = i; }
+            }
+        }
+
+        _cfg.Slot = slot;
+        _cfg.SlotX[slot] = _overlay.Location.X;
+        _cfg.SlotY[slot] = _overlay.Location.Y;
+        _cfg.SlotBarX[slot] = barX;
+        _cfg.SlotAuto = true;
+        Save();
+
+        _overlay.Slot = slot;
+        int set = _cfg.SlotBarX.Count(v => v >= 0);
+        _overlay.SetAlert(set < 3
+            ? $"Saved. {3 - set} more: open a panel and do it again"
+            : "Saved. All three set");
+
+        Log.Write($"overlay: spot {slot + 1} saved at {_overlay.Location} "
+                  + $"for character x={barX}");
+
+        var clear = new System.Windows.Forms.Timer { Interval = 4000 };
+        clear.Tick += (_, _) =>
+        {
+            clear.Stop();
+            clear.Dispose();
+            if (_overlay is { IsDisposed: false }) _overlay.SetAlert("");
+        };
+        clear.Start();
+    }
+
     /// <summary>Whether a remembered spot is still on a screen that exists.</summary>
     private bool OnAScreen(Point at)
     {

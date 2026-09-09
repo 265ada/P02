@@ -97,17 +97,20 @@ internal sealed class HowToForm : Form
 
         Ctrl and right-click on it opens its own options.
 
-        Position: three saved spots, Left, Middle and Right. They exist
-        because opening your inventory slides your character one way and the
-        character sheet slides him the other, so one remembered spot is in
-        the wrong place two thirds of the time. Pick one, drag the readout
-        where you want it, and it is remembered there. Do that three times,
-        once per layout.
+        Three saved spots, so it is in the right place whatever you have
+        open. To set them up, do this three times:
 
-        Each spot also remembers where your character was standing when you
-        set it. From then on, "Move it as my character does" picks whichever
-        of the three matches where he is now - so it follows your panels
-        without knowing anything about them, and without chasing him around.
+            Put the readout where you want it, then Ctrl and right-click it
+            and choose "Remember this spot".
+
+        Once with your panels closed, once with your inventory open, once
+        with your character sheet open. It works out which is which from
+        where your character is standing, so there is nothing to name and
+        no order to get right. Dragging shows the position in pixels while
+        you move it.
+
+        After that, "Move it as my character does" keeps it in the matching
+        spot as you open and close things.
 
         Also there: lock it in place, and let clicks pass straight through
         into the game. Hold Ctrl to make it solid again while click-through
