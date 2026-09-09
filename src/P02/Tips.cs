@@ -609,4 +609,18 @@ internal static class Tips
         "came out useful, and says so plainly if the two pictures were too alike",
         "to learn anything from.",
     ];
+
+    public static readonly string[] WhatIsWrong =
+    [
+        "Checks the whole setup and lists what is wrong, worst first, with the",
+        "one thing that fixes each.",
+        "",
+        "All of it was knowable before - spread over a status bar, three",
+        "coloured labels, a log file and a tooltip, in the app's words rather",
+        "than yours. Working out which of them mattered took somebody who had",
+        "read the source.",
+        "",
+        "It also runs itself at startup, and speaks up only when something is",
+        "actually stopping it working.",
+    ];
 }

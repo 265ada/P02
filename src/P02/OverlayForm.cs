@@ -18,12 +18,15 @@ namespace P02;
 public sealed class OverlayForm : Form
 {
     private const int Pad = 11;
-    private const int RowH = 24;
+    private const int RowH = 40;
     private const int BarH = 11;
     private const int NameW = 34;
     private const int ValueW = 54;
 
     private readonly System.Windows.Forms.Timer _fade = new();
+
+    private string _lifeKey = "";
+    private string _manaKey = "";
 
     private GlobeReading _life = new("Life", 0, false);
     private GlobeReading _mana = new("Mana", 0, false, "off");
@@ -159,6 +162,13 @@ public sealed class OverlayForm : Form
     /// <summary>Taking focus off the game to show a readout would be its own bug.</summary>
     protected override bool ShowWithoutActivation => true;
 
+    /// <summary>The keys each pool would press, shown beside its trigger.</summary>
+    public void SetKeys(string life, string mana)
+    {
+        _lifeKey = life;
+        _manaKey = mana;
+    }
+
     public void Show(GlobeReading life, GlobeReading mana,
                      double lifeTrigger, double manaTrigger)
     {
@@ -265,6 +275,21 @@ public sealed class OverlayForm : Form
         _lockItem!.Checked = Locked;
         _throughItem!.Checked = ClickThrough;
         _menu.Show(this, at);
+    }
+
+    /// <summary>The bare current/maximum out of whatever the source reported.</summary>
+    private static string Exact(string raw)
+    {
+        int slash = raw.IndexOf('/');
+        if (slash < 0) return "";
+
+        int from = slash;
+        while (from > 0 && (char.IsDigit(raw[from - 1]) || raw[from - 1] == ',')) from--;
+
+        int to = slash + 1;
+        while (to < raw.Length && (char.IsDigit(raw[to]) || raw[to] == ',')) to++;
+
+        return to - from > 3 ? raw[from..to] : "";
     }
 
     /// <summary>A globe that is not watched has nothing to say, so it takes no room.</summary>
@@ -376,12 +401,12 @@ public sealed class OverlayForm : Form
             g.FillPath(ghost, path);
 
         int y = Pad;
-        Row(g, "Life", _life, _lifeTrigger, y);
+        Row(g, "Life", _life, _lifeTrigger, _lifeKey, y);
         y += RowH;
 
         if (ManaShown)
         {
-            Row(g, "Mana", _mana, _manaTrigger, y);
+            Row(g, "Mana", _mana, _manaTrigger, _manaKey, y);
             y += RowH;
         }
 
@@ -400,7 +425,8 @@ public sealed class OverlayForm : Form
         }
     }
 
-    private void Row(Graphics g, string name, GlobeReading r, double trigger, int y)
+    private void Row(Graphics g, string name, GlobeReading r, double trigger,
+                     string key, int y)
     {
         Glyph(g, name, Theme.Dim, Theme.Small, Pad, y + 2);
 
@@ -448,6 +474,18 @@ public sealed class OverlayForm : Form
                    : held ? Theme.Warn
                    : r.Fraction < trigger ? Theme.Bad : Theme.Text;
         Glyph(g, right, colour, Theme.UiBold, bar.Right + 8, y + 1);
+
+        // What the percentage is a percentage of, and what would happen. A bare
+        // "60%" says none of that, and every argument about whether it was
+        // reading correctly came down to not being able to see the numbers it
+        // was reading.
+        string exact = Exact(r.TextRaw);
+        if (exact.Length > 0)
+            Glyph(g, exact, Theme.Dim, Theme.Small, Pad + NameW, y + BarH + 5);
+
+        if (key.Length > 0)
+            Glyph(g, $"{trigger:P0} to {key}", Theme.Dim, Theme.Small,
+                  bar.Right + 8, y + BarH + 5);
     }
 
     private void Status(Graphics g, int y)

@@ -272,6 +272,18 @@ public sealed class MainForm : Form
         Tips.On(hide, Tips.HideCapture);
 
 
+        var checkBtn = new Button { Text = "What is wrong?", Bounds = new Rectangle(0, 0, 150, 28) };
+        checkBtn.Click += (_, _) =>
+        {
+            var found = SelfCheck.Run(_cfg, _engine, Version);
+            MessageBox.Show(this, SelfCheck.Describe(found), "What is wrong?",
+                            MessageBoxButtons.OK,
+                            found.Any(f => f.Stops) ? MessageBoxIcon.Warning
+                                                    : MessageBoxIcon.Information);
+        };
+        Controls.Add(checkBtn);
+        Tips.On(checkBtn, Tips.WhatIsWrong);
+
         var diagBtn = new Button
         {
             Text = "Export diagnostics",
@@ -552,7 +564,7 @@ public sealed class MainForm : Form
         BackColor = Theme.Bg;
         ForeColor = Theme.Text;
         Font = Theme.Ui;
-        Regroup(new Control[] { findAll, updBtn, upd, diagBtn, logBtn },
+        Regroup(new Control[] { findAll, checkBtn, updBtn, upd, diagBtn, logBtn },
                 new Control[] { numbersOnly, mem, rescan, pollLbl, _pollHz },
                 new Control[] { winLbl, _window, clearBtn, armKeyLbl, _hotkey,
                                 sendLbl, method, postedNote, testBtn },
@@ -964,6 +976,8 @@ public sealed class MainForm : Form
 
                     if (_overlay.Visible)
                     {
+                        _overlay.SetKeys(_cfg.Life.Enabled ? _cfg.Life.Key.ToUpperInvariant() : "",
+                                         _cfg.Mana.Enabled ? _cfg.Mana.Key.ToUpperInvariant() : "");
                         _overlay.Show(life, mana, _cfg.Life.Threshold, _cfg.Mana.Threshold);
                         _overlay.SetFightCount(_engine.FiresThisFight, _engine.InCombat);
                         if (_cfg.OverlaySnap || _cfg.OverlayFollowBar) PlaceOverlay();
@@ -1141,6 +1155,14 @@ public sealed class MainForm : Form
         base.OnShown(e);
         ReportRepairs();
         FirstRunSetup();
+
+        // Said once, on the way in, and only when something is actually broken.
+        // Every session that went wrong went wrong from the first minute, and
+        // nobody was told until they asked.
+        var wrong = SelfCheck.Run(_cfg, _engine, Version);
+        if (wrong.Any(f => f.Stops))
+            MessageBox.Show(this, SelfCheck.Describe(wrong), "P02 is not ready",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
         // With unattended installs on, the launch check has nothing to ask
         // about: the countdown below handles it a few seconds later, in one
         // place, and having waited for a fight to end.

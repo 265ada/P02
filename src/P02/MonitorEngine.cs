@@ -504,6 +504,16 @@ public sealed class MonitorEngine : IDisposable
         public bool LastDitchUsed;
         public long BackoffUntilMs;
         public bool Blind;
+
+        // Per pool, not per app. These were three single fields shared by life,
+        // mana and shield: life would confirm its address and mana, sampled a
+        // moment later with its own maximum, would immediately unconfirm it -
+        // and each pool's disagreement timer reset the others'. Anyone who
+        // switched mana on had the two of them cancelling each other out all
+        // session.
+        public int MemGeneration = -1;
+        public bool MemConfirmed;
+        public long MemDisagreeSinceMs;
     }
 
     private void Loop(CancellationToken ct)
@@ -590,7 +600,7 @@ public sealed class MonitorEngine : IDisposable
                 // thing. Reading them several times a second for that is what
                 // makes a machine hitch: each read is a screen grab and a
                 // recognise. Once a second is plenty to police a liar.
-                _ocr.SetInterval(_memConfirmed ? 900 : nearTrouble ? 60 : 160);
+                _ocr.SetInterval(_lifeMemConfirmed ? 900 : nearTrouble ? 60 : 160);
 
                 bool fighting = t0 - lastDropMs < _cfg.CombatGraceMs;
                 if (fighting != InCombat)
@@ -662,10 +672,15 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>The run-up to each press, kept so one can be explained later.</summary>
     private readonly FireTrail _trail = new();
 
-    /// <summary>Which memory lock this is, and whether the numbers have vouched for it.</summary>
-    private int _memGeneration = -1;
-    private bool _memConfirmed;
-    private long _memDisagreeSinceMs;
+    /// <summary>Whether memory has an address it is willing to read from.</summary>
+    public bool MemoryLocked => _lifeMemConfirmed;
+
+    /// <summary>Whether this pool's numbers have produced a reading recently.</summary>
+    public bool NumbersReading(string name) =>
+        _ocr.TryGet(name, out var r) && _ocr.NowMs - r.AtMs < 4000;
+
+    /// <summary>Whether life's address is vouched for; the OCR rate follows it.</summary>
+    private bool _lifeMemConfirmed;
 
     private GlobeReading Sample(State st, WatcherConfig c, string name,
                                 bool focused, Stopwatch clock)
@@ -796,7 +811,8 @@ public sealed class MonitorEngine : IDisposable
                 if (now - st.ZeroSinceMs > 1500)
                 {
                     st.ZeroSinceMs = 0;
-                    _memConfirmed = false;
+                    st.MemConfirmed = false;
+                    if (name == "Life") _lifeMemConfirmed = false;
                     Log.Write($"{name}: memory has read 0 of {max:N0} for over a second - "
                               + "the address has gone stale, searching again");
                     _mem.Rescan();
@@ -813,11 +829,11 @@ public sealed class MonitorEngine : IDisposable
             // between those moments a wrong address had free rein - twenty
             // presses went out at "16%" in the gaps, each one caught and thrown
             // out afterwards, which is no use to anyone already drinking.
-            if (_memGeneration != _mem.Generation)
+            if (st.MemGeneration != _mem.Generation)
             {
-                _memGeneration = _mem.Generation;
-                _memConfirmed = false;
-                _memDisagreeSinceMs = 0;
+                st.MemGeneration = _mem.Generation;
+                st.MemConfirmed = false;
+                st.MemDisagreeSinceMs = 0;
             }
 
             // Agreeing with the configured maximum is not enough on its own:
@@ -849,10 +865,11 @@ public sealed class MonitorEngine : IDisposable
             {
                 Log.Write($"{name}: memory and the numbers both read a maximum of {max:N0}, "
                           + $"not {expectedMax:N0} - adopting it at once");
+                int wasBoth = expectedMax;
                 c.KnownMax = max;
-                _cfg.Save();
                 expectedMax = max;
-                MaxAdopted?.Invoke(name, expectedMax, max);
+                _cfg.Save();
+                MaxAdopted?.Invoke(name, wasBoth, max);
             }
 
             // The numbers are the authority on the maximum, because they are
@@ -865,22 +882,24 @@ public sealed class MonitorEngine : IDisposable
             // wrong address - the structure does not move when you level. Take
             // the new value from it and carry on; nothing needs reading and
             // nothing needs finding again.
-            if (_memConfirmed && max > 0 && expectedMax > 0 && max != expectedMax
+            if (st.MemConfirmed && max > 0 && expectedMax > 0 && max != expectedMax
                 && ocrMax <= 0)
             {
                 Log.Write($"{name}: maximum is now {max:N0} where it was {expectedMax:N0} - "
                           + "taken from the address already locked");
+                int wasLevelled = expectedMax;
                 c.KnownMax = max;
                 expectedMax = max;
                 _cfg.Save();
-                MaxAdopted?.Invoke(name, expectedMax, max);
+                MaxAdopted?.Invoke(name, wasLevelled, max);
             }
 
             if (ocrMax > 0 && max > 0 && max != ocrMax)
             {
-                if (_memConfirmed)
+                if (st.MemConfirmed)
                 {
-                    _memConfirmed = false;
+                    st.MemConfirmed = false;
+                    if (name == "Life") _lifeMemConfirmed = false;
                     Log.Write($"{name}: memory says the maximum is {max:N0} but the numbers "
                               + $"say {ocrMax:N0} - wrong address, searching again");
                     _mem.Rescan();
@@ -890,9 +909,10 @@ public sealed class MonitorEngine : IDisposable
                 goto pastMemory;
             }
 
-            if (!_memConfirmed && max > 0 && expectedMax > 0 && max == expectedMax)
+            if (!st.MemConfirmed && max > 0 && expectedMax > 0 && max == expectedMax)
             {
-                _memConfirmed = true;
+                st.MemConfirmed = true;
+                if (name == "Life") _lifeMemConfirmed = true;
                 Log.Write($"{name}: memory has the right maximum ({max:N0}) - using this "
                           + "address until the numbers disagree with it for two seconds");
             }
@@ -913,14 +933,15 @@ public sealed class MonitorEngine : IDisposable
             // disagrees for a frame or two and is ridden out. This is the only
             // thing that can take an address away, so it is also what protects
             // against the search having found the wrong one.
-            if (_memConfirmed && haveOcr && !matchesOcr)
+            if (st.MemConfirmed && haveOcr && !matchesOcr)
             {
-                if (_memDisagreeSinceMs == 0) _memDisagreeSinceMs = now;
+                if (st.MemDisagreeSinceMs == 0) st.MemDisagreeSinceMs = now;
 
-                if (now - _memDisagreeSinceMs > 2000)
+                if (now - st.MemDisagreeSinceMs > 2000)
                 {
-                    _memConfirmed = false;
-                    _memDisagreeSinceMs = 0;
+                    st.MemConfirmed = false;
+                    st.MemDisagreeSinceMs = 0;
+                    if (name == "Life") _lifeMemConfirmed = false;
                     Log.Write($"{name}: memory has read {memFrac:P0} against the numbers' "
                               + $"{ocrFrac:P0} for two seconds - dropping this address");
                     _mem.Rescan();
@@ -938,18 +959,18 @@ public sealed class MonitorEngine : IDisposable
             }
             else if (matchesOcr)
             {
-                _memDisagreeSinceMs = 0;
+                st.MemDisagreeSinceMs = 0;
             }
 
             bool trusted = max > 0 && (expectedMax == 0 || max == expectedMax)
-                           && matchesOcr && _memConfirmed;
+                           && matchesOcr && st.MemConfirmed;
 
 
             if (trusted)
             {
                 frac = name == "Life" ? ms.LifeFraction : ms.ManaFraction;
                 fromText = true;
-                textRaw = $"memory, life {cur:N0}/{max:N0}";
+                textRaw = $"memory, {name.ToLowerInvariant()} {cur:N0}/{max:N0}";
                 textLostOverride = false;
             }
             // Only when the maxima genuinely differ. This used to fire whenever
@@ -993,7 +1014,10 @@ public sealed class MonitorEngine : IDisposable
             else if (!st.Blind && now - st.BlindSinceMs > 8000)
             {
                 st.Blind = true;
-                Log.Write($"{name}: reading {frac:P1} for 8s - the region is not on the globe");
+                Log.Write($"{name}: reading {frac:P1} for 8 seconds - "
+                          + (_cfg.NumbersOnly
+                              ? "nothing is being read; press Set it up for me"
+                              : "the region is not on the globe"));
                 Blind?.Invoke(name, true);
             }
         }
