@@ -343,7 +343,25 @@ public sealed class MonitorEngine : IDisposable
 
         // Two stats reading the same numbers means one box is on the other's
         // line. Life reading shield is the dangerous direction.
-        foreach (var (a, b) in new[] { ("Life", "Shield"), ("Life", "Mana"), ("Mana", "Shield") })
+        // Two stats reading the same numbers means one box is on the other's
+        // line. Life reading shield is the dangerous direction - but the common
+        // case is a character with no energy shield at all, where the shield
+        // line reads 0/0, is refused as implausible, and the search settles on
+        // life instead. Telling somebody to go and drag a box for a stat they
+        // do not have is no kind of answer, so the duplicate is simply dropped.
+        if (seen.TryGetValue("Life", out int lifeMax)
+            && seen.TryGetValue("Shield", out int shieldMax)
+            && lifeMax == shieldMax)
+        {
+            _cfg.Shield.TextRegion = new Box();
+            seen.Remove("Shield");
+            report.RemoveAll(line => line.StartsWith("Shield:", StringComparison.Ordinal));
+            report.Add("Shield: it is reading your life, not a shield - dropped. If you do "
+                       + "have energy shield, use Numbers... on the shield row.");
+            Log.Write("setup: shield box was on the life line - dropped");
+        }
+
+        foreach (var (a, b) in new[] { ("Life", "Mana"), ("Mana", "Shield") })
         {
             if (!seen.TryGetValue(a, out int x) || !seen.TryGetValue(b, out int y)) continue;
             if (x != y) continue;
