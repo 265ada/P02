@@ -18,7 +18,7 @@ namespace P02;
 public sealed class OverlayForm : Form
 {
     private const int Pad = 11;
-    private const int RowH = 40;
+    private const int RowH = 24;
     private const int BarH = 11;
     private const int NameW = 34;
     private const int ValueW = 54;
@@ -382,19 +382,12 @@ public sealed class OverlayForm : Form
         int h = Pad + RowH + (ManaShown ? RowH : 0) + 26
                 + (_alert.Length > 0 ? 22 : 0) + Pad;
 
-        // Wide enough for whatever it has to say. An alert is a sentence, not a
-        // label, and it was being cut off mid-word by a window sized for the
-        // bars above it - "move him, then t".
-        int w = 292;
-        if (_alert.Length > 0)
-        {
-            using var g = CreateGraphics();
-            w = Math.Max(w, (int)Math.Ceiling(g.MeasureString(_alert, Theme.Small).Width)
-                            + Pad * 2 + 14);
-        }
+        // The alert wraps within the width the readout already has. Growing the
+        // window to fit a sentence made the whole thing bigger for the sake of
+        // a message that is gone in five seconds.
+        if (_alert.Length > 0) h += (AlertLines() - 1) * 13;
 
-        if (ClientSize.Height != h || ClientSize.Width != w)
-            ClientSize = new Size(w, h);
+        if (ClientSize.Height != h) ClientSize = new Size(ClientSize.Width, h);
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -511,13 +504,56 @@ public sealed class OverlayForm : Form
         {
             // Loud on purpose. Everything else here is meant to be glanceable
             // and ignorable; this one is meant to interrupt.
-            var box = new Rectangle(Pad - 4, y + 26, ClientSize.Width - 2 * Pad + 8, 19);
+            int lines = AlertLines();
+            var box = new Rectangle(Pad - 4, y + 26,
+                                    ClientSize.Width - 2 * Pad + 8, 19 + (lines - 1) * 13);
+
             using (var back = new SolidBrush(Color.FromArgb(210, 150, 30, 26)))
             using (var path = Rounded(box, 5))
                 g.FillPath(back, path);
 
-            Glyph(g, _alert, Color.White, Theme.Small, box.X + 7, box.Y + 2);
+            int at = box.Y + 2;
+            foreach (string part in Wrap(_alert, box.Width - 14))
+            {
+                Glyph(g, part, Color.White, Theme.Small, box.X + 7, at);
+                at += 13;
+            }
         }
+    }
+
+    /// <summary>How many lines the alert needs at the width it has.</summary>
+    private int AlertLines() => Wrap(_alert, ClientSize.Width - 2 * Pad - 6).Count;
+
+    /// <summary>
+    /// Breaks a sentence to a width, on spaces.
+    ///
+    /// The alternative was making the window wider, which grows the readout for
+    /// the sake of a message that is gone in five seconds.
+    /// </summary>
+    private List<string> Wrap(string text, int width)
+    {
+        var lines = new List<string>();
+        if (text.Length == 0) return lines;
+
+        using var g = CreateGraphics();
+        string line = "";
+
+        foreach (string word in text.Split(' '))
+        {
+            string tried = line.Length == 0 ? word : line + " " + word;
+            if (g.MeasureString(tried, Theme.Small).Width > width && line.Length > 0)
+            {
+                lines.Add(line);
+                line = word;
+            }
+            else
+            {
+                line = tried;
+            }
+        }
+
+        if (line.Length > 0) lines.Add(line);
+        return lines;
     }
 
     private void Row(Graphics g, string name, GlobeReading r, double trigger,
@@ -570,17 +606,7 @@ public sealed class OverlayForm : Form
                    : r.Fraction < trigger ? Theme.Bad : Theme.Text;
         Glyph(g, right, colour, Theme.UiBold, bar.Right + 8, y + 1);
 
-        // What the percentage is a percentage of, and what would happen. A bare
-        // "60%" says none of that, and every argument about whether it was
-        // reading correctly came down to not being able to see the numbers it
-        // was reading.
-        string exact = Exact(r.TextRaw);
-        if (exact.Length > 0)
-            Glyph(g, exact, Theme.Dim, Theme.Small, Pad + NameW, y + BarH + 5);
 
-        if (key.Length > 0)
-            Glyph(g, $"{trigger:P0} to {key}", Theme.Dim, Theme.Small,
-                  bar.Right + 8, y + BarH + 5);
     }
 
     private void Status(Graphics g, int y)

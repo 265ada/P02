@@ -413,6 +413,16 @@ public sealed class AppConfig
     /// </summary>
     public int[] SlotBarX { get; set; } = [-1, -1, -1];
 
+    /// <summary>
+    /// What the screen looked like when each spot was saved.
+    ///
+    /// A few pixels down each side of the game window - which is where the
+    /// panels open, and panels are large, fixed and either there or not. This
+    /// replaces hunting for the character, which was a small moving thing that
+    /// the readout is deliberately parked on top of.
+    /// </summary>
+    public int[][] SlotLook { get; set; } = [[], [], []];
+
     /// <summary>Which of the three is in use: 0 left, 1 middle, 2 right.</summary>
     public int Slot { get; set; } = 1;
 

@@ -576,8 +576,9 @@ internal static class Tips
         "closed, once with the inventory open, and once with the character sheet",
         "open.",
         "",
-        "There is nothing to name and no order to get right - it works out which",
-        "spot is which from where your character is standing when you save it.",
+        "It remembers what the screen looked like each time, and matches against",
+        "that. There is nothing to name, no order to get right, and nothing that",
+        "has to be found - a panel is either open or it is not.",
     ];
 
     public static readonly string[] NumbersOnly =

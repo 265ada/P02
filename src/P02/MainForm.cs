@@ -1120,82 +1120,64 @@ public sealed class MainForm : Form
     {
         if (_overlay is not { IsDisposed: false }) return;
 
-        // Blink out and look. The readout is meant to end up over the bars, so
-        // by the time anybody saves a spot it is very likely covering the thing
-        // that identifies it - and one glance is not enough, because the game
-        // is still drawing and the character is rarely perfectly still.
-        var bar = _engine.CharacterBar;
-        if (bar.Width <= 0)
+        if (Native.FindWindowRect(_cfg.WindowMatch) is not { } game)
         {
-            var wasBounds = _engine.OverlayBounds;
-            _engine.OverlayBounds = Rectangle.Empty;
-            _overlay.Hide();
-
-            for (int look = 0; look < 6 && bar.Width <= 0; look++)
-            {
-                Application.DoEvents();
-                Thread.Sleep(120);
-                bar = _engine.FindCharacterNow();
-            }
-
-            _overlay.Show();
-            _overlay.BringToFront();
-            _engine.OverlayBounds = wasBounds;
+            Alert("The game is not on screen");
+            return;
         }
 
-        int barX = bar.Width > 0 ? bar.X + bar.Width / 2 : -1;
+        // What the screen looks like right now, which is what identifies this
+        // layout. Nothing has to be found: the panels are either open or they
+        // are not, and these points are where they open.
+        var look = ScreenSignature.Sample(game);
+
+        // The spot this layout already owns, if it has one.
         int slot = -1;
+        int nearest = int.MaxValue;
 
-        // The one already claimed by roughly this position, if there is one.
-        if (barX >= 0)
-            for (int i = 0; i < 3 && slot < 0; i++)
-                if (_cfg.SlotBarX[i] >= 0 && Math.Abs(_cfg.SlotBarX[i] - barX) < 90) slot = i;
+        for (int i = 0; i < 3; i++)
+        {
+            if (_cfg.SlotLook.Length != 3 || _cfg.SlotLook[i].Length == 0) continue;
+            int away = ScreenSignature.Distance(_cfg.SlotLook[i], look);
+            if (away < nearest) { nearest = away; if (away < 14) slot = i; }
+        }
 
-        // Otherwise one with nothing in it.
+        // Otherwise an empty one, and failing that the one it is least unlike.
         for (int i = 0; i < 3 && slot < 0; i++)
             if (_cfg.SlotX[i] < 0) slot = i;
 
-        // All three used and none of them here: replace the nearest, since
-        // three layouts is all there are and one of them has moved.
-        if (slot < 0 && barX >= 0)
-        {
-            int nearest = int.MaxValue;
-            for (int i = 0; i < 3; i++)
+        if (slot < 0)
+            for (int i = 0, best = int.MaxValue; i < 3; i++)
             {
-                if (_cfg.SlotBarX[i] < 0) continue;
-                int away = Math.Abs(_cfg.SlotBarX[i] - barX);
-                if (away < nearest) { nearest = away; slot = i; }
+                if (_cfg.SlotLook[i].Length == 0) continue;
+                int away = ScreenSignature.Distance(_cfg.SlotLook[i], look);
+                if (away < best) { best = away; slot = i; }
             }
-        }
 
         if (slot < 0) slot = Math.Clamp(_cfg.Slot, 0, 2);
 
-        // The position is saved either way. Refusing to save it because the
-        // character could not be seen loses the one thing this was asked to
-        // do, over a detail it can learn later.
         _cfg.Slot = slot;
         _cfg.SlotX[slot] = _overlay.Location.X;
         _cfg.SlotY[slot] = _overlay.Location.Y;
-        if (barX >= 0) _cfg.SlotBarX[slot] = barX;
-        if (barX >= 0) _cfg.SlotAuto = true;
+        _cfg.SlotLook[slot] = look;
+        _cfg.SlotAuto = true;
         Save();
 
         _overlay.Slot = slot;
 
-        // Counted honestly: a spot with a position but no character attached to
-        // it is not one of the three that can be switched between.
-        int linked = 0;
-        for (int i = 0; i < 3; i++)
-            if (_cfg.SlotX[i] >= 0 && _cfg.SlotBarX[i] >= 0) linked++;
-
-        _overlay.SetAlert(barX < 0
-            ? "Spot saved, but I could not see your character - move him and save again"
-            : linked >= 3
-                ? "Saved. All three are set"
-                : $"Saved {linked} of 3 - open a panel and save another");
+        int set = _cfg.SlotLook.Count(v => v.Length > 0);
+        Alert(set >= 3 ? "Saved. All three are set"
+                       : $"Saved {set} of 3 - open a panel and save another");
 
         Log.Write($"overlay: spot {slot + 1} saved at {_overlay.Location}, "
-                  + $"character x={barX}, {linked} of 3 linked");
+                  + $"{set} of 3 set");
+    }
+
+    /// <summary>Says something on the readout, and takes it away again.</summary>
+    private void Alert(string what)
+    {
+        if (_overlay is not { IsDisposed: false }) return;
+        _overlay.SetAlert(what);
 
         var clear = new System.Windows.Forms.Timer { Interval = 5000 };
         clear.Tick += (_, _) =>
@@ -1227,44 +1209,41 @@ public sealed class MainForm : Form
     /// already says which layout is up without this needing to know anything
     /// about the game's windows. Left third, middle, right third.
     /// </summary>
+    private long _lookedAtMs;
+
+    /// <summary>
+    /// Moves the readout to whichever saved spot this layout belongs to.
+    ///
+    /// It compares what the screen looks like now against what it looked like
+    /// when each spot was saved. Opening a panel changes those points a great
+    /// deal and walking around changes them barely at all, so the comparison is
+    /// not a close-run thing.
+    /// </summary>
     private void FollowPanels()
     {
         if (!_cfg.SlotAuto || _cfg.OverlaySnap) return;
 
-        var bar = _engine.CharacterBar;
-        if (bar.Width <= 0) return;
-        if (Native.FindWindowRect(_cfg.WindowMatch) is not { } game || game.Width < 200) return;
+        // Three or four times a second. This is a screen capture, and the
+        // panels are not opened faster than that.
+        long now = Environment.TickCount64;
+        if (now - _lookedAtMs < 300) return;
+        _lookedAtMs = now;
 
-        int barX = bar.X + bar.Width / 2;
+        if (Native.FindWindowRect(_cfg.WindowMatch) is not { } game) return;
 
-        // Whichever spot was set with the character nearest to where he is now.
-        // Each one was placed for a particular layout, so the position he
-        // stands in for that layout is the thing that identifies it - no
-        // knowledge of the game's panels required, and no assumption about how
-        // far a panel pushes him.
-        int wanted = -1;
-        int nearest = int.MaxValue;
+        var look = ScreenSignature.Sample(game);
+        int wanted = -1, best = int.MaxValue;
 
-        if (_cfg.SlotBarX.Length == 3)
-            for (int i = 0; i < 3; i++)
-            {
-                if (_cfg.SlotBarX[i] < 0) continue;
-                int away = Math.Abs(_cfg.SlotBarX[i] - barX);
-                if (away < nearest) { nearest = away; wanted = i; }
-            }
-
-        // Nothing recorded yet - the first time, or before any spot has been
-        // dragged into place. Thirds of the window is a poor guess but it is
-        // better than sitting still, and it stops mattering the moment a spot
-        // is actually set.
-        if (wanted < 0)
+        for (int i = 0; i < 3; i++)
         {
-            int across = barX - game.X;
-            int third = game.Width / 3;
-            wanted = across < third ? 0 : across < third * 2 ? 1 : 2;
+            if (_cfg.SlotLook.Length != 3 || _cfg.SlotLook[i].Length == 0) continue;
+            if (_cfg.SlotX[i] < 0) continue;
+
+            int away = ScreenSignature.Distance(_cfg.SlotLook[i], look);
+            if (away < best) { best = away; wanted = i; }
         }
 
-        if (wanted == _cfg.Slot) return;
+        if (wanted < 0 || wanted == _cfg.Slot) return;
 
         _cfg.Slot = wanted;
         if (_overlay is { IsDisposed: false }) _overlay.Slot = wanted;
