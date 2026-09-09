@@ -408,6 +408,11 @@ public sealed class AppConfig
     /// something rather than hiding something.
     /// </summary>
     public bool OverlayAutoHide { get; set; }
+    /// <summary>The size the window was left at, so it is not reset each launch.</summary>
+    public int WindowW { get; set; }
+
+    public int WindowH { get; set; }
+
     public bool StartMinimised { get; set; }
     public bool CheckUpdatesOnStart { get; set; } = true;
 

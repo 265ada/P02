@@ -35,8 +35,13 @@ public sealed class MainForm : Form
         _engine = new MonitorEngine(cfg);
 
         Text = $"P02  v{Version}";
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox = false;
+        // Resizable, and it scrolls. It was a fixed 900x856 that had grown with
+        // every feature until it was taller than a 1080p screen, which meant the
+        // bottom of it - the arm button, among other things - simply could not
+        // be reached on the most common monitor there is.
+        FormBorderStyle = FormBorderStyle.Sizable;
+        MaximizeBox = true;
+        AutoScroll = true;
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(900, 856);
 
@@ -591,8 +596,31 @@ public sealed class MainForm : Form
 
         // Same again for the window itself: fit the contents rather than
         // assume them.
+        // Fit the contents, then fit the screen. Whichever is smaller wins, and
+        // what does not fit scrolls rather than falling off the bottom.
         int deepest = Controls.Cast<Control>().Max(c => c.Bottom);
-        ClientSize = new Size(ClientSize.Width, deepest + 12);
+        var room = (Screen.FromControl(this) ?? Screen.PrimaryScreen!).WorkingArea;
+
+        MinimumSize = new Size(760, 420);
+
+        int wantW = _cfg.WindowW > 0 ? _cfg.WindowW : ClientSize.Width;
+        int wantH = _cfg.WindowH > 0 ? _cfg.WindowH : deepest + 12;
+
+        ClientSize = new Size(Math.Clamp(wantW, MinimumSize.Width, room.Width - 40),
+                              Math.Clamp(wantH, MinimumSize.Height, room.Height - 60));
+
+        ResizeEnd += (_, _) =>
+        {
+            if (WindowState != FormWindowState.Normal) return;
+            _cfg.WindowW = ClientSize.Width;
+            _cfg.WindowH = ClientSize.Height;
+            Save();
+        };
+
+        // The groups reflow to the width they are given, so anything that
+        // changes it lays them out again.
+        Resize += (_, _) => { if (WindowState != FormWindowState.Minimized) Relayout(); };
+        Relayout();
 
         RefreshArmUi();
         _engine.Start();
@@ -611,27 +639,88 @@ public sealed class MainForm : Form
     /// sound, and moving a setup between machines. The headings do the work the
     /// tooltips were carrying alone.
     /// </summary>
+    private Control[][]? _groups;
+    private readonly List<Card> _groupCards = [];
+
+    private void Relayout()
+    {
+        if (_groups is null) return;
+
+        // The pair of pool cards share the width evenly, with the same margin
+        // outside them as between them. They were two fixed 382-wide panels at
+        // fixed coordinates, so any other window width left them off-centre
+        // with a growing empty strip down one side.
+        const int Edge = 12, Gap = 10;
+        int half = (ClientSize.Width - Edge * 2 - Gap) / 2;
+
+        _life.SetBounds(Edge, _life.Top, half, _life.Height);
+        _mana.SetBounds(Edge + half + Gap, _mana.Top, half, _mana.Height);
+
+        // The arm button keeps its size; the status beside it takes the rest.
+        _status.SetBounds(_arm.Right + 14, _status.Top,
+                          ClientSize.Width - _arm.Right - 26, _status.Height);
+        _focus.SetBounds(_arm.Right + 14, _focus.Top,
+                         ClientSize.Width - _arm.Right - 26, _focus.Height);
+
+        Regroup(_groups[0], _groups[1], _groups[2], _groups[3], _groups[4]);
+    }
+
     private void Regroup(Control[] setup, Control[] reading, Control[] firing,
                          Control[] sound, Control[] sharing)
     {
+        _groups = [setup, reading, firing, sound, sharing];
+
+        // Rebuilt from scratch each time, so the old cards go first - and the
+        // controls have to come out of them before they are disposed, or they
+        // are disposed along with them.
+        foreach (var old in _groupCards)
+        {
+            while (old.Controls.Count > 0) old.Controls[0].Parent = this;
+            Controls.Remove(old);
+            old.Dispose();
+        }
+        _groupCards.Clear();
+
         int top = Math.Max(_arm.Bottom, _focus.Bottom) + 14;
         const int Gap = 10, Edge = 12;
-        int wide = (ClientSize.Width - Edge * 2 - Gap * 2) / 3;
 
-        var a = Group("Getting started", Edge, top, wide, setup);
-        var b = Group("What it reads", a.Right + Gap, top, wide, reading);
-        var c = Group("When it may fire", b.Right + Gap, top,
-                      ClientSize.Width - Edge - (b.Right + Gap), firing);
+        // Three columns where there is room for them, two where there is not.
+        // A narrow window with three columns is three columns of wrapped
+        // single words.
+        int usable = ClientSize.Width - Edge * 2;
+        int columns = usable >= 780 ? 3 : 2;
+        int wide = (usable - Gap * (columns - 1)) / columns;
 
-        int next = Math.Max(a.Bottom, Math.Max(b.Bottom, c.Bottom)) + Gap;
-        int half = (ClientSize.Width - Edge * 2 - Gap) / 2;
+        var titles = new[] { "Getting started", "What it reads", "When it may fire",
+                             "Sound", "Moving this setup" };
+        var contents = new[] { setup, reading, firing, sound, sharing };
 
-        var d = Group("Sound", Edge, next, half, sound);
-        var e = Group("Moving this setup", d.Right + Gap, next,
-                      ClientSize.Width - Edge - (d.Right + Gap), sharing);
+        int x = Edge, rowTop = top, rowBottom = top, column = 0;
 
-        _live.SetBounds(Edge, Math.Max(d.Bottom, e.Bottom) + Gap,
-                        ClientSize.Width - Edge * 2, 20);
+        for (int i = 0; i < titles.Length; i++)
+        {
+            // The last card on a row takes the remaining pixels, so the right
+            // edge lines up with the left one instead of leaving a ragged gap.
+            bool last = column == columns - 1 || i == titles.Length - 1;
+            int w = last ? ClientSize.Width - Edge - x : wide;
+
+            var card = Group(titles[i], x, rowTop, w, contents[i]);
+            _groupCards.Add(card);
+            rowBottom = Math.Max(rowBottom, card.Bottom);
+
+            if (++column < columns && i < titles.Length - 1)
+            {
+                x = card.Right + Gap;
+            }
+            else
+            {
+                column = 0;
+                x = Edge;
+                rowTop = rowBottom + Gap;
+            }
+        }
+
+        _live.SetBounds(Edge, rowBottom + Gap, ClientSize.Width - Edge * 2, 20);
     }
 
     /// <summary>

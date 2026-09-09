@@ -59,6 +59,7 @@ public sealed class GlobePanel : Card
 
         Text = title;
         Width = 382;
+        MinimumSize = new Size(360, 0);
         Height = 570;
 
 
