@@ -23,6 +23,18 @@ public sealed class OverlayForm : Form
     private const int NameW = 34;
     private const int ValueW = 54;
 
+    /// <summary>
+    /// One font for the alert, used to measure it and to draw it.
+    ///
+    /// Measuring with one and drawing with another is how text ends up cut off
+    /// mid-word, and this readout has done that more than once. It is also
+    /// bigger than the rest: an alert is the one thing here that has to be read
+    /// rather than glanced at.
+    /// </summary>
+    private static readonly Font AlertFont = new("Segoe UI Semibold", 9f);
+
+    private const int AlertLine = 16;
+
     private readonly System.Windows.Forms.Timer _fade = new();
 
     private string _lifeKey = "";
@@ -380,12 +392,12 @@ public sealed class OverlayForm : Form
     private void FitHeight()
     {
         int h = Pad + RowH + (ManaShown ? RowH : 0) + 26
-                + (_alert.Length > 0 ? 22 : 0) + Pad;
+                + (_alert.Length > 0 ? AlertLine + 8 : 0) + Pad;
 
         // The alert wraps within the width the readout already has. Growing the
         // window to fit a sentence made the whole thing bigger for the sake of
         // a message that is gone in five seconds.
-        if (_alert.Length > 0) h += (AlertLines() - 1) * 13;
+        if (_alert.Length > 0) h += (AlertLines() - 1) * AlertLine;
 
         if (ClientSize.Height != h) ClientSize = new Size(ClientSize.Width, h);
     }
@@ -506,17 +518,18 @@ public sealed class OverlayForm : Form
             // and ignorable; this one is meant to interrupt.
             int lines = AlertLines();
             var box = new Rectangle(Pad - 4, y + 26,
-                                    ClientSize.Width - 2 * Pad + 8, 19 + (lines - 1) * 13);
+                                    ClientSize.Width - 2 * Pad + 8,
+                                    AlertLine + 6 + (lines - 1) * AlertLine);
 
             using (var back = new SolidBrush(Color.FromArgb(210, 150, 30, 26)))
             using (var path = Rounded(box, 5))
                 g.FillPath(back, path);
 
-            int at = box.Y + 2;
+            int at = box.Y + 3;
             foreach (string part in Wrap(_alert, box.Width - 14))
             {
-                Glyph(g, part, Color.White, Theme.Small, box.X + 7, at);
-                at += 13;
+                Glyph(g, part, Color.White, AlertFont, box.X + 7, at);
+                at += AlertLine;
             }
         }
     }
@@ -541,7 +554,7 @@ public sealed class OverlayForm : Form
         foreach (string word in text.Split(' '))
         {
             string tried = line.Length == 0 ? word : line + " " + word;
-            if (g.MeasureString(tried, Theme.Small).Width > width && line.Length > 0)
+            if (g.MeasureString(tried, AlertFont).Width > width && line.Length > 0)
             {
                 lines.Add(line);
                 line = word;
