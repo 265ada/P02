@@ -576,7 +576,7 @@ public sealed class MonitorEngine : IDisposable
 
                 // Decoration, and rate limited inside, so it can never compete
                 // with the reading that decides whether to press a key.
-                if (_cfg.OverlayFollowBar && _cfg.OverlayOn && focused
+                if ((_cfg.OverlayFollowBar || _cfg.SlotAuto) && _cfg.OverlayOn && focused
                     && Native.FindWindowRect(_cfg.WindowMatch) is { } client)
                     _bar.Look(client);
 

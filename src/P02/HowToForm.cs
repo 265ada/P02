@@ -95,10 +95,23 @@ internal sealed class HowToForm : Form
         your life, the exact numbers, what would fire, and how many presses
         this fight.
 
-        Ctrl and right-click on it opens its own options - lock it in place,
-        or let clicks pass straight through into the game. Hold Ctrl to make
-        it solid again while click-through is on. Right-clicking the "P"
-        button brings it back if it ever gets away from you.
+        Ctrl and right-click on it opens its own options.
+
+        Position: three saved spots, Left, Middle and Right. They exist
+        because opening your inventory slides your character one way and the
+        character sheet slides him the other, so one remembered spot is in
+        the wrong place two thirds of the time. Pick one, drag the readout
+        where you want it, and it is remembered there. Do that three times,
+        once per layout.
+
+        "Follow the panels" then chooses between them on its own, by where
+        your character actually is. Nothing needs to know about the game's
+        windows; his own floating bar moves when he does.
+
+        Also there: lock it in place, and let clicks pass straight through
+        into the game. Hold Ctrl to make it solid again while click-through
+        is on. Right-clicking the "P" button brings it back if it ever gets
+        away from you.
 
 
         UPDATES

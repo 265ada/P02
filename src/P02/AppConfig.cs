@@ -388,6 +388,33 @@ public sealed class AppConfig
 
     public int FollowOffsetY { get; set; } = int.MinValue;
 
+    /// <summary>
+    /// Three places to put the readout, chosen from its own menu.
+    ///
+    /// The game slides the character sideways when a panel opens - one way for
+    /// the inventory, the other for the character sheet, back again when both
+    /// are shut - so a readout parked beside him is in the wrong place two
+    /// thirds of the time. One remembered position cannot serve three layouts.
+    ///
+    /// They live in the settings file, which updates never touch.
+    /// </summary>
+    public int[] SlotX { get; set; } = [-1, -1, -1];
+
+    public int[] SlotY { get; set; } = [-1, -1, -1];
+
+    /// <summary>Which of the three is in use: 0 left, 1 middle, 2 right.</summary>
+    public int Slot { get; set; } = 1;
+
+    /// <summary>
+    /// Choose between the three by where the character actually is.
+    ///
+    /// Opening the inventory slides him one way and the character sheet the
+    /// other, and his own floating bar moves with him - so the bar already
+    /// says which layout is up, without knowing anything about the game's
+    /// panels. Left third, middle, right third.
+    /// </summary>
+    public bool SlotAuto { get; set; } = true;
+
     /// <summary>Pinned in place, so a stray drag cannot move the readout.</summary>
     public bool OverlayLocked { get; set; }
 

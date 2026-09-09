@@ -911,6 +911,20 @@ public sealed class MainForm : Form
                 // Remember where it was dropped, so it comes back there rather
                 // than only being saved when the app closes.
                 _overlay.ResetAsked += ResetOverlay;
+                _overlay.SlotChosen += which =>
+                {
+                    _cfg.Slot = Math.Clamp(which, 0, 2);
+                    _cfg.SlotAuto = false;
+                    Save();
+                    ApplyOverlayOptions();
+                    PlaceOverlay();
+                };
+                _overlay.SlotAutoChanged += on =>
+                {
+                    _cfg.SlotAuto = on;
+                    Save();
+                    ApplyOverlayOptions();
+                };
                 _overlay.OptionsChanged += (locked, through) =>
                 {
                     _cfg.OverlayLocked = locked;
@@ -930,6 +944,14 @@ public sealed class MainForm : Form
                     {
                         _cfg.FollowOffsetX = _overlay.Location.X - at.X;
                         _cfg.FollowOffsetY = _overlay.Location.Y - at.Y;
+                    }
+                    else
+                    {
+                        // A drag is how a position is set, so it lands in
+                        // whichever of the three is currently chosen.
+                        int slot = Math.Clamp(_cfg.Slot, 0, 2);
+                        _cfg.SlotX[slot] = _overlay.Location.X;
+                        _cfg.SlotY[slot] = _overlay.Location.Y;
                     }
 
                     _cfg.Save();
@@ -995,6 +1017,17 @@ public sealed class MainForm : Form
             return;
         }
 
+        if (!forceDefault && !_cfg.OverlaySnap && !_cfg.OverlayFollowBar)
+        {
+            int slot = Math.Clamp(_cfg.Slot, 0, 2);
+            if (_cfg.SlotX.Length == 3 && _cfg.SlotY.Length == 3
+                && _cfg.SlotX[slot] >= 0 && _cfg.SlotY[slot] >= 0)
+            {
+                var at = new Point(_cfg.SlotX[slot], _cfg.SlotY[slot]);
+                if (OnAScreen(at)) { _overlay.Location = at; return; }
+            }
+        }
+
         if (!forceDefault && _cfg.OverlaySnap && _cfg.Life.TextRegion.IsValid)
         {
             var box = _cfg.Life.TextRegion.ToRect();
@@ -1042,6 +1075,46 @@ public sealed class MainForm : Form
     /// click-through at all - so both were switched off again the moment
     /// anything toggled the readout.
     /// </summary>
+    /// <summary>Whether a remembered spot is still on a screen that exists.</summary>
+    private bool OnAScreen(Point at)
+    {
+        if (_overlay is not { IsDisposed: false }) return false;
+        var box = new Rectangle(at, _overlay.Size);
+
+        return Screen.AllScreens.Any(sc =>
+        {
+            var shown = Rectangle.Intersect(sc.WorkingArea, box);
+            return shown.Width >= box.Width / 2 && shown.Height >= box.Height / 2;
+        });
+    }
+
+    /// <summary>
+    /// Picks one of the three by where the character is standing.
+    ///
+    /// His own floating bar moves when a panel slides him sideways, so it
+    /// already says which layout is up without this needing to know anything
+    /// about the game's windows. Left third, middle, right third.
+    /// </summary>
+    private void FollowPanels()
+    {
+        if (!_cfg.SlotAuto || _cfg.OverlaySnap || _cfg.OverlayFollowBar) return;
+
+        var bar = _engine.CharacterBar;
+        if (bar.Width <= 0) return;
+        if (Native.FindWindowRect(_cfg.WindowMatch) is not { } game || game.Width < 200) return;
+
+        int centre = bar.X + bar.Width / 2 - game.X;
+        int third = game.Width / 3;
+        int wanted = centre < third ? 0 : centre < third * 2 ? 1 : 2;
+
+        if (wanted == _cfg.Slot) return;
+
+        _cfg.Slot = wanted;
+        if (_overlay is { IsDisposed: false }) _overlay.Slot = wanted;
+        Save();
+        PlaceOverlay();
+    }
+
     private void ApplyOverlayOptions()
     {
         if (_overlay is not { IsDisposed: false }) return;
@@ -1050,6 +1123,8 @@ public sealed class MainForm : Form
         // asking for it.
         _overlay.Locked = _cfg.OverlaySnap || _cfg.OverlayLocked;
         _overlay.ClickThrough = _cfg.OverlayClickThrough;
+        _overlay.Slot = Math.Clamp(_cfg.Slot, 0, 2);
+        _overlay.SlotAuto = _cfg.SlotAuto;
     }
 
     private void ResetOverlay()
@@ -1103,6 +1178,7 @@ public sealed class MainForm : Form
                         _overlay.Show(life, mana, _cfg.Life.Threshold, _cfg.Mana.Threshold);
                         _overlay.SetFightCount(_engine.FiresThisFight, _engine.InCombat);
                         if (_cfg.OverlaySnap || _cfg.OverlayFollowBar) PlaceOverlay();
+                        else FollowPanels();
                     }
                 }
 

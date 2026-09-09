@@ -52,6 +52,24 @@ public sealed class OverlayForm : Form
     /// <summary>Raised when the menu asks for the default position back.</summary>
     public event Action? ResetAsked;
 
+    /// <summary>Raised when one of the three saved places is chosen.</summary>
+    public event Action<int>? SlotChosen;
+
+    /// <summary>Raised when following the panels is switched on or off.</summary>
+    public event Action<bool>? SlotAutoChanged;
+
+    /// <summary>Whether the position is chosen by where the character is.</summary>
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(
+        System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool SlotAuto { get; set; }
+
+    /// <summary>Which of the three is in use, for the tick in the menu.</summary>
+    [System.ComponentModel.Browsable(false)]
+    [System.ComponentModel.DesignerSerializationVisibility(
+        System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public int Slot { get; set; }
+
     /// <summary>
     /// Set while the readout is anchored to something in the game, so a drag
     /// cannot quietly fight the thing that keeps putting it back.
@@ -225,6 +243,8 @@ public sealed class OverlayForm : Form
     private ContextMenuStrip? _menu;
     private ToolStripMenuItem? _lockItem;
     private ToolStripMenuItem? _throughItem;
+    private ToolStripMenuItem[]? _slotItems;
+    private ToolStripMenuItem? _autoItem;
 
     /// <summary>
     /// The options menu, built once and kept.
@@ -265,7 +285,43 @@ public sealed class OverlayForm : Form
             var reset = new ToolStripMenuItem("Move back to the corner");
             reset.Click += (_, _) => ResetAsked?.Invoke();
 
+            // Three places, because the game slides the character sideways
+            // when a panel opens and one remembered spot cannot serve three
+            // layouts. Choosing one moves there; dragging saves where you put
+            // it, into whichever is chosen.
+            _slotItems =
+            [
+                new ToolStripMenuItem("Left"),
+                new ToolStripMenuItem("Middle"),
+                new ToolStripMenuItem("Right"),
+            ];
+
+            for (int i = 0; i < _slotItems.Length; i++)
+            {
+                int which = i;
+                _slotItems[i].ToolTipText =
+                    "Go to this position. Drag the readout afterwards and it is "
+                    + "remembered here.";
+                _slotItems[i].Click += (_, _) => SlotChosen?.Invoke(which);
+            }
+
+            _autoItem = new ToolStripMenuItem("Follow the panels")
+            {
+                CheckOnClick = true,
+                ToolTipText = "Opening your inventory slides the character one way and "
+                              + "the character sheet the other. This picks Left, Middle "
+                              + "or Right to match, from where he actually is.",
+            };
+            _autoItem.Click += (_, _) => SlotAutoChanged?.Invoke(_autoItem.Checked);
+
+            var places = new ToolStripMenuItem("Position");
+            places.DropDownItems.Add(_autoItem);
+            places.DropDownItems.Add(new ToolStripSeparator());
+            places.DropDownItems.AddRange(_slotItems);
+
             _menu = new ContextMenuStrip { ShowImageMargin = false };
+            _menu.Items.Add(places);
+            _menu.Items.Add(new ToolStripSeparator());
             _menu.Items.Add(_lockItem);
             _menu.Items.Add(_throughItem);
             _menu.Items.Add(new ToolStripSeparator());
@@ -274,6 +330,8 @@ public sealed class OverlayForm : Form
 
         _lockItem!.Checked = Locked;
         _throughItem!.Checked = ClickThrough;
+        for (int i = 0; i < _slotItems!.Length; i++) _slotItems[i].Checked = i == Slot;
+        _autoItem!.Checked = SlotAuto;
         _menu.Show(this, at);
     }
 
