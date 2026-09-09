@@ -126,10 +126,10 @@ public sealed class GlobePanel : Card
             + Environment.NewLine
             + "any dragging. Use this only when that cannot find one.");
 
-        var emptyBtn = new Button { Text = "Tune colours", Bounds = new Rectangle(206, y, 86, 26) };
-        emptyBtn.Click += (_, _) => CalibrateEmpty();
+        var emptyBtn = new Button { Text = "Teach it", Bounds = new Rectangle(206, y, 86, 26) };
+        emptyBtn.Click += (_, _) => TeachGlobe();
         Controls.Add(emptyBtn);
-        Tips.On(emptyBtn, Tips.TuneColours);
+        Tips.On(emptyBtn, Tips.TeachIt);
 
         _tuned.SetBounds(14, y + 5, 188, 18);
         _tuned.ForeColor = SystemColors.GrayText;
@@ -1000,6 +1000,104 @@ public sealed class GlobePanel : Card
     /// with anything measured during play. A globe part way down has both
     /// colours in it at once, lit identically.
     /// </summary>
+    /// <summary>
+    /// Learns the globe from two pictures of it: full, and empty.
+    ///
+    /// Colour tuning asked which colours are liquid, and on many globes there
+    /// is no answer - drained and full are the same hue at overlapping
+    /// brightness, and pressing it again cannot change that. This asks a
+    /// question that always has one: does this row look more like it did when
+    /// the globe was full, or when it was empty? Rows differ from each other
+    /// even where the picture as a whole does not, because the frame, the
+    /// shading and the gargoyle sit in fixed places.
+    /// </summary>
+    private void TeachGlobe()
+    {
+        if (!_cfg.Region.IsValid)
+        {
+            MessageBox.Show(this, "Set the globe's box first, with Auto-find or Set.",
+                            "Teach it", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        int[]? full = Snapshot($"Fill your {Text.ToLowerInvariant()} globe right up, then "
+                               + "press OK without alt-tabbing back.");
+        if (full is null) return;
+
+        int[]? empty = Snapshot($"Now get the {Text.ToLowerInvariant()} globe as low as you "
+                                + "can - dead is ideal and is the easiest to be sure of - "
+                                + "then press OK.");
+        if (empty is null) return;
+
+        if (full.Length != empty.Length)
+        {
+            MessageBox.Show(this, "The box changed size between the two pictures. Try again.",
+                            "Teach it", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        int useful = 0;
+        for (int i = 0; i < full.Length; i++)
+            if (Apart(full[i], empty[i]) >= 24) useful++;
+
+        if (useful < full.Length / 6)
+        {
+            MessageBox.Show(this,
+                "Those two pictures are nearly identical, so there is nothing to learn "
+                + "from them." + Environment.NewLine + Environment.NewLine
+                + "Usually that means the globe was not actually full for the first one, or "
+                + "not actually low for the second. If it happens again with a genuinely "
+                + "full and a genuinely empty globe, this globe cannot be read by looking "
+                + "at it - use the numbers, which have none of these problems.",
+                "Teach it", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        _cfg.FullLook = full;
+        _cfg.EmptyLook = empty;
+        _onChange();
+
+        _tuned.Text = $"taught: {useful} of {full.Length} rows tell full from empty";
+        MessageBox.Show(this,
+            $"Learned. {useful} of {full.Length} rows can tell a full globe from an empty "
+            + "one, which is what it now measures against - no colours to guess at."
+            + Environment.NewLine + Environment.NewLine
+            + "Press Check to watch it follow the globe down.",
+            "Teach it", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private int[]? Snapshot(string ask)
+    {
+        if (MessageBox.Show(this, ask + Environment.NewLine + Environment.NewLine
+                            + "This window hides for a moment while it looks.",
+                            "Teach it", MessageBoxButtons.OKCancel,
+                            MessageBoxIcon.Information) != DialogResult.OK)
+            return null;
+
+        var owner = FindForm();
+        owner?.Hide();
+        Thread.Sleep(400);
+
+        using var cap = new ScreenCapture();
+        bool got = cap.Grab(_cfg.Region.ToRect());
+        int[]? look = got ? OrbDetector.Look(cap.Buffer, cap.Width, cap.Height) : null;
+        owner?.Show();
+
+        if (look is null)
+            MessageBox.Show(this, "Could not photograph the globe.", "Teach it",
+                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+        return look;
+    }
+
+    private static int Apart(int a, int b)
+    {
+        int dr = ((a >> 16) & 255) - ((b >> 16) & 255);
+        int dg = ((a >> 8) & 255) - ((b >> 8) & 255);
+        int db = (a & 255) - (b & 255);
+        return Math.Abs(dr) + Math.Abs(dg) + Math.Abs(db);
+    }
+
     private void CalibrateEmpty()
     {
         if (!_cfg.Region.IsValid || _cfg.FullRow < 0)

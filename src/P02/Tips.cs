@@ -591,4 +591,22 @@ internal static class Tips
         "machine and you would rather have a rough reading than none - and know",
         "that a rough reading is what the misfires were.",
     ];
+
+    public static readonly string[] TeachIt =
+    [
+        "Learns this globe from two pictures of it: full, and empty.",
+        "",
+        "The old colour tuning asked which colours count as liquid, and on many",
+        "globes there is no answer - drained and full are the same hue at",
+        "overlapping brightness, and pressing it again could never change that.",
+        "",
+        "This asks a question that always has one: does this row look more like",
+        "it did when the globe was full, or when it was empty? Rows differ from",
+        "each other even where the picture as a whole does not, because the",
+        "frame, the shading and the gargoyle sit in fixed places.",
+        "",
+        "Dead is the easiest empty to be sure of. It tells you how many rows",
+        "came out useful, and says so plainly if the two pictures were too alike",
+        "to learn anything from.",
+    ];
 }

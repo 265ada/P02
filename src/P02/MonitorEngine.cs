@@ -850,6 +850,26 @@ public sealed class MonitorEngine : IDisposable
                 MaxAdopted?.Invoke(name, expectedMax, max);
             }
 
+            // The numbers are the authority on the maximum, because they are
+            // read from the screen and cannot be pointed at the wrong thing. A
+            // memory maximum that disagrees with a maximum being read right now
+            // is a wrong address, whatever its current value looks like - and
+            // "reading HP 754/1217" beside a game saying 0/1,151 is exactly
+            // that.
+            if (ocrMax > 0 && max > 0 && max != ocrMax)
+            {
+                if (_memConfirmed)
+                {
+                    _memConfirmed = false;
+                    Log.Write($"{name}: memory says the maximum is {max:N0} but the numbers "
+                              + $"say {ocrMax:N0} - wrong address, searching again");
+                    _mem.Rescan();
+                }
+
+                textRaw = $"memory max {max:N0}, numbers say {ocrMax:N0} - ignored";
+                goto pastMemory;
+            }
+
             if (!_memConfirmed && max > 0 && expectedMax > 0 && max == expectedMax)
             {
                 _memConfirmed = true;

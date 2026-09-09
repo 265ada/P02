@@ -87,7 +87,82 @@ internal static class OrbDetector
 
     /// <summary>Fraction still filled, 0-1. Buffer is BGRA, top row first.</summary>
     public static double Fraction(byte[] buf, int w, int h, WatcherConfig c)
-        => FractionFromRow(SurfaceRow(buf, w, h, c), h, c);
+    {
+        // Taught, if it has been taught. Comparing each row against how it
+        // looked full and how it looked empty needs no colour to be nameable,
+        // which is the whole difficulty with the globes that cannot be tuned.
+        if (c.FullLook.Length == h && c.EmptyLook.Length == h)
+            return FractionFromLook(buf, w, h, c);
+
+        return FractionFromRow(SurfaceRow(buf, w, h, c), h, c);
+    }
+
+    /// <summary>
+    /// One packed colour per row: the average across the middle of the globe,
+    /// where the liquid is and the frame is not.
+    /// </summary>
+    public static int[] Look(byte[] buf, int w, int h)
+    {
+        var rows = new int[h];
+        int from = w / 4, to = w - w / 4;
+        if (to <= from) { from = 0; to = w; }
+
+        for (int y = 0; y < h; y++)
+        {
+            long r = 0, g = 0, b = 0;
+            for (int x = from; x < to; x++)
+            {
+                int i = (y * w + x) * 4;
+                b += buf[i];
+                g += buf[i + 1];
+                r += buf[i + 2];
+            }
+
+            int n = to - from;
+            rows[y] = ((int)(r / n) << 16) | ((int)(g / n) << 8) | (int)(b / n);
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// How full the globe is, by asking each row which of its two taught
+    /// selves it resembles.
+    ///
+    /// The surface is where the rows stop looking full and start looking empty.
+    /// Rows that looked identical in both lessons say nothing and are skipped -
+    /// the frame and the gargoyle never change, so they cannot help.
+    /// </summary>
+    private static double FractionFromLook(byte[] buf, int w, int h, WatcherConfig c)
+    {
+        var now = Look(buf, w, h);
+        int full = 0, empty = 0, surface = -1;
+
+        for (int y = 0; y < h; y++)
+        {
+            int dFull = Distance(now[y], c.FullLook[y]);
+            int dEmpty = Distance(now[y], c.EmptyLook[y]);
+            int spread = Distance(c.FullLook[y], c.EmptyLook[y]);
+
+            // A row that looked the same both times cannot tell them apart.
+            if (spread < 24) continue;
+
+            if (dFull < dEmpty) { full++; if (surface < 0) surface = y; }
+            else empty++;
+        }
+
+        if (full + empty < 4) return FractionFromRow(SurfaceRow(buf, w, h, c), h, c);
+
+        return Math.Clamp(full / (double)(full + empty), 0, 1);
+    }
+
+    private static int Distance(int a, int b)
+    {
+        int dr = ((a >> 16) & 255) - ((b >> 16) & 255);
+        int dg = ((a >> 8) & 255) - ((b >> 8) & 255);
+        int db = (a & 255) - (b & 255);
+        return Math.Abs(dr) + Math.Abs(dg) + Math.Abs(db);
+    }
 
     /// <summary>
     /// Turns a surface row into a fraction. Without calibration the box edges

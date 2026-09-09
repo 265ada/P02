@@ -213,6 +213,25 @@ public sealed class WatcherConfig
 
     public int EmptyRow { get; set; } = -1;
 
+    /// <summary>
+    /// What each row of the globe looks like when it is full, and when it is
+    /// empty, as one packed colour per row.
+    ///
+    /// Colour tuning asked a question that has no answer on many setups: which
+    /// colours are liquid? On a globe whose drained half is the same hue as its
+    /// full half, at overlapping brightness, there is no such set and no amount
+    /// of retrying produces one.
+    ///
+    /// This asks a question that always has an answer instead: does this row
+    /// look more like it did when the globe was full, or more like it did when
+    /// it was empty? Rows differ from each other even when the picture as a
+    /// whole does not, because the frame, the shading and the gargoyle are all
+    /// in fixed places.
+    /// </summary>
+    public int[] FullLook { get; set; } = [];
+
+    public int[] EmptyLook { get; set; } = [];
+
     // --- learned from calibration ---------------------------------------
     // A hue test alone cannot separate a full globe from an empty one: the
     // empty part of the life globe is the same red, only darker. These record
