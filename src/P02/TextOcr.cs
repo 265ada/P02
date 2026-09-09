@@ -607,14 +607,18 @@ internal sealed partial class TextOcr : IDisposable
             // sits inside the word's own height - one line down is a different
             // stat, and reading shield as life is the dangerous direction.
             var pair = pairs
-                .Where(o => Math.Abs(o.Where.Y + o.Where.Height / 2 - mid) <= w.Height)
+                .Where(o => Math.Abs(o.Where.Y + o.Where.Height / 2 - mid) <= w.Height / 2
+                            && o.Where.Right > w.Right)
                 .OrderBy(o => Math.Abs(o.Where.Y + o.Where.Height / 2 - mid))
                 .Select(o => (Seen?)o)
                 .FirstOrDefault();
             if (pair is null) continue;
 
             var box = Rectangle.Union(w, pair.Value.Where);
-            box.Inflate(12, 10);
+            // Generous. A box cut close to its own glyphs reads back as the
+            // word and none of the numbers: the engine wants margin around what
+            // it is asked to read, and a HUD line has none of its own.
+            box.Inflate(26, 14);
             box.Intersect(search);
             found[label] = box;
             Log.Write($"found {label} at {box} - word \"{word.Value.Text}\" with "
@@ -731,15 +735,54 @@ internal sealed partial class TextOcr : IDisposable
         if (!cap.Grab(region)) return "";
 
         shot = ToBitmap(cap.Buffer, cap.Width, cap.Height);
-        foreach (int scale in new[] { 3, 2, 4, 5 })
+
+        // Raw first - right often enough, and it costs nothing - then the same
+        // crop thresholded, for digits on ground bright enough to swallow them.
+        // A read that comes back with the word and no numbers is not a success;
+        // the numbers are the point.
+        foreach (int cut in new[] { 0, 170, 200, 140 })
+        {
+            using var prepared = cut == 0 ? null : Threshold(shot, cut);
+            foreach (int scale in new[] { 3, 2, 4 })
+            {
+                using var big = Upscale(prepared ?? shot, scale);
+                string text = Flatten(Recognise(big));
+                if (PairPattern().IsMatch(text)) return text;
+            }
+        }
+
+        // A tight crop is the usual reason for failing. The engine reads a line
+        // far better with space around it than pressed against its edges, and a
+        // HUD line has no margin of its own.
+        using (var roomy = new ScreenCapture())
+        {
+            if (roomy.Grab(Rectangle.Inflate(region, 44, 18)))
+            {
+                using var shot2 = ToBitmap(roomy.Buffer, roomy.Width, roomy.Height);
+                foreach (int cut in new[] { 170, 0, 200 })
+                {
+                    using var prepared = cut == 0 ? null : Threshold(shot2, cut);
+                    using var big = Upscale(prepared ?? shot2, 3);
+                    string text = Flatten(Recognise(big));
+                    if (PairPattern().IsMatch(text)) return text;
+                }
+            }
+        }
+
+        // Nothing carried a pair. Hand back whatever was legible, so the panel
+        // can say what it saw rather than only that it saw nothing.
+        foreach (int scale in new[] { 3, 2 })
         {
             using var big = Upscale(shot, scale);
-            string text = Recognise(big).Replace('\n', ' ')
-                                        .Replace('\r', ' ').Trim();
+            string text = Flatten(Recognise(big));
             if (text.Length > 0) return text;
         }
+
         return "";
     }
+
+    private static string Flatten(string raw) =>
+        raw.Replace((char)10, ' ').Replace((char)13, ' ').Trim();
 
     public void Dispose()
     {

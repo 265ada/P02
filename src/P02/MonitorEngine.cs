@@ -139,6 +139,27 @@ public sealed class MonitorEngine : IDisposable
             if (labels.All(found.ContainsKey)) break;
         }
 
+        // Life, Shield and Ward are one stacked block - same left edge, same
+        // width, evenly spaced - so finding any of them locates the others.
+        // Life is the one that keeps not coming back, and it is the one that
+        // matters, so it is placed from Shield when its own word will not read.
+        //
+        // Across every band rather than inside one: the two lines can easily
+        // fall either side of a band edge, and then neither knows about the
+        // other.
+        if (labels.Contains("Life") && !found.ContainsKey("Life")
+            && found.TryGetValue("Shield", out var shield))
+        {
+            var life = new Rectangle(shield.X, shield.Y - shield.Height,
+                                     shield.Width, shield.Height);
+            if (life.Y >= corner.Top)
+            {
+                found["Life"] = life;
+                Log.Write($"placed Life at {life} - one line above Shield, which was found; "
+                          + "its own word did not come back readable");
+            }
+        }
+
         return found;
     }
 
