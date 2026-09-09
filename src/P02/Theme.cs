@@ -35,11 +35,14 @@ public static class Theme
 
     public static readonly Color Armed = Color.FromArgb(158, 44, 40);
 
-    public static readonly Font Ui = new("Segoe UI", 8.25f);
-    public static readonly Font UiBold = new("Segoe UI", 8.25f, FontStyle.Bold);
-    public static readonly Font Small = new("Segoe UI", 7.5f);
-    public static readonly Font Title = new("Segoe UI Semibold", 9f);
-    public static readonly Font Big = new("Segoe UI Semibold", 10.5f);
+    // Full size on purpose. Scaling the window already brings the type down
+    // with it; shrinking these as well applied the reduction twice and left
+    // labels smaller than the boxes they name.
+    public static readonly Font Ui = new("Segoe UI", 9f);
+    public static readonly Font UiBold = new("Segoe UI", 9f, FontStyle.Bold);
+    public static readonly Font Small = new("Segoe UI", 8.25f);
+    public static readonly Font Title = new("Segoe UI Semibold", 10.5f);
+    public static readonly Font Big = new("Segoe UI Semibold", 12f);
 
     /// <summary>
     /// Draws a checkbox over the top of the system one.

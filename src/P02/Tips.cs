@@ -623,4 +623,15 @@ internal static class Tips
         "It also runs itself at startup, and speaks up only when something is",
         "actually stopping it working.",
     ];
+
+    public static readonly string[] HowTo =
+    [
+        "What to do, in order, in plain words.",
+        "",
+        "The four steps that set it up, what the readings mean, which settings",
+        "are worth touching and which are not, and what to do when something",
+        "looks wrong.",
+        "",
+        "It opens by itself the first time, when nothing has been set up yet.",
+    ];
 }

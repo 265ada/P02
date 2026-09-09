@@ -92,8 +92,7 @@ public sealed class MainForm : Form
             if (follow.Checked) { _cfg.OverlaySnap = false; snap.Checked = false; }
             Save();
             if (_overlay is { IsDisposed: false })
-                _overlay.Locked = _cfg.OverlaySnap || _cfg.OverlayLocked;
-            _overlay.ClickThrough = _cfg.OverlayClickThrough;
+                ApplyOverlayOptions();
             PlaceOverlay();
         };
         Controls.Add(follow);
@@ -108,7 +107,7 @@ public sealed class MainForm : Form
             if (snap.Checked) { _cfg.OverlayFollowBar = false; follow.Checked = false; }
             Save();
             if (_overlay is { IsDisposed: false })
-                _overlay.Locked = _cfg.OverlaySnap;
+                ApplyOverlayOptions();
             PlaceOverlay();
         };
 
@@ -276,6 +275,11 @@ public sealed class MainForm : Form
         Controls.Add(hide);
         Tips.On(hide, Tips.HideCapture);
 
+
+        var howBtn = new Button { Text = "How do I use this?", Bounds = new Rectangle(0, 0, 160, 28) };
+        howBtn.Click += (_, _) => { using var f = new HowToForm(); f.ShowDialog(this); };
+        Controls.Add(howBtn);
+        Tips.On(howBtn, Tips.HowTo);
 
         var checkBtn = new Button { Text = "What is wrong?", Bounds = new Rectangle(0, 0, 150, 28) };
         checkBtn.Click += (_, _) =>
@@ -569,7 +573,7 @@ public sealed class MainForm : Form
         BackColor = Theme.Bg;
         ForeColor = Theme.Text;
         Font = Theme.Ui;
-        Regroup(new Control[] { findAll, checkBtn, updBtn, upd, diagBtn, logBtn },
+        Regroup(new Control[] { findAll, checkBtn, howBtn, updBtn, upd, diagBtn, logBtn },
                 new Control[] { numbersOnly, mem, rescan, pollLbl, _pollHz },
                 new Control[] { winLbl, _window, clearBtn, armKeyLbl, _hotkey,
                                 sendLbl, method, postedNote, testBtn },
@@ -932,7 +936,7 @@ public sealed class MainForm : Form
                 };
             }
 
-            _overlay.Locked = _cfg.OverlaySnap;
+            ApplyOverlayOptions();
             PlaceOverlay();
             _overlay.SetArmed(_engine.Armed);
             _overlay.Show();
@@ -1030,6 +1034,24 @@ public sealed class MainForm : Form
     /// readout ignores the mouse, its menu cannot be opened again. So this
     /// clears it, along with the lock and the position.
     /// </summary>
+    /// <summary>
+    /// Puts the readout's own settings onto it.
+    ///
+    /// Three places did this, each slightly differently, and the one that runs
+    /// every time the readout is shown had lost the lock and never applied
+    /// click-through at all - so both were switched off again the moment
+    /// anything toggled the readout.
+    /// </summary>
+    private void ApplyOverlayOptions()
+    {
+        if (_overlay is not { IsDisposed: false }) return;
+
+        // Anchored to something in the game counts as locked, and so does
+        // asking for it.
+        _overlay.Locked = _cfg.OverlaySnap || _cfg.OverlayLocked;
+        _overlay.ClickThrough = _cfg.OverlayClickThrough;
+    }
+
     private void ResetOverlay()
     {
         _cfg.OverlayClickThrough = false;
@@ -1040,8 +1062,7 @@ public sealed class MainForm : Form
         ToggleOverlay(true);
         if (_overlay is { IsDisposed: false })
         {
-            _overlay.ClickThrough = false;
-            _overlay.Locked = _cfg.OverlaySnap;
+            ApplyOverlayOptions();
         }
 
         PlaceOverlay(forceDefault: true);
@@ -1260,6 +1281,13 @@ public sealed class MainForm : Form
         // Said once, on the way in, and only when something is actually broken.
         // Every session that went wrong went wrong from the first minute, and
         // nobody was told until they asked.
+        if (!_cfg.Life.TextRegion.IsValid && !_cfg.Mana.TextRegion.IsValid
+            && _cfg.Life.KnownMax <= 0)
+        {
+            using var how = new HowToForm();
+            how.ShowDialog(this);
+        }
+
         var wrong = SelfCheck.Run(_cfg, _engine, Version);
         if (wrong.Any(f => f.Stops))
             MessageBox.Show(this, SelfCheck.Describe(wrong), "P02 is not ready",
