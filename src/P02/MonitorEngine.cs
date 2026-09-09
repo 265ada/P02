@@ -694,6 +694,22 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>The floating bar over the character, when anyone is asking.</summary>
     private readonly BarFinder _bar = new();
 
+    /// <summary>
+    /// Looks for the character right now, ignoring the usual rate limit.
+    ///
+    /// For the moment somebody saves a spot: the readout is deliberately
+    /// sitting on the bars by then, so the caller hides it for an instant and
+    /// asks again rather than waiting for a scan that would find nothing.
+    /// </summary>
+    public Rectangle FindCharacterNow()
+    {
+        if (Native.FindWindowRect(_cfg.WindowMatch) is not { } client) return Rectangle.Empty;
+
+        _bar.Ignore = OverlayBounds;
+        _bar.Look(client, everyMs: 0);
+        return CharacterBar;
+    }
+
     /// <summary>Where the character's own life bar is, or empty if it is not up.</summary>
     public Rectangle CharacterBar => _bar.Visible ? _bar.Bar : Rectangle.Empty;
 

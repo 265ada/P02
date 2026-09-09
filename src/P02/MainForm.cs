@@ -1120,7 +1120,24 @@ public sealed class MainForm : Form
     {
         if (_overlay is not { IsDisposed: false }) return;
 
+        // The readout is meant to end up over the bars, so by the time anybody
+        // saves a spot it is very likely covering the thing that identifies it.
+        // Blink it out for a moment and look properly.
         var bar = _engine.CharacterBar;
+        if (bar.Width <= 0)
+        {
+            _engine.OverlayBounds = Rectangle.Empty;
+            _overlay.Hide();
+            Application.DoEvents();
+            Thread.Sleep(140);
+
+            bar = _engine.FindCharacterNow();
+
+            _overlay.Show();
+            _overlay.BringToFront();
+            _engine.OverlayBounds = Rectangle.Inflate(_overlay.Bounds, 8, 8);
+        }
+
         if (bar.Width <= 0)
         {
             // It hunts a few times a second, so it may simply not have looked

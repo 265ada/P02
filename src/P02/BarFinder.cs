@@ -10,11 +10,16 @@ namespace P02;
 /// separate from everything else here: every other reading comes from a box
 /// somebody set once.
 ///
-/// What makes it findable is not the green on its own - a game is full of green
-/// - but the pair. The energy shield bar sits directly on top of the life bar,
-/// the same width, and blue directly above green in a long thin horizontal run
-/// is not something the world happens to contain. A bar with no shield left is
-/// still found by its own dark frame.
+/// It hunts the blue mana bar, not the green life bar, for two reasons.
+///
+/// Totems and minions have life bars and no mana - so hunting green meant
+/// competing with everything on screen that has hit points, and losing to
+/// whichever happened to be nearest the middle. Nothing but the character has
+/// the blue one.
+///
+/// And the readout is meant to sit over the life bar, as part of the game's own
+/// interface. Anchoring to the thing you intend to cover cannot work; the mana
+/// bar sits directly under it and stays visible.
 /// </summary>
 internal sealed class BarFinder : IDisposable
 {
@@ -95,10 +100,6 @@ internal sealed class BarFinder : IDisposable
         byte[] px = _cap.Buffer;
         int w = _cap.Width, h = _cap.Height, stride = w * ScreenCapture.Bpp;
 
-        // Everything on screen with hit points has a green bar. Taking the
-        // first one found meant taking a totem, or a minion, or whatever was
-        // scanned soonest. The character is the one in the middle, so all the
-        // candidates are collected and the most central wins.
         int cx = w / 2, cy = h / 2;
         Rectangle best = Rectangle.Empty;
         long bestCost = long.MaxValue;
@@ -108,8 +109,8 @@ internal sealed class BarFinder : IDisposable
             int run = 0;
             for (int x = 0; x <= w; x++)
             {
-                bool life = x < w && IsLife(At(px, stride, x, y));
-                if (life) { run++; continue; }
+                bool blue = x < w && IsMana(At(px, stride, x, y));
+                if (blue) { run++; continue; }
 
                 if (run >= MinRun
                     && Confirm(px, stride, w, h, x - run, y, run, area, out var hit)
@@ -133,9 +134,8 @@ internal sealed class BarFinder : IDisposable
     }
 
     /// <summary>
-    /// A green run is only the life bar if there is shield blue directly above
-    /// it, or a dark frame around it. Grass, gems and spell effects have
-    /// neither.
+    /// A blue run is the mana bar if it is thin and framed, or has the life bar
+    /// beside it. Water and spell light are neither.
     /// </summary>
     private static bool Confirm(byte[] px, int stride, int w, int h,
                                 int x0, int y, int run, Rectangle area, out Rectangle bar)
@@ -144,26 +144,25 @@ internal sealed class BarFinder : IDisposable
         int mid = x0 + run / 2;
         if (mid < 0 || mid >= w) return false;
 
-        // How deep the green goes. A bar is thin; a bush is not.
+        // How deep the blue goes. A bar is thin; water is not.
         int top = y, bottom = y;
-        while (top > 0 && IsLife(At(px, stride, mid, top - 1))) top--;
-        while (bottom < h - 1 && IsLife(At(px, stride, mid, bottom + 1))) bottom++;
+        while (top > 0 && IsMana(At(px, stride, mid, top - 1))) top--;
+        while (bottom < h - 1 && IsMana(At(px, stride, mid, bottom + 1))) bottom++;
         if (bottom - top + 1 > MaxThick) return false;
 
-        // Above or below. Which side the shield bar sits on is not something
-        // worth being certain about - it differs by build and by how the game
-        // stacks them - and insisting on above meant simply never finding the
-        // bar for anyone whose shield draws under it.
-        bool shield = false;
-        for (int dy = 1; dy <= 9 && !shield; dy++)
+        // The life bar, if it is not covered by the readout deliberately sitting
+        // on it. Its absence is not disqualifying for that reason.
+        bool life = false;
+        for (int dy = 1; dy <= 9 && !life; dy++)
         {
-            if (top - dy >= 0 && IsShield(At(px, stride, mid, top - dy))) shield = true;
-            if (bottom + dy < h && IsShield(At(px, stride, mid, bottom + dy))) shield = true;
+            if (top - dy >= 0 && IsLife(At(px, stride, mid, top - dy))) life = true;
+            if (bottom + dy < h && IsLife(At(px, stride, mid, bottom + dy))) life = true;
         }
 
-        // A dark frame used to be accepted as proof on its own. Every bar in
-        // the game has one, so that proved nothing and let a totem win.
-        if (!shield) return false;
+        bool framed = top - 1 >= 0 && IsDark(At(px, stride, mid, top - 1))
+                      || bottom + 1 < h && IsDark(At(px, stride, mid, bottom + 1));
+
+        if (!life && !framed) return false;
 
         bar = new Rectangle(area.X + x0, area.Y + top, run, bottom - top + 1);
         return true;
@@ -180,8 +179,8 @@ internal sealed class BarFinder : IDisposable
     private static bool IsLife(byte r, byte g, byte b) =>
         g > 90 && g > r + 40 && g > b + 40;
 
-    private static bool IsShield((byte R, byte G, byte B) c) =>
-        c.B > 90 && c.B > c.R + 30 && c.B > c.G + 15;
+    private static bool IsMana((byte R, byte G, byte B) c) =>
+        c.B > 85 && c.B > c.R + 28 && c.B > c.G + 12;
 
     private static bool IsDark((byte R, byte G, byte B) c) =>
         c.R < 70 && c.G < 70 && c.B < 70;
