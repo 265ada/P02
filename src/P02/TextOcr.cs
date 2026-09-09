@@ -127,10 +127,22 @@ internal sealed partial class TextOcr : IDisposable
     }
 
     /// <summary>The maximum currently being read and settled on, or 0.</summary>
+    /// <summary>
+    /// The maximum currently being read and settled on, or 0.
+    ///
+    /// Only while it is still being read. The settled value used to be handed
+    /// out long after the numbers had stopped coming, so a maximum from an
+    /// earlier character or an earlier set of gear was adopted over and over -
+    /// "Maximum changed from 1,138 to 1,190 - updated to match", on a character
+    /// whose life is 1,138, from a reading minutes old.
+    /// </summary>
     public int StableMaxOf(string name)
     {
         lock (_gate)
-            return _slots.TryGetValue(name, out var slot) ? slot.StableMax : 0;
+        {
+            if (!_slots.TryGetValue(name, out var slot) || !slot.HasLast) return 0;
+            return _clock.ElapsedMilliseconds - slot.Last.AtMs < 5000 ? slot.StableMax : 0;
+        }
     }
 
     /// <summary>
@@ -140,7 +152,10 @@ internal sealed partial class TextOcr : IDisposable
     public int SuggestedMax(string name)
     {
         lock (_gate)
-            return _slots.TryGetValue(name, out var slot) ? slot.Suggested : 0;
+        {
+            if (!_slots.TryGetValue(name, out var slot) || !slot.HasLast) return 0;
+            return _clock.ElapsedMilliseconds - slot.Last.AtMs < 5000 ? slot.Suggested : 0;
+        }
     }
 
     /// <summary>
