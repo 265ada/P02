@@ -448,8 +448,20 @@ internal sealed partial class TextOcr : IDisposable
         return int.TryParse(digits[..n], out value);
     }
 
+    /// <summary>
+    /// One recogniser, one caller at a time.
+    ///
+    /// The engine refuses a second call while one is in flight - "Another
+    /// RecognizeAsync operation is already running!" - and every one of those
+    /// is a reading lost. It was rare while each read was a single recognise;
+    /// sweeping several preparations made the background reader and the setup
+    /// search collide constantly, and the numbers went dark again.
+    /// </summary>
+    private static readonly object Recogniser = new();
+
     private string Recognise(Bitmap bmp)
     {
+        lock (Recogniser)
         try
         {
             using var ms = new MemoryStream();
@@ -588,22 +600,25 @@ internal sealed partial class TextOcr : IDisposable
         using var big = Upscale(prepared ?? shot, scale);
 
         OcrResult result;
-        try
+        lock (Recogniser)
         {
-            using var ms = new MemoryStream();
-            big.Save(ms, ImageFormat.Bmp);
-            ms.Position = 0;
-            var decoder = BitmapDecoder.CreateAsync(ms.AsRandomAccessStream())
-                                       .AsTask().GetAwaiter().GetResult();
-            using var soft = decoder.GetSoftwareBitmapAsync(
-                BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied)
-                .AsTask().GetAwaiter().GetResult();
-            result = _engine.RecognizeAsync(soft).AsTask().GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            Log.Write($"find numbers failed: {ex.Message}");
-            return;
+            try
+            {
+                using var ms = new MemoryStream();
+                big.Save(ms, ImageFormat.Bmp);
+                ms.Position = 0;
+                var decoder = BitmapDecoder.CreateAsync(ms.AsRandomAccessStream())
+                                           .AsTask().GetAwaiter().GetResult();
+                using var soft = decoder.GetSoftwareBitmapAsync(
+                    BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied)
+                    .AsTask().GetAwaiter().GetResult();
+                result = _engine.RecognizeAsync(soft).AsTask().GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log.Write($"find numbers failed: {ex.Message}");
+                return;
+            }
         }
 
         foreach (var line in result.Lines)
