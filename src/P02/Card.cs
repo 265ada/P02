@@ -41,22 +41,26 @@ public class Card : Panel
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
         var r = new Rectangle(0, 0, Width - 1, Height - 1);
+
+        // No outline. A surface a shade lighter than the window is separation
+        // enough, and a window full of outlined boxes reads as a form to fill
+        // in rather than something to glance at mid-fight.
         using (var back = new SolidBrush(Theme.Card))
-        using (var path = Rounded(r, 8))
+        using (var path = Rounded(r, 6))
             g.FillPath(back, path);
 
-        using (var pen = new Pen(Theme.Line))
-        using (var path = Rounded(r, 8))
-            g.DrawPath(pen, path);
+        if (Text.Length == 0) return;
 
-        if (Text.Length > 0)
-        {
-            using var stripe = new SolidBrush(_accent);
-            g.FillRectangle(stripe, 12, 12, 3, 15);
+        // The rule under the heading is the accent, and it is the only
+        // structural line on the card: it says where this group begins, which
+        // is information. It runs the width of its own title, not the card, so
+        // it reads as belonging to the words rather than boxing them.
+        using var title = new SolidBrush(Theme.Text);
+        var size = g.MeasureString(Text, Theme.Title);
+        g.DrawString(Text, Theme.Title, title, 14, 9);
 
-            using var title = new SolidBrush(Theme.Text);
-            g.DrawString(Text, Theme.Title, title, 21, 9);
-        }
+        using var rule = new SolidBrush(_accent);
+        g.FillRectangle(rule, 14, 11 + (int)size.Height, Math.Max(28, (int)size.Width - 4), 2);
     }
 
     private static GraphicsPath Rounded(Rectangle r, int radius)

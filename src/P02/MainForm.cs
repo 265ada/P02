@@ -140,6 +140,8 @@ public sealed class MainForm : Form
         int cardH = Math.Max(_life.MinimumHeight, _mana.MinimumHeight);
         _life.Height = cardH;
         _mana.Height = cardH;
+        _life.Accent = Theme.Life;
+        _mana.Accent = Theme.Mana;
         Controls.Add(_life);
         Controls.Add(_mana);
 
@@ -149,19 +151,20 @@ public sealed class MainForm : Form
         // silently and only in the release where the row was added.
         int y = Math.Max(_life.Bottom, _mana.Bottom) + 16;
 
-        _arm.SetBounds(12, y, 200, 54);
-        _arm.Font = new Font("Segoe UI", 12, FontStyle.Bold);
+        _arm.SetBounds(12, y, 208, 60);
+        _arm.Font = new Font("Segoe UI Semibold", 15f);
+        _arm.FlatStyle = FlatStyle.Flat;
         _arm.Click += (_, _) => _engine.Toggle();
         Controls.Add(_arm);
         Tips.On(_arm, "Arms and disarms. Nothing is ever sent while disarmed.",
             "", "It starts disarmed every launch, on purpose.");
 
-        _status.SetBounds(224, y + 6, 460, 22);
-        _status.Font = new Font("Segoe UI", 10);
+        _status.SetBounds(234, y + 8, 460, 24);
+        _status.Font = new Font("Segoe UI Semibold", 11f);
         Controls.Add(_status);
         Tips.On(_status, Tips.Status);
 
-        _focus.SetBounds(224, y + 30, 460, 20);
+        _focus.SetBounds(234, y + 34, 640, 20);
         _focus.ForeColor = SystemColors.GrayText;
         Controls.Add(_focus);
         Tips.On(_focus, Tips.Focus);
@@ -560,8 +563,9 @@ public sealed class MainForm : Form
         Theme.Apply(this);
 
         // After the general styling, or it would paint over them.
-        Theme.Primary(findAll, Color.FromArgb(222, 170, 52));
-        Theme.Primary(updBtn, Color.FromArgb(76, 175, 96));
+        Theme.Primary(findAll, Theme.Accent);
+        Theme.Primary(updBtn, Theme.Good);
+        RefreshArmUi();
 
         _life.Accent = Theme.Bad;
         _mana.Accent = Theme.Accent;
@@ -1007,16 +1011,23 @@ public sealed class MainForm : Form
         _life.ClearStatus();
         _mana.ClearStatus();
         if (_overlay is { IsDisposed: false }) _overlay.SetArmed(on);
-        _arm.Text = on ? "ARMED  –  click to stop" : "DISARMED  –  click to arm";
-        _arm.BackColor = on ? Color.FromArgb(200, 60, 60) : SystemColors.Control;
-        _arm.ForeColor = on ? Color.White : SystemColors.ControlText;
+        // The one bold thing in the window, and the only one that shouts. Armed
+        // is filled and unmistakable from the corner of an eye; disarmed is an
+        // outline, quiet but not hidden. Everything else stays out of its way.
+        _arm.Text = on ? "Armed" : "Disarmed";
+        _arm.BackColor = on ? Theme.Armed : Theme.Card;
+        _arm.ForeColor = on ? Color.FromArgb(255, 238, 230) : Theme.Dim;
+        _arm.FlatAppearance.BorderSize = on ? 0 : 2;
+        _arm.FlatAppearance.BorderColor = Theme.Line;
+        _arm.FlatAppearance.MouseOverBackColor =
+            on ? ControlPaint.Light(Theme.Armed, 0.15f) : Theme.Raised;
 
         var watching = new List<string>();
         if (_cfg.Life.Enabled) watching.Add($"Life <{_cfg.Life.Threshold:P0} → {_cfg.Life.Key.ToUpperInvariant()}");
         if (_cfg.Mana.Enabled) watching.Add($"Mana <{_cfg.Mana.Threshold:P0} → {_cfg.Mana.Key.ToUpperInvariant()}");
         _status.Text = watching.Count == 0
-            ? "No globe is switched on."
-            : string.Join("     ", watching);
+            ? "Nothing is being watched."
+            : string.Join("      ", watching);
 
         _tray.Text = on ? "P02 – armed" : "P02 – disarmed";
     }

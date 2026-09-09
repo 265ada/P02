@@ -3,24 +3,37 @@ namespace P02;
 /// <summary>
 /// One palette and one set of fonts, applied over the whole window.
 ///
-/// Everything here is coordinate-laid-out already, so this deliberately styles
-/// existing controls rather than rebuilding them: colours, fonts and flat
-/// borders, walked over the control tree. Restyling is then a change in one
-/// place instead of two hundred.
+/// The colours are the game's, not a dashboard's. This sits beside Path of
+/// Exile 2 for hours at a time, and the previous palette - blue-grey surfaces,
+/// a cornflower accent, a thin grey border round everything - was the generic
+/// dark panel that every tool ships with. It belonged to no subject at all.
+///
+/// So: warm charcoal rather than blue, because the game is firelight on stone.
+/// Blood red for life and deep blue for mana, taken from the globes themselves,
+/// so the panel for a pool is the colour of that pool without needing a label.
+/// Amber for anything you are meant to press. Borders mostly gone, because
+/// surfaces separated by tone need no line drawn round them, and a window full
+/// of boxes reads as a form to fill in rather than a thing to glance at.
 /// </summary>
 public static class Theme
 {
-    public static readonly Color Bg = Color.FromArgb(24, 25, 28);
-    public static readonly Color Card = Color.FromArgb(33, 35, 39);
-    public static readonly Color Field = Color.FromArgb(43, 46, 51);
-    public static readonly Color Line = Color.FromArgb(58, 62, 69);
-    public static readonly Color Text = Color.FromArgb(232, 234, 237);
-    public static readonly Color Dim = Color.FromArgb(150, 156, 165);
-    public static readonly Color Accent = Color.FromArgb(88, 156, 246);
-    public static readonly Color Good = Color.FromArgb(96, 200, 120);
-    public static readonly Color Warn = Color.FromArgb(240, 180, 70);
-    public static readonly Color Bad = Color.FromArgb(238, 96, 90);
-    public static readonly Color Armed = Color.FromArgb(206, 66, 66);
+    public static readonly Color Bg = Color.FromArgb(22, 20, 18);
+    public static readonly Color Card = Color.FromArgb(32, 29, 26);
+    public static readonly Color Raised = Color.FromArgb(42, 38, 34);
+    public static readonly Color Field = Color.FromArgb(26, 24, 21);
+    public static readonly Color Line = Color.FromArgb(58, 52, 45);
+    public static readonly Color Text = Color.FromArgb(237, 230, 219);
+    public static readonly Color Dim = Color.FromArgb(150, 140, 128);
+    public static readonly Color Accent = Color.FromArgb(214, 158, 62);
+    public static readonly Color Good = Color.FromArgb(122, 176, 96);
+    public static readonly Color Warn = Color.FromArgb(224, 158, 58);
+    public static readonly Color Bad = Color.FromArgb(198, 74, 62);
+
+    /// <summary>The globes' own colours, so a panel is the colour of its pool.</summary>
+    public static readonly Color Life = Color.FromArgb(168, 46, 44);
+    public static readonly Color Mana = Color.FromArgb(52, 96, 168);
+
+    public static readonly Color Armed = Color.FromArgb(158, 44, 40);
 
     public static readonly Font Ui = new("Segoe UI", 9f);
     public static readonly Font UiBold = new("Segoe UI", 9f, FontStyle.Bold);
@@ -89,9 +102,9 @@ public static class Theme
                 case Button b:
                     b.FlatStyle = FlatStyle.Flat;
                     b.FlatAppearance.BorderColor = Line;
-                    b.FlatAppearance.MouseOverBackColor = Field;
+                    b.FlatAppearance.MouseOverBackColor = Raised;
                     b.FlatAppearance.MouseDownBackColor = Line;
-                    b.BackColor = Card;
+                    b.BackColor = Raised;
                     b.ForeColor = Text;
                     b.Font = Ui;
                     b.Cursor = Cursors.Hand;
