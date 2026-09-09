@@ -237,9 +237,16 @@ public sealed class MonitorEngine : IDisposable
             if (!_ocr.VerifyRegion(cfg.TextRegion.ToRect(), label,
                                    out int cur, out int max, out string raw))
             {
-                cfg.TextRegion = new Box();
-                report.Add($"{label}: could not read it back"
-                           + (raw.Length > 0 ? $" (saw \"{raw}\")" : "") + " - not used");
+                // The box is kept. The search had already read the whole line
+                // out of that exact rectangle - "Shield 3,208/3,342" - and this
+                // second, weaker read is only being asked to agree. Throwing
+                // the box away because a re-read came back short is the same
+                // mistake as letting the globe pixels veto the numbers: a worse
+                // check discarding a better result, and it left Life and Shield
+                // with no box at all after both had just been found.
+                report.Add($"{label}: box set, but reading it back gave"
+                           + (raw.Length > 0 ? $" only \"{raw}\"" : " nothing")
+                           + " - it will be re-read as you play");
                 continue;
             }
 

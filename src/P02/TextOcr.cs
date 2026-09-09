@@ -553,7 +553,11 @@ internal sealed partial class TextOcr : IDisposable
 
                 // Back to screen coordinates, with a little room around it so
                 // the glyphs are not clipped on the next read.
-                const int pad = 6;
+                // Generous, because the box is read back at other
+                // magnifications where the glyphs land differently, and a tight
+                // crop is what made a re-read come back with the word and none
+                // of the numbers.
+                const int pad = 12;
                 found[label] = new Rectangle(
                     search.X + (int)(l / scale) - pad,
                     search.Y + (int)(t / scale) - pad,
