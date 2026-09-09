@@ -634,7 +634,10 @@ public sealed class MonitorEngine : IDisposable
                 // not need doing several times a second - every five is plenty
                 // and costs nothing. Until it is locked, they are what is
                 // keeping you alive, so they are read hard.
-                _ocr.SetInterval(_lifeMemConfirmed ? 5000 : nearTrouble ? 60 : 160);
+                // Not so rare that it goes stale as a fallback: if memory ever
+                // loses its address, these are what is left, and a reading two
+                // seconds old is one that has to be waited for.
+                _ocr.SetInterval(_lifeMemConfirmed ? 1500 : nearTrouble ? 60 : 160);
 
                 bool fighting = t0 - lastDropMs < _cfg.CombatGraceMs;
                 if (fighting != InCombat)
@@ -1052,7 +1055,15 @@ public sealed class MonitorEngine : IDisposable
         // more than a moment means an inventory, the passive tree, a vendor or
         // the atlas is up - and those cover the globe, so the pixel fallback
         // would be reading the panel and firing at it.
-        bool textLost = textConfigured && textAge > c.RequireTextMs && textLostOverride;
+        // "The numbers are not on screen" is a reason to hold fire only when the
+        // numbers are what it is reading. With memory locked on, they are a
+        // cross-check running every second or two - so their being stale, or
+        // hidden behind a menu, says nothing about whether the pool is being
+        // read. Holding fire for it meant refusing to act while memory sat
+        // there reporting your life correctly, which is the worst failure this
+        // can have.
+        bool textLost = textConfigured && textAge > c.RequireTextMs && textLostOverride
+                        && !st.MemConfirmed;
 
         // Anything above the floor is a real reading, and the moment it happens
         // is what separates "nearly dead" from "cannot see it".
