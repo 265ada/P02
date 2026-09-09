@@ -5,3 +5,8 @@ publish/
 artifacts/
 tests/DetectorTests/bin/
 tests/DetectorTests/obj/
+
+# Agent tooling, installed per-machine and not part of this project
+.agents/
+.claude/skills/
+skills-lock.json
