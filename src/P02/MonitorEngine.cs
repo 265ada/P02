@@ -516,6 +516,7 @@ public sealed class MonitorEngine : IDisposable
         // session.
         public int MemGeneration = -1;
         public bool MemConfirmed;
+        public bool GlobeCovering;
         public long MemDisagreeSinceMs;
         public int LastMemCur = -1;
         public long MemSameSinceMs;
@@ -813,11 +814,21 @@ public sealed class MonitorEngine : IDisposable
 
             frac = OrbDetector.Fraction(st.Cap.Buffer, st.Cap.Width, st.Cap.Height, c);
         }
+
         else if (!c.UseText && !_cfg.UseMemory)
         {
             return new GlobeReading(name, 0, false,
                 _cfg.NumbersOnly ? "numbers not set up" : "no region");
         }
+
+        // Kept aside, because it is about to be overwritten by a better source
+        // and it is still worth having. The globe cannot tell life from energy
+        // shield and reads a poisoned globe as empty, so it is a poor judge of
+        // how much life there is - but it is a perfectly good judge of which of
+        // two exact sources has gone mad, and that is the job it is given
+        // below. Nothing here lets it decide a reading on its own.
+        double globeFrac = frac;
+        bool globeUsable = haveGlobe;
 
         // The numbers beside the globe are exact. When there is a recent
         // reading, it decides; the pixels stay as the fallback for the gaps
@@ -1134,9 +1145,52 @@ public sealed class MonitorEngine : IDisposable
                     // Whichever is right, the lower reading is the safe one to
                     // act on. Firing early costs a charge; firing late costs
                     // the character.
-                    frac = Math.Min(memFrac, ocrFrac);
+                    // Ask the globe which of them has gone mad.
+                    //
+                    // Taking the lower reading was right when memory was the
+                    // liar - it froze at 100% while the numbers watched life
+                    // fall to 41%, and two seconds of that is a death. But it
+                    // is catastrophic when the numbers are the liar, and the
+                    // log shows exactly that: OCR read "6" out of 1,496, memory
+                    // correctly said 1,496, and the lower-reading rule spent
+                    // twenty-two flask charges on a character at full life.
+                    //
+                    // Neither source can be believed over the other on
+                    // principle, so a third one settles it. The globe is a poor
+                    // judge of an exact number and an excellent judge of
+                    // whether a pool is nearly empty, which is the only
+                    // question being asked here.
+                    double pick;
+                    string why;
+                    if (globeUsable)
+                    {
+                        bool memClose = Math.Abs(globeFrac - memFrac)
+                                        <= Math.Abs(globeFrac - ocrFrac);
+                        pick = memClose ? memFrac : ocrFrac;
+                        why = $"the globe reads {globeFrac:P0}, closer to "
+                              + (memClose ? "memory" : "the numbers");
+                    }
+                    else if (_mem.Structured)
+                    {
+                        // No globe to ask, and memory is not a guess any more -
+                        // it is a component whose vitals point back at it and
+                        // whose maxima match. The numbers are the source that
+                        // misreads a digit, so they no longer get to overrule it
+                        // unaided.
+                        pick = memFrac;
+                        why = "no globe to settle it, and memory has your character";
+                    }
+                    else
+                    {
+                        // Nothing better than caution: firing early costs a
+                        // charge, firing late costs the character.
+                        pick = Math.Min(memFrac, ocrFrac);
+                        why = "nothing to settle it - taking the lower";
+                    }
+
+                    frac = pick;
                     textRaw = $"memory {memFrac:P0} vs numbers {ocrFrac:P0} - "
-                              + $"acting on {frac:P0}";
+                              + $"{why}, acting on {frac:P0}";
                     fromText = true;
                     textLostOverride = false;
                     haveOcr = false;
@@ -1202,8 +1256,46 @@ public sealed class MonitorEngine : IDisposable
         // read. Holding fire for it meant refusing to act while memory sat
         // there reporting your life correctly, which is the worst failure this
         // can have.
-        bool textLost = textConfigured && textAge > c.RequireTextMs && textLostOverride
-                        && !st.MemConfirmed;
+        bool exactGone = textConfigured && textAge > c.RequireTextMs && textLostOverride
+                         && !st.MemConfirmed;
+
+        // Rather than going blind, hand over to the globe.
+        //
+        // Holding fire here is the failure that kills people. Both exact
+        // sources being unavailable at once is not rare - a menu covers the
+        // numbers, a zone change costs the memory lock - and the answer used to
+        // be to stop acting entirely and say so in a status bar nobody is
+        // reading mid-fight.
+        //
+        // The globe is a worse source and it is still a source. It cannot tell
+        // life from energy shield and it reads a loading screen as an empty
+        // globe, so it only covers when it is reading something credible right
+        // now: a globe that has read nothing for longer than the blind grace is
+        // one that cannot be seen, and that stays a hold. A globe that was
+        // reading a moment ago and is draining is a character in trouble.
+        bool globeCovers = exactGone && globeUsable
+                           && !Unreadable(globeFrac, now, st.LastGoodMs, c);
+
+        if (globeCovers)
+        {
+            frac = globeFrac;
+            fromText = false;
+            textRaw = $"globe {globeFrac:P0} - neither memory nor the numbers are "
+                      + "available";
+            if (!st.GlobeCovering)
+            {
+                st.GlobeCovering = true;
+                Log.Write($"{name}: nothing exact to read - the globe is covering at "
+                          + $"{globeFrac:P0}");
+            }
+        }
+        else if (st.GlobeCovering)
+        {
+            st.GlobeCovering = false;
+            Log.Write($"{name}: exact reading is back");
+        }
+
+        bool textLost = exactGone && !globeCovers;
 
         // Anything above the floor is a real reading, and the moment it happens
         // is what separates "nearly dead" from "cannot see it".
