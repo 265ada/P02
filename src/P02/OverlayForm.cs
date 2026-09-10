@@ -254,6 +254,7 @@ public sealed class OverlayForm : Form
 
     private ContextMenuStrip? _menu;
     private ToolStripMenuItem? _manaItem;
+    private nint _beforeMenu;
 
     /// <summary>Raised when the mana row is turned on or off from the menu.</summary>
     public event Action<bool>? ManaShownChanged;
@@ -305,13 +306,7 @@ public sealed class OverlayForm : Form
                               + "builds never touch a mana flask, and a row that never "
                               + "changes is a row in the way.",
             };
-            _manaItem.Click += (_, _) =>
-            {
-                ShowMana = _manaItem.Checked;
-                FitHeight();
-                Render();
-                ManaShownChanged?.Invoke(ShowMana);
-            };
+            _manaItem.Click += (_, _) => SetManaShown(_manaItem.Checked);
 
             var remember = new ToolStripMenuItem("Remember this spot")
             {
@@ -360,6 +355,17 @@ public sealed class OverlayForm : Form
             places.DropDownItems.AddRange(_slotItems);
 
             _menu = new ContextMenuStrip { ShowImageMargin = false };
+            // Whatever had the foreground before the menu opened gets it back.
+            // Forcing the menu forward is what makes it usable at all from a
+            // window that never activates, and leaving the game unfocused
+            // afterwards would quietly stop anything firing - "only fire while
+            // the game is focused" is doing its job and would look like a bug.
+            _menu.Closed += (_, _) =>
+            {
+                if (_beforeMenu != 0) Native.ForceForeground(_beforeMenu);
+                _beforeMenu = 0;
+            };
+
             _menu.Items.Add(remember);
             _menu.Items.Add(new ToolStripSeparator());
             _menu.Items.Add(places);
@@ -377,7 +383,16 @@ public sealed class OverlayForm : Form
         for (int i = 0; i < _slotItems!.Length; i++) _slotItems[i].Checked = i == Slot;
         _autoItem!.Checked = SlotAuto;
         _manaItem!.Checked = ShowMana;
+        _beforeMenu = Native.GetForegroundWindow();
         _menu.Show(this, at);
+
+        // The readout is a WS_EX_NOACTIVATE window, which is right for a thing
+        // that sits over a game and must never steal its focus - and it leaves
+        // a menu opened from it in an odd half-state. It draws, it highlights,
+        // and a click on an item can be swallowed on the way to the handler.
+        // Handing the menu the foreground for as long as it is open costs
+        // nothing, because the menu closes the moment you choose something.
+        Native.ForceForeground(_menu.Handle);
     }
 
     /// <summary>
@@ -418,13 +433,48 @@ public sealed class OverlayForm : Form
     /// </summary>
     private static readonly Color ManaBlue = Color.FromArgb(86, 142, 226);
 
+    /// <summary>
+    /// Turns the mana row on or off, from wherever the request came.
+    ///
+    /// Written down rather than left in the menu handler because the menu is
+    /// the part that was suspect: it opens from a window that never activates,
+    /// and a click on an item there can go missing. Anything that goes wrong
+    /// now says so in the log instead of simply not happening.
+    /// </summary>
+    private void SetManaShown(bool show)
+    {
+        Log.Write($"overlay: mana row turned {(show ? "on" : "off")}");
+        ShowMana = show;
+        FitHeight();
+        Render();
+        ManaShownChanged?.Invoke(show);
+    }
+
     /// <summary>Whether the mana row is wanted at all.</summary>
     [System.ComponentModel.DesignerSerializationVisibility(
         System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public bool ShowMana { get; set; } = true;
 
     /// <summary>A globe that is not watched has nothing to say, so it takes no room.</summary>
-    private bool ManaShown => ShowMana && !(_mana.Note == "off" && !_mana.Ok);
+    /// <summary>Whether mana is being watched at all, which the row follows.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(
+        System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool ManaWatched { get; set; } = true;
+
+    /// <summary>
+    /// A row nobody asked for takes no space.
+    ///
+    /// It used to decide this by whether mana had anything to say - a reading
+    /// noted "off" meant nothing was watching it. That stopped being true the
+    /// moment memory started working: memory reads life, mana and shield
+    /// together whether or not you watch them, so mana always has a live
+    /// reading now and the row never went away. Somebody with "Watch my mana"
+    /// unchecked was still looking at a mana bar.
+    ///
+    /// Whether it is watched is the actual question, so that is what is asked.
+    /// </summary>
+    private bool ManaShown => ShowMana && ManaWatched
+                              && !(_mana.Note == "off" && !_mana.Ok);
 
     private void FitHeight()
     {

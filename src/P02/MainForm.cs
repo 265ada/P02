@@ -1324,6 +1324,7 @@ public sealed class MainForm : Form
 
                     if (_overlay.Visible)
                     {
+                        _overlay.ManaWatched = _cfg.Mana.Enabled;
                         _overlay.SetKeys(_cfg.Life.Enabled ? _cfg.Life.Key.ToUpperInvariant() : "",
                                          _cfg.Mana.Enabled ? _cfg.Mana.Key.ToUpperInvariant() : "");
                         _overlay.Show(life, mana, _cfg.Life.Threshold, _cfg.Mana.Threshold);
