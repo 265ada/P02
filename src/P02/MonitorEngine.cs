@@ -519,6 +519,10 @@ public sealed class MonitorEngine : IDisposable
         public long MemDisagreeSinceMs;
         public int LastMemCur = -1;
         public long MemSameSinceMs;
+
+        /// <summary>Whether this address has ever been seen to change.</summary>
+        public bool MemMoved;
+        public int MemFirstCur = -1;
     }
 
     private void Loop(CancellationToken ct)
@@ -733,7 +737,9 @@ public sealed class MonitorEngine : IDisposable
     private long _started;
 
     /// <summary>Whether memory has an address it is willing to read from.</summary>
-    public bool MemoryLocked => _lifeMemConfirmed;
+    public bool MemoryLocked => _lifeMemConfirmed && _lifeMemMoved;
+
+    private bool _lifeMemMoved;
 
     /// <summary>Whether this pool's numbers have produced a reading recently.</summary>
     public bool NumbersReading(string name) =>
@@ -879,7 +885,7 @@ public sealed class MonitorEngine : IDisposable
             if (cur == st.LastMemCur)
             {
                 if (st.MemSameSinceMs == 0) st.MemSameSinceMs = now;
-                else if (now - st.MemSameSinceMs > 8000 && haveOcr
+                else if (now - st.MemSameSinceMs > 4000 && haveOcr
                          && Math.Abs(ocrFrac - memFrac) > 0.05)
                 {
                     st.MemSameSinceMs = 0;
@@ -919,6 +925,29 @@ public sealed class MonitorEngine : IDisposable
                 st.MemGeneration = _mem.Generation;
                 st.MemConfirmed = false;
                 st.MemDisagreeSinceMs = 0;
+                st.MemMoved = false;
+                if (name == "Life") _lifeMemMoved = false;
+                st.MemFirstCur = -1;
+                st.LastMemCur = -1;
+                st.MemSameSinceMs = 0;
+            }
+
+            // A pool that never moves is not a pool.
+            //
+            // The search matches a candidate against life as it is at that
+            // instant, and at full health every stray copy of the maximum
+            // matches. Those copies are then perfect - they agree with the
+            // maximum, they agree with the numbers, and they never change
+            // again. Watching for the value to move at least once is the only
+            // check that tells a real pool from a coincidence, because it is
+            // the only thing a coincidence cannot do.
+            if (st.MemFirstCur < 0) st.MemFirstCur = cur;
+            else if (!st.MemMoved && cur != st.MemFirstCur)
+            {
+                st.MemMoved = true;
+                if (name == "Life") _lifeMemMoved = true;
+                Log.Write($"{name}: memory moved ({st.MemFirstCur:N0} -> {cur:N0}) - "
+                          + "this address follows the game");
             }
 
             // Agreeing with the configured maximum is not enough on its own:
@@ -1064,8 +1093,11 @@ public sealed class MonitorEngine : IDisposable
                 st.MemDisagreeSinceMs = 0;
             }
 
+            // Never used to decide anything until it has been seen to move.
+            // Until then the numbers stay in charge, which is slower but is
+            // reading something that certainly exists.
             bool trusted = max > 0 && (expectedMax == 0 || max == expectedMax)
-                           && matchesOcr && st.MemConfirmed;
+                           && matchesOcr && st.MemConfirmed && st.MemMoved;
 
 
             if (trusted)

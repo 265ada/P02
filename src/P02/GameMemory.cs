@@ -401,9 +401,20 @@ internal sealed class GameMemory : IDisposable
             foreach (int curOff in CurrentOffsets)
             {
                 if (!ReadInt(a + curOff, out int curHp)) continue;
-                if (curHp < 0 || curHp > wantHp * 3) continue;
                 if (!ReadInt(a + _manaDelta + curOff, out int curMp)) continue;
-                if (curMp < 0 || curMp > wantMp * 3) continue;
+
+                // Both pools have to make sense, not just the one being matched.
+                // Accepting a candidate on life alone let it lock onto numbers
+                // that merely equalled life at that instant - and the log shows
+                // exactly what that produced: "life 792/2078, mana 1600/738",
+                // a mana current larger than its own maximum, and "life 738",
+                // which is the mana maximum wearing life's hat. A coincidence
+                // does not move afterwards, which is why the readout sat still.
+                //
+                // Overhealing is real, so a pool may exceed its maximum - but by
+                // a third, not by double.
+                if (curHp < 0 || curHp > wantHp * 4 / 3) continue;
+                if (wantMp > 0 && (curMp < 0 || curMp > wantMp * 4 / 3)) continue;
 
                 double score;
                 if (hintCurHp > 0)
@@ -415,7 +426,13 @@ internal sealed class GameMemory : IDisposable
                         ? Math.Abs(curMp - hintCurMp) / (double)wantMp
                         : 0;
                     if (offHp > 0.05 || offMp > 0.05) continue;
+
+                    // Prefer the candidate whose mana is furthest from being a
+                    // second copy of its own maximum. A structure where both
+                    // pools sit exactly at full is indistinguishable from two
+                    // stray copies of the maxima; one that is part-full is not.
                     score = offHp + offMp;
+                    if (wantMp > 0 && curMp == wantMp) score += 0.02;
                 }
                 else
                 {
