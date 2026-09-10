@@ -207,6 +207,31 @@ public sealed class MonitorEngine : IDisposable
         bool anythingToDo = _cfg.Life.UseText || _cfg.Mana.UseText;
         if (!anythingToDo) return;
 
+        // Reading something is not the same as reading it correctly.
+        //
+        // The repair below only ever ran when nothing at all came back, which
+        // left the worse fault untouched: a box that reads perfectly most of
+        // the time and comes back as "1,49 6/1149 6s" the rest of it. That
+        // looks like a working setup by every measure here, and it is the one
+        // that emptied a flask belt at full life.
+        //
+        // A box that garbles a quarter of what it sees is a box in the wrong
+        // place or too tight around the digits, and it is repaired on the same
+        // footing as one that reads nothing.
+        foreach (string pool in new[] { "Life", "Mana" })
+        {
+            _ocr.GarbleRate(pool, out int garbled, out int attempts);
+            if (attempts < 12 || garbled * 4 < attempts) continue;
+
+            if (now - _refoundAtMs < 60000) return;
+            _refoundAtMs = now;
+            _ocr.ForgetGarble(pool);
+            Log.Write($"{pool}: {garbled} of the last {attempts} reads came back garbled "
+                      + "- finding the numbers again");
+            RefindNow();
+            return;
+        }
+
         bool reading = (_ocr.TryGet("Life", out var l) && _ocr.NowMs - l.AtMs < 5000)
                        || (_ocr.TryGet("Mana", out var m) && _ocr.NowMs - m.AtMs < 5000);
         if (reading) { _textOkAtMs = now; return; }
@@ -218,18 +243,27 @@ public sealed class MonitorEngine : IDisposable
         _refoundAtMs = now;
         _textOkAtMs = now;
 
-        // On its own thread. This searches whole corners of the screen at
-        // several magnifications and takes seconds, and it was running inside
-        // the poll loop - so every reading, memory included, stopped dead for
-        // as long as it took. On a machine where the numbers need finding
-        // often, that is the life value updating once every second or three.
+        Log.Write("numbers: nothing read for 20 seconds - looking for the lines again");
+        RefindNow();
+    }
+
+    /// <summary>
+    /// Finds the number lines again, off the poll thread.
+    ///
+    /// This searches whole corners of the screen at several magnifications and
+    /// takes seconds, and it was once running inside the poll loop - so every
+    /// reading, memory included, stopped dead for as long as it took. On a
+    /// machine where the numbers need finding often, that is the life value
+    /// updating once every second or three.
+    /// </summary>
+    private void RefindNow()
+    {
         if (Interlocked.Exchange(ref _refinding, 1) == 1) return;
 
         Task.Run(() =>
         {
             try
             {
-                Log.Write("numbers: nothing read for 20 seconds - looking for the lines again");
                 string what = FindAllNumbers();
                 Log.Write($"numbers: {what.Replace(Environment.NewLine, " / ")}");
             }
@@ -242,6 +276,45 @@ public sealed class MonitorEngine : IDisposable
                 Volatile.Write(ref _refinding, 0);
             }
         });
+    }
+
+    /// <summary>
+    /// Picks the crop that reads reliably, not merely the one that reads.
+    ///
+    /// Tried as found first, then with a little more room each time. Whichever
+    /// gets the most clean reads out of five wins, and anything that manages
+    /// all five is taken immediately.
+    /// </summary>
+    private Rectangle Settle(Rectangle box, string label)
+    {
+        Rectangle best = box;
+        int bestScore = -1;
+
+        foreach (int pad in new[] { 0, 4, 9, 15 })
+        {
+            var tryBox = Rectangle.Inflate(box, pad, pad / 2);
+            if (tryBox.Width <= 0 || tryBox.Height <= 0) continue;
+
+            int clean = 0;
+            for (int i = 0; i < 5; i++)
+                if (_ocr.VerifyRegion(tryBox, label, out _, out _, out _)) clean++;
+
+            if (clean > bestScore)
+            {
+                bestScore = clean;
+                best = tryBox;
+            }
+
+            if (clean == 5) break;
+        }
+
+        if (bestScore < 5)
+            Log.Write($"setup: {label}'s numbers read cleanly {bestScore} times out of 5 "
+                      + $"at {best} - the best of the crops tried");
+        else if (best != box)
+            Log.Write($"setup: {label}'s box widened to {best} - it read every time there");
+
+        return best;
     }
 
     private void AdoptChangedMax(string name, WatcherConfig c)
@@ -346,6 +419,20 @@ public sealed class MonitorEngine : IDisposable
                  { ("Life", _cfg.Life), ("Mana", _cfg.Mana), ("Shield", _cfg.Shield) })
         {
             if (!done.Contains(label)) continue;
+
+            // A box that reads once is not a box that reads.
+            //
+            // This is what was behind the flask belt being emptied at full
+            // life: a crop a few pixels too tight round the digits, which reads
+            // "1,496/1,496" perfectly most of the time and "1,49 6/1149 6s" the
+            // rest of it. One successful read was enough to accept it, and the
+            // failures then arrived mid-fight, steadily, looking exactly like a
+            // character at six life.
+            //
+            // So it is asked several times, and given room if it stumbles. A
+            // slightly larger box costs nothing - the line is found by its own
+            // words and numbers, not by the edges of the rectangle.
+            cfg.TextRegion = Box.From(Settle(cfg.TextRegion.ToRect(), label));
 
             if (!_ocr.VerifyRegion(cfg.TextRegion.ToRect(), label,
                                    out int cur, out int max, out string raw))
@@ -772,6 +859,13 @@ public sealed class MonitorEngine : IDisposable
     private long _started;
 
     /// <summary>Whether memory has an address it is willing to read from.</summary>
+    /// <summary>How often a pool's numbers come back unreadable.</summary>
+    public void GarbleRate(string name, out int garbled, out int attempts)
+        => _ocr.GarbleRate(name, out garbled, out attempts);
+
+    /// <summary>Several components match and it is waiting for one to move.</summary>
+    public bool MemoryPending => _mem.Pending;
+
     public bool MemoryLocked => _lifeMemConfirmed && (_lifeMemMoved || _mem.Structured);
 
     private bool _lifeMemMoved;

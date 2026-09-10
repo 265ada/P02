@@ -53,6 +53,15 @@ internal sealed partial class TextOcr : IDisposable
 
         /// <summary>Reads in a row that produced no pair.</summary>
         public int Fails;
+
+        /// <summary>
+        /// Reads that came back with text in them and still yielded nothing
+        /// usable. A crop a few pixels too tight does this: mostly fine, and
+        /// garbled often enough to matter. Counted so it can be repaired
+        /// rather than merely survived.
+        /// </summary>
+        public int Attempts;
+        public int Garbled;
     }
 
     private readonly Dictionary<string, Slot> _slots = new();
@@ -115,6 +124,31 @@ internal sealed partial class TextOcr : IDisposable
     }
 
     /// <summary>Most recent believable reading, if there is one.</summary>
+    /// <summary>
+    /// How often this pool's numbers come back unreadable, and how many times
+    /// it has been asked. Below a handful of attempts the answer means nothing,
+    /// which is why both are reported rather than a bare rate.
+    /// </summary>
+    public void GarbleRate(string name, out int garbled, out int attempts)
+    {
+        garbled = attempts = 0;
+        lock (_gate)
+        {
+            if (!_slots.TryGetValue(name, out var slot)) return;
+            garbled = slot.Garbled;
+            attempts = slot.Attempts;
+        }
+    }
+
+    /// <summary>Forgets what a box read before it was moved or resized.</summary>
+    public void ForgetGarble(string name)
+    {
+        lock (_gate)
+        {
+            if (_slots.TryGetValue(name, out var slot)) { slot.Garbled = 0; slot.Attempts = 0; }
+        }
+    }
+
     public bool TryGet(string name, out Reading reading)
     {
         lock (_gate)
@@ -250,8 +284,17 @@ internal sealed partial class TextOcr : IDisposable
         int expected;
         lock (_gate) { label = slot.Label; expected = slot.ExpectedMax; }
 
+        lock (_gate)
+        {
+            slot.Attempts++;
+            // Kept short so a box repaired ten minutes ago is not still being
+            // judged on how it read before.
+            if (slot.Attempts > 60) { slot.Attempts /= 2; slot.Garbled /= 2; }
+        }
+
         if (!TryParse(text, out int cur, out int max, label, expected))
         {
+            lock (_gate) slot.Garbled++;
             // Silence here is correct - a refused reading is better than the
             // wrong line - but it should be explicable.
             if (label.Length > 0

@@ -45,6 +45,13 @@ internal static class SelfCheck
             return found;
         }
 
+        // Said plainly, because it looks like a failure and is not one.
+        if (cfg.UseMemory && engine.MemoryPending)
+            Say(2, "Several things in the game hold your exact life, mana and shield, so "
+                 + "it cannot yet tell which one is your character.",
+                "It is watching them and will take the one that moves. Anything at all "
+                + "happening to you settles it; nothing needs pressing.");
+
         if (!engine.TextAvailable)
             Say(0, "Windows cannot read text on this machine, so the numbers are out.",
                 "Turn on \"Read game memory\", which does not need it. "
@@ -86,6 +93,24 @@ internal static class SelfCheck
                           + "death screen, so this clears itself the moment you are in "
                           + "the game. If it persists while you can see your life "
                           + "number, press \"Set it up for me\" to re-find it.");
+
+            // The fault that had to be found by reading a log by hand.
+            //
+            // Nothing here could see it: the box was set, readings were coming
+            // back, the maximum was right, and every check said the setup was
+            // healthy - while a quarter of what it read was "1,49 6/1149 6s"
+            // and a character at full life was being reported at six.
+            if (numbers)
+            {
+                engine.GarbleRate(name, out int garbled, out int attempts);
+                if (attempts >= 12 && garbled * 4 >= attempts)
+                    Say(garbled * 2 >= attempts ? 0 : 1,
+                        $"{name}'s numbers come back unreadable {garbled} times in "
+                        + $"{attempts} - the box is probably a little tight around the "
+                        + "digits.",
+                        "It is already re-finding them on its own. If it keeps happening, "
+                        + "press \"Set it up for me\" while the numbers are on screen.");
+            }
 
             if (w.Key.Trim().Length == 0)
                 Say(0, $"{name} has no key set, so it has nothing to press.",

@@ -100,6 +100,9 @@ internal sealed class GameMemory : IDisposable
     private List<(long owner, int health, int mana, int shield)> _pending = [];
     private int[] _pendingFirst = [];
 
+    /// <summary>Waiting for one of several equal matches to give itself away.</summary>
+    public bool Pending => _pending.Count > 1;
+
     private bool _structured;
 
     // Where each vital sits inside the Life component, taken from the game
