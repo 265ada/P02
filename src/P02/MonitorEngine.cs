@@ -574,8 +574,34 @@ public sealed class MonitorEngine : IDisposable
                         MaxAdopted?.Invoke("Shield", 0, es.MaxEs);
                     }
 
+                    // Keep the stored maxima honest while memory is speaking.
+                    //
+                    // A saved maximum mana of 597 - true when it was saved,
+                    // wrong after a gear change - is what stopped the search
+                    // finding anything at all for days: it was hunting a number
+                    // the game no longer held. Nothing tells you a saved number
+                    // has gone stale, so the fix is to stop letting it.
+                    if (_mem.Structured && _mem.TryGet(out var live))
+                    {
+                        if (live.MaxMp > 0 && _cfg.Mana.KnownMax != live.MaxMp)
+                        {
+                            Log.Write($"Mana: maximum {live.MaxMp:N0} refreshed from memory "
+                                      + $"(was {_cfg.Mana.KnownMax:N0})");
+                            _cfg.Mana.KnownMax = live.MaxMp;
+                        }
+                        if (live.MaxEs > 0 && _cfg.Shield.KnownMax != live.MaxEs)
+                            _cfg.Shield.KnownMax = live.MaxEs;
+                        if (live.MaxHp > 0 && _cfg.Life.KnownMax != live.MaxHp)
+                        {
+                            Log.Write($"Life: maximum {live.MaxHp:N0} refreshed from memory "
+                                      + $"(was {_cfg.Life.KnownMax:N0})");
+                            _cfg.Life.KnownMax = live.MaxHp;
+                        }
+                    }
+
                     _mem.HintMaxHp = ExpectedMax("Life", _cfg.Life, 0);
                     _mem.HintMaxMp = ExpectedMax("Mana", _cfg.Mana, 0);
+                    _mem.HintMaxEs = _cfg.Shield.KnownMax;
 
                     // The currents as well, when the numbers can be read. The
                     // maxima locate the structure; only the current tells the

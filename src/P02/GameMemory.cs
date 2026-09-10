@@ -136,6 +136,16 @@ internal sealed class GameMemory : IDisposable
     public volatile int HintMaxMp;
 
     /// <summary>
+    /// Your maximum energy shield, when it is known.
+    ///
+    /// It earns its place by being the number least likely to be stale at the
+    /// same moment as the others - which is the whole job here, since the
+    /// search needs your component to agree about more than one thing before
+    /// it will believe it is yours.
+    /// </summary>
+    public volatile int HintMaxEs;
+
+    /// <summary>
     /// The current values from the screen, when they are readable.
     ///
     /// Without these the search had nothing to test a candidate current
@@ -397,115 +407,248 @@ internal sealed class GameMemory : IDisposable
             return 0;
         }
 
-        var lifeAt = new List<long>();
-        var manaAt = new List<long>();
-        var pairAt = new List<long>();
+        // Every place holding your maximum life or mana, indexed by the
+        // component that claims to own it.
+        //
+        // What was here before required your maximum mana to sit exactly one
+        // vital's width from your maximum life - 0x58 bytes, the distance
+        // between the two on one machine on one patch. That distance is
+        // precisely the thing this was supposed to stop depending on, and when
+        // it no longer held the search found twenty-five thousand candidates
+        // and zero pairs, every time, forever.
+        //
+        // Nothing is assumed about the distance now. A vital names its owner,
+        // so each candidate is asked who owns it; a health vital and a mana
+        // vital that name the SAME owner are the two halves of one character,
+        // whatever the gap between them turns out to be. The owner pointer sits
+        // inside the buffer already read, so asking costs nothing.
+        var hpBy = new Dictionary<long, long>();
+        var mpBy = new Dictionary<long, long>();
+        int hpSeen = 0, mpSeen = 0;
         var buf = new byte[32 * 1024 * 1024];
+
+        // How far back the owner pointer sits from the maximum we matched.
+        int ownerBack = VitalTotal - VitalOwner;
 
         foreach (var (start, size) in Regions())
         {
             if (_stop.IsCancellationRequested) return 0;
-            for (long off = 0; off < size; off += buf.Length - 8)
+            for (long off = 0; off < size; off += buf.Length - 0x40)
             {
                 int chunk = (int)Math.Min(buf.Length, size - off);
                 if (chunk < 8) break;
                 if (!ReadProcessMemory(_handle, (nint)(start + off), buf, chunk, out var got))
                     continue;
 
-                int usable = (int)got - 4;
-                int pairStride = ManaInLife - HealthInLife;
-
-                for (int i = 0; i + 4 <= usable; i += 4)
+                // Chunks overlap by more than a vital, so a candidate skipped
+                // here for want of the bytes behind it was already covered with
+                // room to spare by the chunk before.
+                for (int i = ownerBack; i + 4 <= (int)got; i += 4)
                 {
                     int v = BitConverter.ToInt32(buf, i);
+                    if (v != wantHp && v != wantMp) continue;
 
-                    // The structural candidates, found inside the buffer we
-                    // already have. Your maximum life with your maximum mana
-                    // exactly one vital away is the whole signature, and
-                    // checking it here costs nothing - where checking twenty
-                    // thousand loose candidates afterwards costs two system
-                    // calls each, which is why the search was slow enough to
-                    // give up and fall back to guessing.
-                    if (v == wantHp)
-                    {
-                        lifeAt.Add(start + off + i);
+                    long owner = BitConverter.ToInt64(buf, i - ownerBack);
+                    if (owner <= 0x10000 || owner > 0x7FFFFFFFFFFF) continue;
 
-                        if (i + pairStride + 4 <= (int)got
-                            && BitConverter.ToInt32(buf, i + pairStride) == wantMp)
-                            pairAt.Add(start + off + i);
-                    }
-                    else if (v == wantMp)
-                    {
-                        manaAt.Add(start + off + i);
-                    }
+                    long total = start + off + i;
+                    long inside = total - VitalTotal - owner;
+                    if (inside <= 0 || inside > 0x2000) continue;
+
+                    if (v == wantHp) { hpSeen++; hpBy.TryAdd(owner, total); }
+                    else { mpSeen++; mpBy.TryAdd(owner, total); }
                 }
             }
         }
 
-        Log.Write($"memory: {lifeAt.Count} places hold {wantHp}, {manaAt.Count} hold {wantMp}");
+        Log.Write($"memory: {hpSeen} vitals hold {wantHp}, {mpSeen} hold {wantMp}");
 
-        // The structure first, before any guessing at distances.
+        // Which of those owners is a Life component.
         //
-        // Each place holding your maximum life might be the Total field of a
-        // health vital. If it is, the Life component that owns it sits a known
-        // distance below, that component's mana vital holds your maximum mana,
-        // and the vital points back at the component. Three fixed relationships
-        // and a self-reference - a coincidence can satisfy one of those, not
-        // all of them.
-        int ownedHealth = 0, ownedMana = 0, manaMatched = 0;
+        // Requiring your maximum mana to be found as well was still a
+        // dependency on a number that goes stale - your gear changes it, and
+        // the log shows exactly what that costs: eighty-five plausible life
+        // vitals, one mana vital, nothing in common, no lock, forever.
+        //
+        // A Life component does not need to be told. It owns SEVERAL vitals -
+        // life, mana, energy shield - and every one of them points back at it.
+        // A stray copy of a number sits in a structure that owns one thing, or
+        // none. So the test is the shape of the component itself, and it holds
+        // whatever your maxima happen to be today.
+        long bestOwner = 0;
+        var finalists = new List<(long owner, int health, int mana, int shield)>();
+        int bestHealth = 0, bestMana = 0, bestShield = 0, bestVitals = 0;
+        var window = new byte[0x800];
 
-        Log.Write($"memory: {pairAt.Count} of them have your maximum mana one vital away");
-
-        foreach (long total in pairAt)
+        foreach (var (owner, hpTotal) in hpBy)
         {
             if (_stop.IsCancellationRequested) return 0;
 
-            // Both vitals name their owner, and it has to be the same one.
-            // That pointer is also what says where they sit inside it, so the
-            // offsets come from the game rather than from a constant that a
-            // patch can move.
-            long healthVital = total - VitalTotal;
-            long manaVital = total + (ManaInLife - HealthInLife) - VitalTotal;
+            int healthOff = (int)(hpTotal - VitalTotal - owner);
+            if (healthOff + VitalCurrent + 4 > window.Length) continue;
 
-            if (!ReadPtr(healthVital + VitalOwner, out long owner)) continue;
-            if (owner <= 0) continue;
-            ownedHealth++;
+            // One read of the whole component, then everything is local.
+            if (!ReadProcessMemory(_handle, (nint)owner, window, window.Length, out var got)
+                || (int)got < window.Length)
+                continue;
 
-            if (!ReadPtr(manaVital + VitalOwner, out long manaOwner)) continue;
-            if (manaOwner != owner) continue;
-            ownedMana++;
+            var owned = new List<int>();
+            for (int at = 0; at + VitalCurrent + 4 <= window.Length; at += 4)
+            {
+                if (BitConverter.ToInt64(window, at + VitalOwner) != owner) continue;
+                int total = BitConverter.ToInt32(window, at + VitalTotal);
+                int cur = BitConverter.ToInt32(window, at + VitalCurrent);
+                if (total <= 0 || total > 1_000_000) continue;
+                if (cur < 0 || cur > total + total / 3) continue;
+                owned.Add(at);
+            }
 
-            int healthOff = (int)(healthVital - owner);
-            int manaOff = (int)(manaVital - owner);
-            if (healthOff <= 0 || healthOff > 0x2000 || manaOff <= healthOff) continue;
+            // Life, mana and energy shield. Fewer than three vitals pointing
+            // home is not a character sheet, it is a coincidence with company.
+            if (owned.Count < 3) continue;
+            int idx = owned.IndexOf(healthOff);
+            if (idx < 0 || idx + 2 >= owned.Count) continue;
 
-            if (!ReadVital(owner + manaOff, out int curMp, out int maxMp)) continue;
-            if (maxMp != wantMp) continue;
-            manaMatched++;
+            // They sit in order - life, then mana, then shield - so the two
+            // that follow the one holding your life are the other two pools.
+            int manaOff = owned[idx + 1];
+            int shieldOff = owned[idx + 2];
 
-            if (!ReadVital(owner + healthOff, out int curHp, out int maxHp)) continue;
-            if (maxHp != wantHp) continue;
+            int manaTotal = BitConverter.ToInt32(window, manaOff + VitalTotal);
+            int shieldTotal = BitConverter.ToInt32(window, shieldOff + VitalTotal);
+            int hpCur = BitConverter.ToInt32(window, healthOff + VitalCurrent);
+            int manaCur = BitConverter.ToInt32(window, manaOff + VitalCurrent);
+            int shieldCur = BitConverter.ToInt32(window, shieldOff + VitalCurrent);
 
-            _healthOff = healthOff;
-            _manaOff = manaOff;
-            _shieldOff = manaOff + (ShieldInLife - ManaInLife);
-            _structured = true;
-            _manaDelta = manaOff - healthOff;
-            _curOffset = VitalCurrent - VitalTotal;
+            // Three pools reading exactly the same thing is not a character.
+            //
+            // One of these did lock, and the reading it gave was "life
+            // 651/1496, mana 651/1496, shield 651/1496" - the same two numbers
+            // three times, at a suspiciously even spacing. Your life, mana and
+            // shield are independent; a run of identical copies is a template
+            // or an array, and it will never move when you take damage.
+            int hpTotal32 = BitConverter.ToInt32(window, healthOff + VitalTotal);
+            if (manaTotal == hpTotal32 && shieldTotal == hpTotal32
+                && manaCur == hpCur && shieldCur == hpCur)
+                continue;
 
-            Log.Write($"memory: found the Life component at {owner:X} - both vitals point "
-                      + $"back to it. life {curHp}/{maxHp}, mana {curMp}/{maxMp}, "
-                      + $"health at +{healthOff:X}, mana at +{manaOff:X}");
-            return owner;
+            // Which one is YOU.
+            //
+            // Shape alone was never going to answer this, and the log shows why
+            // in the plainest possible way: it locked onto "life 651/1496, mana
+            // 1080/1232, shield 651/748" - a perfectly real, perfectly valid
+            // Life component. It just belonged to something else. Every monster
+            // in the zone has one, and one of them happens to share your
+            // maximum life.
+            //
+            // So the component has to agree with things only your character
+            // agrees with, and with more than one of them - any single number
+            // has a twin somewhere in a zone full of creatures. Nothing here is
+            // required, because any one of them can be stale or unreadable;
+            // what is required is that the winner agrees about something and
+            // that nothing else agrees about as much.
+            // Not all agreements are worth the same. A saved maximum is only
+            // as good as the last time it was saved; a value read off the
+            // screen a moment ago cannot be stale at all. Counting them equally
+            // produced a straight tie between the component that matched a
+            // year-old mana number and the one that was actually the player -
+            // and a tie means no lock, which is the same as being broken.
+            int agree = 0;
+            if (HintCurHp > 0 && Math.Abs(hpCur - HintCurHp) <= HintMaxHp / 20) agree += 5;
+            if (HintCurMp > 0 && manaTotal > 0
+                && Math.Abs(manaCur - HintCurMp) <= manaTotal / 20) agree += 4;
+            if (HintMaxEs > 0 && shieldTotal == HintMaxEs) agree += 3;
+            if (HintMaxMp > 0 && manaTotal == HintMaxMp) agree += 2;
+
+            if (agree == 0) continue;
+
+            Log.Write($"memory: candidate {owner:X} scores {agree} - {owned.Count} vitals, "
+                      + $"life {hpCur}/{hpTotal32}, mana {manaCur}/{manaTotal}, "
+                      + $"shield {shieldCur}/{shieldTotal}, at +{healthOff:X}");
+
+            if (agree > bestVitals)
+            {
+                bestVitals = agree;
+                finalists.Clear();
+            }
+            if (agree == bestVitals) finalists.Add((owner, healthOff, manaOff, shieldOff));
         }
 
-        Log.Write($"memory: structure check - {ownedHealth} with a health vital pointing "
-                  + $"home, {ownedMana} with mana too, {manaMatched} whose mana total was "
-                  + $"{wantMp}");
+        // When several agree equally well, watch which one is alive.
+        //
+        // This is not hypothetical. The game holds two components with your
+        // exact maxima and an identical layout - one is you, the other reads
+        // "life 1263/1496" and has read that ever since, a copy that nothing
+        // writes to any more. Every number about them agrees; the only thing
+        // that separates them is that yours changes.
+        //
+        // So they get watched. The one that moves is the one you are playing,
+        // and if none of them moves, nothing is picked - a frozen readout is
+        // the single worst thing this can do, and it is exactly what taking
+        // either of these on a coin-flip produces.
+        if (finalists.Count > 1)
+        {
+            Log.Write($"memory: {finalists.Count} components match equally - watching to "
+                      + "see which one is alive");
 
-        Log.Write($"memory: structure check - {ownedHealth} with a health vital pointing "
-                  + $"home, {ownedMana} with mana too, {manaMatched} whose mana total was "
-                  + $"{wantMp}");
+            var first = new int[finalists.Count];
+            for (int k = 0; k < finalists.Count; k++)
+                ReadVital(finalists[k].owner + finalists[k].health, out first[k], out _);
+
+            var moved = new List<int>();
+            for (int pass = 0; pass < 24 && moved.Count != 1; pass++)
+            {
+                if (_stop.IsCancellationRequested) return 0;
+                Thread.Sleep(100);
+                moved.Clear();
+                for (int k = 0; k < finalists.Count; k++)
+                {
+                    if (!ReadVital(finalists[k].owner + finalists[k].health,
+                                   out int now, out _)) continue;
+                    if (now != first[k]) moved.Add(k);
+                }
+            }
+
+            if (moved.Count != 1)
+            {
+                Log.Write($"memory: {moved.Count} of them changed while watching - not "
+                          + "guessing between components that all sit still. Take a hit "
+                          + "or use a flask and this settles itself.");
+                Status = "more than one thing in the game matches your numbers - take any "
+                         + "damage and this sorts itself out";
+                _structured = false;
+                return 0;
+            }
+
+            finalists = [finalists[moved[0]]];
+        }
+
+        if (finalists.Count == 1)
+        {
+            (bestOwner, bestHealth, bestMana, bestShield) = finalists[0];
+        }
+
+        if (bestOwner != 0)
+        {
+            _healthOff = bestHealth;
+            _manaOff = bestMana;
+            _shieldOff = bestShield;
+            _structured = true;
+            _manaDelta = bestMana - bestHealth;
+            _curOffset = VitalCurrent - VitalTotal;
+
+            ReadVital(bestOwner + bestHealth, out int curHp, out int maxHp);
+            ReadVital(bestOwner + bestMana, out int curMp, out int maxMp);
+            ReadVital(bestOwner + bestShield, out int curEs, out int maxEs);
+            Log.Write($"memory: found the Life component at {bestOwner:X} - its vitals point "
+                      + $"back to it. life {curHp}/{maxHp}, mana {curMp}/{maxMp}, "
+                      + $"shield {curEs}/{maxEs}, at +{bestHealth:X} +{bestMana:X} "
+                      + $"+{bestShield:X}");
+            return bestOwner;
+        }
+
+        Log.Write($"memory: {hpBy.Count} owners hold {HintMaxHp} in a vital, none of them "
+                  + "is a character with three pools that agrees with your other numbers");
 
         // No guessing when the structure does not match.
         //
@@ -515,166 +658,13 @@ internal sealed class GameMemory : IDisposable
         // is not a character, and there are thousands of them. Saying "still
         // looking" is worth far more than an answer that might be a
         // coincidence, since the numbers on screen carry you meanwhile.
-        Status = "the game's layout does not match what this knows - the numbers on "
-                 + "screen are being used instead";
+        Status = hpBy.Count == 0
+            ? $"no vital holds {HintMaxHp} - is that your maximum life? Press Find "
+              + "numbers with your life full"
+            : "the game's layout does not match what this knows - the numbers on "
+              + "screen are being used instead";
         _structured = false;
         return 0;
-        if (lifeAt.Count == 0 || manaAt.Count == 0)
-        {
-            Status = $"no {wantHp} and {wantMp} found together - are those your maxima?";
-            return 0;
-        }
-
-        manaAt.Sort();
-        var manaArr = manaAt.ToArray();
-
-        // Pair them up: every life candidate with a mana value close by. The
-        // real distance between the two shows up as the one that repeats.
-        var byDelta = new Dictionary<long, List<long>>();
-        foreach (long a in lifeAt)
-        {
-            int idx = Array.BinarySearch(manaArr, a - 0x400);
-            if (idx < 0) idx = ~idx;
-            for (int k = idx; k < manaArr.Length && manaArr[k] <= a + 0x400; k++)
-            {
-                long delta = manaArr[k] - a;
-                if (delta == 0) continue;
-                if (!byDelta.TryGetValue(delta, out var list))
-                    byDelta[delta] = list = [];
-                list.Add(a);
-            }
-        }
-
-        if (byDelta.Count == 0)
-        {
-            Status = $"{wantHp} and {wantMp} never appear near each other";
-            return 0;
-        }
-
-        // Prefer the distance that the most candidates agree on, and among
-        // equals prefer the smaller gap: fields of one structure sit close.
-        var best = byDelta.OrderByDescending(kv => kv.Value.Count)
-                          .ThenBy(kv => Math.Abs(kv.Key))
-                          .First();
-        _manaDelta = (int)best.Key;
-        Log.Write($"memory: mana sits {_manaDelta:+#;-#;0} bytes from life "
-                  + $"in {best.Value.Count} candidate(s)");
-
-        // Current sits beside maximum; which side is not worth assuming either.
-        //
-        // "Not absurd" was not a test. Any integer in a wide range passed, and
-        // the first one to do so won - which is how a perfectly located pair of
-        // maxima ended up reporting a life of 240 out of 1,490 while the screen
-        // said 1,947. When the screen can be read, the current has to match it;
-        // when it cannot, the best that can be said is that a real current
-        // never exceeds its own maximum by much, so prefer the candidate that
-        // sits closest to being a sensible fraction rather than taking whatever
-        // comes first.
-        int hintCurHp = HintCurHp, hintCurMp = HintCurMp;
-        long bestAddr = 0;
-        int bestOff = 4;
-        double bestScore = double.MaxValue;
-
-        foreach (long a in best.Value)
-        {
-            // Directly beside the maximum was an assumption, and with seven
-            // candidates all offering 240 it was plainly the wrong one - the
-            // real current was never four bytes away. A wider sweep would once
-            // have been reckless, but nothing is accepted now without matching
-            // what the screen reads, so looking further costs only time.
-            foreach (int curOff in CurrentOffsets)
-            {
-                if (!ReadInt(a + curOff, out int curHp)) continue;
-                if (!ReadInt(a + _manaDelta + curOff, out int curMp)) continue;
-
-                // Both pools have to make sense, not just the one being matched.
-                // Accepting a candidate on life alone let it lock onto numbers
-                // that merely equalled life at that instant - and the log shows
-                // exactly what that produced: "life 792/2078, mana 1600/738",
-                // a mana current larger than its own maximum, and "life 738",
-                // which is the mana maximum wearing life's hat. A coincidence
-                // does not move afterwards, which is why the readout sat still.
-                //
-                // Overhealing is real, so a pool may exceed its maximum - but by
-                // a third, not by double.
-                if (curHp < 0 || curHp > wantHp * 4 / 3) continue;
-                if (wantMp > 0 && (curMp < 0 || curMp > wantMp * 4 / 3)) continue;
-
-                double score;
-                if (hintCurHp > 0)
-                {
-                    // The screen is the witness. Anything more than a few
-                    // percent off is a different number that happens to fit.
-                    double offHp = Math.Abs(curHp - hintCurHp) / (double)wantHp;
-                    double offMp = hintCurMp > 0 && wantMp > 0
-                        ? Math.Abs(curMp - hintCurMp) / (double)wantMp
-                        : 0;
-                    if (offHp > 0.05 || offMp > 0.05) continue;
-
-                    // Prefer the candidate whose mana is furthest from being a
-                    // second copy of its own maximum. A structure where both
-                    // pools sit exactly at full is indistinguishable from two
-                    // stray copies of the maxima; one that is part-full is not.
-                    score = offHp + offMp;
-                    if (wantMp > 0 && curMp == wantMp) score += 0.02;
-                }
-                else
-                {
-                    // No reading from the screen to check against - which is the
-                    // usual state on a machine where the numbers will not read,
-                    // and precisely the machine that needs memory most. Waiting
-                    // for the numbers there means waiting forever.
-                    //
-                    // A full pool is its own hint, and needs nobody to read
-                    // anything: at full, current IS the maximum. So the search
-                    // asks for that instead. It costs the person standing at
-                    // full life while it looks, which they usually are.
-                    if (curHp != wantHp) continue;
-                    if (wantMp > 0 && curMp != wantMp) continue;
-                    score = 0;
-                }
-
-                if (score >= bestScore) continue;
-                bestScore = score;
-                bestAddr = a;
-                bestOff = curOff;
-            }
-        }
-
-        if (bestAddr != 0)
-        {
-            _curOffset = bestOff;
-            ReadInt(bestAddr + bestOff, out int gotHp);
-            ReadInt(bestAddr + _manaDelta + bestOff, out int gotMp);
-            Log.Write($"memory: current sits {bestOff:+#;-#} from maximum; "
-                      + $"life {gotHp}/{wantHp}, mana {gotMp}/{wantMp}"
-                      + (hintCurHp > 0 ? $" (screen said {hintCurHp}/{hintCurMp})" : ""));
-            return bestAddr;
-        }
-
-        Status = hintCurHp > 0
-            ? "found the maxima but no current beside them matching the screen"
-            : "found the maxima but nothing beside them at full - stand at full "
-              + "life and mana and press Re-scan";
-        return 0;
-    }
-
-    /// <summary>
-    /// Where a current value might sit relative to its maximum: the two places
-    /// beside it first, then outwards through the rest of the structure.
-    /// </summary>
-    private static IEnumerable<int> CurrentOffsets
-    {
-        get
-        {
-            yield return 4;
-            yield return -4;
-            for (int d = 8; d <= 128; d += 4)
-            {
-                yield return d;
-                yield return -d;
-            }
-        }
     }
 
     /// <summary>The maxima must still be the ones we searched for.</summary>
