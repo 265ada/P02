@@ -465,6 +465,17 @@ public sealed class AppConfig
     public bool CheckUpdatesOnStart { get; set; } = true;
 
     /// <summary>
+    /// Whether the launch check is allowed to interrupt with a box.
+    ///
+    /// It exists because the check was firing on a saved, correct setup - the
+    /// game sitting on its login screen at the eight-second mark is enough -
+    /// and telling the player to run setup again, which fixes nothing and
+    /// happens every single launch. A warning nobody can turn off is a warning
+    /// everybody learns to click through, including the once it is right.
+    /// </summary>
+    public bool WarnAtLaunch { get; set; } = true;
+
+    /// <summary>
     /// Decide only from the numbers and memory, never from the globe colours.
     ///
     /// The globe was the original way and it is the worst of the three: it

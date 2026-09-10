@@ -77,9 +77,15 @@ internal static class SelfCheck
                     memoryReading
                         ? "Nothing is wrong with the reading. The numbers are only a "
                           + "cross-check while memory has your character."
-                        : "Press \"Set it up for me\" while standing somewhere safe with the "
-                          + "numbers on screen. They are not drawn in menus or on the death "
-                          + "screen.");
+                        // Not "run setup again". The region is saved and it is
+                        // the right region - that is what makes this check
+                        // possible at all. Sending someone back through setup
+                        // to fix a login screen is how a working install ends
+                        // up being told it is broken every time it opens.
+                        : "The numbers are not drawn on menus, the login screen or the "
+                          + "death screen, so this clears itself the moment you are in "
+                          + "the game. If it persists while you can see your life "
+                          + "number, press \"Set it up for me\" to re-find it.");
 
             if (w.Key.Trim().Length == 0)
                 Say(0, $"{name} has no key set, so it has nothing to press.",

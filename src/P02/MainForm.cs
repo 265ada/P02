@@ -1502,22 +1502,59 @@ public sealed class MainForm : Form
             how.ShowDialog(this);
         }
 
-        // Asked once, a few seconds in, rather than the instant the window
-        // appears. Nothing has read anything yet at that point, so it always
-        // found a fault and said so - every launch, on a setup that was fine.
-        var settle = new System.Windows.Forms.Timer { Interval = 8000 };
-        settle.Tick += (_, _) =>
+        // A fault has to still be a fault before anyone is interrupted.
+        //
+        // This used to be one look, eight seconds after the window opened, and
+        // it was wrong nearly every time: eight seconds in, the game is often
+        // still on its login screen, no life number is drawn anywhere, and the
+        // check duly announced that nothing was coming back and setup should be
+        // run again - on an install whose setup was saved, correct, and about
+        // to start working perfectly a few seconds later.
+        //
+        // So it watches instead of glancing. Only a fault that survives a full
+        // minute of looking is real enough to stop someone with a box, and it
+        // is said once.
+        if (_cfg.WarnAtLaunch)
         {
-            settle.Stop();
-            settle.Dispose();
-            if (IsDisposed) return;
+            int looks = 0;
+            var settle = new System.Windows.Forms.Timer { Interval = 6000 };
+            settle.Tick += (_, _) =>
+            {
+                if (IsDisposed) { settle.Stop(); settle.Dispose(); return; }
 
-            var wrong = SelfCheck.Run(_cfg, _engine, Version);
-            if (wrong.Any(f => f.Stops))
-                MessageBox.Show(this, SelfCheck.Describe(wrong), "P02 is not ready",
-                                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        };
-        settle.Start();
+                var wrong = SelfCheck.Run(_cfg, _engine, Version);
+                if (!wrong.Any(f => f.Stops))
+                {
+                    // It sorted itself out, which is the usual ending.
+                    settle.Stop();
+                    settle.Dispose();
+                    return;
+                }
+
+                if (++looks < 10) return;
+
+                settle.Stop();
+                settle.Dispose();
+
+                var box = new TaskDialogPage
+                {
+                    Caption = "P02 is not ready",
+                    Heading = "This has been wrong for a minute now",
+                    Text = SelfCheck.Describe(wrong),
+                    Icon = TaskDialogIcon.Warning,
+                    Verification = new TaskDialogVerificationCheckBox(
+                        "Don't check this at launch again"),
+                    Buttons = { TaskDialogButton.OK },
+                };
+                TaskDialog.ShowDialog(this, box);
+                if (box.Verification.Checked)
+                {
+                    _cfg.WarnAtLaunch = false;
+                    Save();
+                }
+            };
+            settle.Start();
+        }
         // With unattended installs on, the launch check has nothing to ask
         // about: the countdown below handles it a few seconds later, in one
         // place, and having waited for a fight to end.
