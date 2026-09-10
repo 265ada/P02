@@ -517,6 +517,8 @@ public sealed class MonitorEngine : IDisposable
         public int MemGeneration = -1;
         public bool MemConfirmed;
         public long MemDisagreeSinceMs;
+        public int LastMemCur = -1;
+        public long MemSameSinceMs;
     }
 
     private void Loop(CancellationToken ct)
@@ -869,6 +871,31 @@ public sealed class MonitorEngine : IDisposable
                 if (now - st.ZeroSinceMs > 1500)
                 {
                     st.ZeroSinceMs = 0;
+
+            // Frozen is as bad as wrong, and harder to see: a freed address
+            // keeps its last values forever, and they stay plausible. Life that
+            // has not moved at all in eight seconds, while something else is
+            // reading it moving, is not being read.
+            if (cur == st.LastMemCur)
+            {
+                if (st.MemSameSinceMs == 0) st.MemSameSinceMs = now;
+                else if (now - st.MemSameSinceMs > 8000 && haveOcr
+                         && Math.Abs(ocrFrac - memFrac) > 0.05)
+                {
+                    st.MemSameSinceMs = 0;
+                    st.MemConfirmed = false;
+                    if (name == "Life") _lifeMemConfirmed = false;
+                    Log.Write($"{name}: memory has read {cur:N0} unchanged for eight "
+                              + "seconds while the numbers moved - the address is frozen, "
+                              + "searching again");
+                    _mem.Rescan();
+                }
+            }
+            else
+            {
+                st.LastMemCur = cur;
+                st.MemSameSinceMs = 0;
+            }
                     st.MemConfirmed = false;
                     if (name == "Life") _lifeMemConfirmed = false;
                     Log.Write($"{name}: memory has read 0 of {max:N0} for over a second - "
@@ -995,7 +1022,12 @@ public sealed class MonitorEngine : IDisposable
             {
                 if (st.MemDisagreeSinceMs == 0) st.MemDisagreeSinceMs = now;
 
-                if (now - st.MemDisagreeSinceMs > 2000)
+                // Six hundred milliseconds, not two seconds. A misread lasts a
+                // frame or two; anything still disagreeing after half a second
+                // is an address that has stopped following the game, and every
+                // moment it keeps its lock is a moment the wrong number could
+                // be the one acted on.
+                if (now - st.MemDisagreeSinceMs > 600)
                 {
                     st.MemConfirmed = false;
                     st.MemDisagreeSinceMs = 0;
@@ -1006,10 +1038,22 @@ public sealed class MonitorEngine : IDisposable
                 }
                 else
                 {
-                    // Believe memory through the wobble, and say so, so a
-                    // rejected frame is never mistaken for a healthy one.
-                    textRaw = $"memory {memFrac:P0}, numbers misread {ocrFrac:P0}";
-                    frac = memFrac;
+                    // Two exact sources disagreeing about how much life there
+                    // is: act on the lower one until it is settled.
+                    //
+                    // Believing memory through the disagreement was fatal. On a
+                    // zone change the old address keeps reading a plausible,
+                    // frozen 2,078 of 2,078 - the maximum still matches, so
+                    // nothing else notices - and it reported 100% for two full
+                    // seconds while the numbers said 41% and falling. Two
+                    // seconds is a death.
+                    //
+                    // Whichever is right, the lower reading is the safe one to
+                    // act on. Firing early costs a charge; firing late costs
+                    // the character.
+                    frac = Math.Min(memFrac, ocrFrac);
+                    textRaw = $"memory {memFrac:P0} vs numbers {ocrFrac:P0} - "
+                              + $"acting on {frac:P0}";
                     fromText = true;
                     textLostOverride = false;
                     haveOcr = false;
