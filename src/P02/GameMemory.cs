@@ -95,6 +95,14 @@ internal sealed class GameMemory : IDisposable
     /// <summary>Set once the structure has been found properly, rather than guessed.</summary>
     private bool _structured;
 
+    // Where each vital sits inside the Life component, taken from the game
+    // rather than from a constant. The published numbers are the starting
+    // guess; the owner pointer tells us the truth, so a patch that moves a
+    // vital does not need anybody to publish new offsets.
+    private int _healthOff = HealthInLife;
+    private int _manaOff = ManaInLife;
+    private int _shieldOff = ShieldInLife;
+
     /// <summary>
     /// Whether the address came from matching the game's own structure.
     ///
@@ -301,9 +309,9 @@ internal sealed class GameMemory : IDisposable
         // a known offset from it. Nothing is learned, so nothing can drift.
         if (_structured)
         {
-            if (!ReadVital(addr + HealthInLife, out int curHp, out int maxHp)) return false;
-            if (!ReadVital(addr + ManaInLife, out int curMp, out int maxMp)) return false;
-            ReadVital(addr + ShieldInLife, out int curEs, out int maxEs);
+            if (!ReadVital(addr + _healthOff, out int curHp, out int maxHp)) return false;
+            if (!ReadVital(addr + _manaOff, out int curMp, out int maxMp)) return false;
+            ReadVital(addr + _shieldOff, out int curEs, out int maxEs);
 
             s = new Stats(curHp, maxHp, curMp, maxMp, curEs, maxEs,
                           _clock.ElapsedMilliseconds);
@@ -391,6 +399,7 @@ internal sealed class GameMemory : IDisposable
 
         var lifeAt = new List<long>();
         var manaAt = new List<long>();
+        var pairAt = new List<long>();
         var buf = new byte[32 * 1024 * 1024];
 
         foreach (var (start, size) in Regions())
@@ -404,11 +413,31 @@ internal sealed class GameMemory : IDisposable
                     continue;
 
                 int usable = (int)got - 4;
+                int pairStride = ManaInLife - HealthInLife;
+
                 for (int i = 0; i + 4 <= usable; i += 4)
                 {
                     int v = BitConverter.ToInt32(buf, i);
-                    if (v == wantHp) lifeAt.Add(start + off + i);
-                    else if (v == wantMp) manaAt.Add(start + off + i);
+
+                    // The structural candidates, found inside the buffer we
+                    // already have. Your maximum life with your maximum mana
+                    // exactly one vital away is the whole signature, and
+                    // checking it here costs nothing - where checking twenty
+                    // thousand loose candidates afterwards costs two system
+                    // calls each, which is why the search was slow enough to
+                    // give up and fall back to guessing.
+                    if (v == wantHp)
+                    {
+                        lifeAt.Add(start + off + i);
+
+                        if (i + pairStride + 4 <= (int)got
+                            && BitConverter.ToInt32(buf, i + pairStride) == wantMp)
+                            pairAt.Add(start + off + i);
+                    }
+                    else if (v == wantMp)
+                    {
+                        manaAt.Add(start + off + i);
+                    }
                 }
             }
         }
@@ -423,34 +452,73 @@ internal sealed class GameMemory : IDisposable
         // and the vital points back at the component. Three fixed relationships
         // and a self-reference - a coincidence can satisfy one of those, not
         // all of them.
-        foreach (long total in lifeAt)
+        int ownedHealth = 0, ownedMana = 0, manaMatched = 0;
+
+        Log.Write($"memory: {pairAt.Count} of them have your maximum mana one vital away");
+
+        foreach (long total in pairAt)
         {
             if (_stop.IsCancellationRequested) return 0;
 
-            long life = total - VitalTotal - HealthInLife;
-            if (life <= 0) continue;
+            // Both vitals name their owner, and it has to be the same one.
+            // That pointer is also what says where they sit inside it, so the
+            // offsets come from the game rather than from a constant that a
+            // patch can move.
+            long healthVital = total - VitalTotal;
+            long manaVital = total + (ManaInLife - HealthInLife) - VitalTotal;
 
-            if (!OwnsItself(life, HealthInLife)) continue;
-            if (!OwnsItself(life, ManaInLife)) continue;
+            if (!ReadPtr(healthVital + VitalOwner, out long owner)) continue;
+            if (owner <= 0) continue;
+            ownedHealth++;
 
-            if (!ReadVital(life + ManaInLife, out int curMp, out int maxMp)) continue;
+            if (!ReadPtr(manaVital + VitalOwner, out long manaOwner)) continue;
+            if (manaOwner != owner) continue;
+            ownedMana++;
+
+            int healthOff = (int)(healthVital - owner);
+            int manaOff = (int)(manaVital - owner);
+            if (healthOff <= 0 || healthOff > 0x2000 || manaOff <= healthOff) continue;
+
+            if (!ReadVital(owner + manaOff, out int curMp, out int maxMp)) continue;
             if (maxMp != wantMp) continue;
+            manaMatched++;
 
-            if (!ReadVital(life + HealthInLife, out int curHp, out int maxHp)) continue;
+            if (!ReadVital(owner + healthOff, out int curHp, out int maxHp)) continue;
             if (maxHp != wantHp) continue;
 
+            _healthOff = healthOff;
+            _manaOff = manaOff;
+            _shieldOff = manaOff + (ShieldInLife - ManaInLife);
             _structured = true;
-            _manaDelta = ManaInLife - HealthInLife;
+            _manaDelta = manaOff - healthOff;
             _curOffset = VitalCurrent - VitalTotal;
 
-            Log.Write($"memory: found the Life component at {life:X} - health and mana "
-                      + $"both point back to it. life {curHp}/{maxHp}, mana {curMp}/{maxMp}");
-            return life;
+            Log.Write($"memory: found the Life component at {owner:X} - both vitals point "
+                      + $"back to it. life {curHp}/{maxHp}, mana {curMp}/{maxMp}, "
+                      + $"health at +{healthOff:X}, mana at +{manaOff:X}");
+            return owner;
         }
 
-        Log.Write("memory: no structure matched; falling back to matching numbers by "
-                  + "distance, which is weaker");
+        Log.Write($"memory: structure check - {ownedHealth} with a health vital pointing "
+                  + $"home, {ownedMana} with mana too, {manaMatched} whose mana total was "
+                  + $"{wantMp}");
+
+        Log.Write($"memory: structure check - {ownedHealth} with a health vital pointing "
+                  + $"home, {ownedMana} with mana too, {manaMatched} whose mana total was "
+                  + $"{wantMp}");
+
+        // No guessing when the structure does not match.
+        //
+        // The old fallback matched loose numbers by distance, and every frozen
+        // reading, every wrong pool and every "reading 100% while you die" came
+        // out of it - because a pair of integers that merely equals your maxima
+        // is not a character, and there are thousands of them. Saying "still
+        // looking" is worth far more than an answer that might be a
+        // coincidence, since the numbers on screen carry you meanwhile.
+        Status = "the game's layout does not match what this knows - the numbers on "
+                 + "screen are being used instead";
         _structured = false;
+        return 0;
         if (lifeAt.Count == 0 || manaAt.Count == 0)
         {
             Status = $"no {wantHp} and {wantMp} found together - are those your maxima?";
