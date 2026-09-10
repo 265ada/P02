@@ -459,6 +459,7 @@ internal sealed partial class TextOcr : IDisposable
                 if (!pick(line)) continue;
                 var m = PairPattern().Match(line);
                 if (!m.Success) continue;
+                if (!WellFormed(line, m)) continue;
                 if (TryNumber(m.Groups[1].Value, out cur)
                     && TryNumber(m.Groups[2].Value, out max)
                     && Sane(cur, max)
@@ -472,6 +473,62 @@ internal sealed partial class TextOcr : IDisposable
 
         cur = max = 0;
         return false;
+    }
+
+    /// <summary>
+    /// Whether the pair is a whole reading, or a fragment cut out of a mangled
+    /// one.
+    ///
+    /// This is the misread that spent a fistful of flask charges on a character
+    /// at full life. The screen said "Life 1,496/1,496"; OCR returned
+    /// "1,49 6/1149 6s"; and the pattern, doing exactly what it was asked, found
+    /// a perfectly good-looking "6/1149" sitting in the middle of the wreckage.
+    /// Six out of fourteen hundred is a last-ditch emergency, so it fired, and
+    /// kept firing, because the misread was steady rather than momentary - a
+    /// second look agreed with the first every time.
+    ///
+    /// What gives it away is not the numbers, which are individually plausible,
+    /// but what surrounds them. A real reading has a word or an edge beside it.
+    /// A fragment has the rest of the broken number: a digit, then the space
+    /// that OCR hallucinated into the middle of it.
+    /// </summary>
+    private static bool WellFormed(string line, Match m)
+        => !SpiltBefore(line, m.Index) && !SpiltAfter(line, m.Index + m.Length);
+
+    /// <summary>
+    /// Loose digits on the left, not belonging to a pair of their own.
+    ///
+    /// Life and shield sitting on one line - "1,465/1,465 2,005/2,005" - is a
+    /// real thing to read, and there the digits on either side are halves of
+    /// other complete pairs. A number that simply came apart has no slash
+    /// holding it to anything.
+    /// </summary>
+    private static bool SpiltBefore(string line, int start)
+    {
+        int at = Skip(line, start - 1, -1);
+        if (at < 0 || !char.IsAsciiDigit(line[at])) return false;
+
+        // Walk back over the digit run. If a slash is holding it, it is the
+        // maximum of the pair before this one and none of our business.
+        while (at >= 0 && (char.IsAsciiDigit(line[at]) || line[at] is ',' or '.')) at--;
+        return at < 0 || line[at] != '/';
+    }
+
+    /// <summary>Loose digits on the right, not starting a pair of their own.</summary>
+    private static bool SpiltAfter(string line, int end)
+    {
+        int at = Skip(line, end, +1);
+        if (at >= line.Length || !char.IsAsciiDigit(line[at])) return false;
+        var next = PairPattern().Match(line, at);
+        return !next.Success || next.Index != at;
+    }
+
+    /// <summary>Steps over the space OCR hallucinated into the middle of a number.</summary>
+    private static int Skip(string line, int from, int step)
+    {
+        int at = from;
+        while (at >= 0 && at < line.Length && line[at] == ' ') at += step;
+        return at == from ? (step > 0 ? line.Length : -1) : at;
     }
 
     private static int LineMax(string line)

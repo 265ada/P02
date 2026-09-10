@@ -224,7 +224,12 @@ static class T
             Parse("good first line, shield below", "1,465/1,465\n2,005/2,005", 1465, 1465);
             Parse("life over shield, one line", "1,465/1,465 2,005/2,005", 1465, 1465);
             Parse("plain", "1,465/1,465", 1465, 1465);
-            Parse("space for comma", "1 465/1,465", 465, 1465);
+            // Was written down as "465/1,465 is fine". It is not fine - it is a
+            // 1,465 that came apart, and reading its second half as your
+            // current life turns a full pool into 31% and fires. That is the
+            // misread that emptied a flask belt, so the expectation is the
+            // thing that changed.
+            Parse("half a number is not a reading", "1 465/1,465", 0, 0);
             Parse("dot for comma", "412/1.465", 412, 1465);
             Parse("mana", "747/747", 747, 747);
 
@@ -418,6 +423,21 @@ static class T
                               + "  current with a phantom digit is refused");
             Console.WriteLine((overheal && oc == 1947 && om == 1490 ? "PASS" : "FAIL")
                               + $"  overheal is still accepted -> {oc}/{om}");
+        }
+
+        // The misread that emptied a flask belt at full life. OCR turned
+        // "Life 1,496/1,496" into "1,49 6/1149 6s", and a perfectly plausible
+        // "6/1149" was sitting in the middle of it - six out of fourteen
+        // hundred, which is a last-ditch emergency.
+        {
+            bool wreck = TextOcr.TryParse("1,49 6/1149 6s", out _, out _, "Life", 0);
+            bool wreck2 = TextOcr.TryParse("Life 1,49 6/1149 6s", out _, out _, "Life", 0);
+            bool clean = TextOcr.TryParse("Life 1,496/1,496", out int cc, out int cm,
+                                          "Life", 1496);
+            Console.WriteLine((!wreck && !wreck2 ? "PASS" : "FAIL")
+                              + "  a pair cut out of a mangled line is refused");
+            Console.WriteLine((clean && cc == 1496 && cm == 1496 ? "PASS" : "FAIL")
+                              + $"  the same line read properly is accepted -> {cc}/{cm}");
         }
 
         // A box cropped to the numbers alone, which is a sensible thing to have
