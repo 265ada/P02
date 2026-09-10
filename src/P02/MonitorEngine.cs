@@ -566,6 +566,14 @@ public sealed class MonitorEngine : IDisposable
                         if (gamePid != 0) _mem.PreferredPid = (int)gamePid;
                     }
 
+                    if (_cfg.Shield.Enabled && _cfg.Shield.KnownMax <= 0
+                        && _mem.TryGet(out var es) && es.MaxEs > 0)
+                    {
+                        _cfg.Shield.KnownMax = es.MaxEs;
+                        Log.Write($"Shield: maximum {es.MaxEs:N0} taken from memory");
+                        MaxAdopted?.Invoke("Shield", 0, es.MaxEs);
+                    }
+
                     _mem.HintMaxHp = ExpectedMax("Life", _cfg.Life, 0);
                     _mem.HintMaxMp = ExpectedMax("Mana", _cfg.Mana, 0);
 
@@ -860,10 +868,30 @@ public sealed class MonitorEngine : IDisposable
         // so it is only believed when it agrees with what we already know.
         if (_cfg.UseMemory && _mem.TryGet(out var ms) && _mem.NowMs - ms.AtMs < 500)
         {
-            int cur = name == "Life" ? ms.CurHp : ms.CurMp;
-            int max = name == "Life" ? ms.MaxHp : ms.MaxMp;
+            // Each pool reads its own vital. Anything that was not life used to
+            // read mana, so energy shield - had anybody switched it on - would
+            // have been watching the wrong pool entirely and firing a life
+            // flask for it.
+            int cur = name switch
+            {
+                "Life" => ms.CurHp,
+                "Shield" => ms.CurEs,
+                _ => ms.CurMp,
+            };
 
-            double memFrac = name == "Life" ? ms.LifeFraction : ms.ManaFraction;
+            int max = name switch
+            {
+                "Life" => ms.MaxHp,
+                "Shield" => ms.MaxEs,
+                _ => ms.MaxMp,
+            };
+
+            double memFrac = name switch
+            {
+                "Life" => ms.LifeFraction,
+                "Shield" => ms.ShieldFraction,
+                _ => ms.ManaFraction,
+            };
 
             // A current of zero beside an intact maximum is a dead pointer, not
             // a dead character - the game frees and rebuilds that structure on
@@ -1107,7 +1135,12 @@ public sealed class MonitorEngine : IDisposable
 
             if (trusted)
             {
-                frac = name == "Life" ? ms.LifeFraction : ms.ManaFraction;
+                frac = name switch
+                {
+                    "Life" => ms.LifeFraction,
+                    "Shield" => ms.ShieldFraction,
+                    _ => ms.ManaFraction,
+                };
                 fromText = true;
                 textRaw = $"memory, {name.ToLowerInvariant()} {cur:N0}/{max:N0}";
                 textLostOverride = false;

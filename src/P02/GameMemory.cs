@@ -61,6 +61,9 @@ internal sealed class GameMemory : IDisposable
 
         public double ManaFraction =>
             MaxMp > 0 ? Math.Clamp(CurMp / (double)MaxMp, 0, 1) : 0;
+
+        public double ShieldFraction =>
+            MaxEs > 0 ? Math.Clamp(CurEs / (double)MaxEs, 0, 1) : 0;
     }
 
     private readonly object _gate = new();
