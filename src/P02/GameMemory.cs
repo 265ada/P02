@@ -93,6 +93,13 @@ internal sealed class GameMemory : IDisposable
     private const int VitalCurrent = 0x38;
 
     /// <summary>Set once the structure has been found properly, rather than guessed.</summary>
+    /// <summary>
+    /// Components that matched equally well and have not yet given themselves
+    /// away by changing. Watched between polls rather than re-found.
+    /// </summary>
+    private List<(long owner, int health, int mana, int shield)> _pending = [];
+    private int[] _pendingFirst = [];
+
     private bool _structured;
 
     // Where each vital sits inside the Life component, taken from the game
@@ -189,6 +196,10 @@ internal sealed class GameMemory : IDisposable
     /// <summary>Drops the cached address so the next pass searches again.</summary>
     public void Rescan()
     {
+        // A tie held from before is not worth keeping across an explicit
+        // rescan: the reason for asking is usually that something changed.
+        _pending = [];
+        _pendingFirst = [];
         lock (_gate) { _address = 0; _hasLatest = false; }
     }
 
@@ -202,6 +213,20 @@ internal sealed class GameMemory : IDisposable
                 {
                     Status = "the game does not seem to be running";
                     _stop.Token.WaitHandle.WaitOne(2000);
+                    continue;
+                }
+
+                // A tie already found is cheaper to settle than to find again.
+                if (_address == 0 && _pending.Count > 1)
+                {
+                    long settled = SettlePending();
+                    if (settled == 0)
+                    {
+                        _stop.Token.WaitHandle.WaitOne(200);
+                        continue;
+                    }
+                    _address = settled;
+                    Generation++;
                     continue;
                 }
 
@@ -390,6 +415,61 @@ internal sealed class GameMemory : IDisposable
     /// one known value at a guessed distance, and it needs nothing to stay true
     /// across patches except that life and mana live near each other.
     /// </summary>
+    /// <summary>
+    /// Waits for one of the tied components to prove it is the live one.
+    ///
+    /// Called between polls, so it costs three reads rather than a sweep of the
+    /// whole address space, and it can afford to wait as long as it takes -
+    /// which is until something happens to your character. If they all start
+    /// moving at once they are not telling us apart from each other and the
+    /// whole set is dropped rather than guessed between.
+    /// </summary>
+    private long SettlePending()
+    {
+        var moved = new List<int>();
+        for (int k = 0; k < _pending.Count; k++)
+        {
+            if (!ReadVital(_pending[k].owner + _pending[k].health, out int now, out _))
+            {
+                // It stopped being readable at all, which is answer enough.
+                moved.Clear();
+                _pending = [];
+                _pendingFirst = [];
+                Log.Write("memory: one of the tied components vanished - searching again");
+                return 0;
+            }
+            if (now != _pendingFirst[k]) moved.Add(k);
+        }
+
+        if (moved.Count == 0) return 0;
+
+        if (moved.Count > 1)
+        {
+            Log.Write($"memory: {moved.Count} of the tied components moved together - "
+                      + "they are copies of each other, searching again");
+            _pending = [];
+            _pendingFirst = [];
+            return 0;
+        }
+
+        var win = _pending[moved[0]];
+        _pending = [];
+        _pendingFirst = [];
+
+        _healthOff = win.health;
+        _manaOff = win.mana;
+        _shieldOff = win.shield;
+        _structured = true;
+        _manaDelta = win.mana - win.health;
+        _curOffset = VitalCurrent - VitalTotal;
+
+        ReadVital(win.owner + win.health, out int curHp, out int maxHp);
+        ReadVital(win.owner + win.mana, out int curMp, out int maxMp);
+        Log.Write($"memory: {win.owner:X} changed while the others sat still - that is "
+                  + $"your character. life {curHp}/{maxHp}, mana {curMp}/{maxMp}");
+        return win.owner;
+    }
+
     private long Search()
     {
         int wantHp = HintMaxHp, wantMp = HintMaxMp;
@@ -611,11 +691,25 @@ internal sealed class GameMemory : IDisposable
 
             if (moved.Count != 1)
             {
-                Log.Write($"memory: {moved.Count} of them changed while watching - not "
-                          + "guessing between components that all sit still. Take a hit "
-                          + "or use a flask and this settles itself.");
-                Status = "more than one thing in the game matches your numbers - take any "
-                         + "damage and this sorts itself out";
+                // Kept, not thrown away.
+                //
+                // Standing at full life in town, none of these will move for as
+                // long as you stand there - and the search used to give up,
+                // wait five seconds, and rebuild the identical tie from a fresh
+                // seven-gigabyte sweep, forever. The answer was there the whole
+                // time; what was missing was the patience to wait for it.
+                //
+                // Watching three addresses costs nothing, so they are now kept
+                // and checked between polls. The moment anything happens to
+                // you - a hit, a flask, a regen tick - it settles itself,
+                // without another sweep and without you being told to go and
+                // make something happen.
+                _pending = finalists;
+                _pendingFirst = first;
+                Log.Write($"memory: {finalists.Count} components still match equally - "
+                          + "holding them and watching for the first one to change");
+                Status = "more than one thing in the game matches your numbers - watching "
+                         + "for the one that moves";
                 _structured = false;
                 return 0;
             }
