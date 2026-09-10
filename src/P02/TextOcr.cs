@@ -347,6 +347,24 @@ internal sealed partial class TextOcr : IDisposable
     }
 
     /// <summary>
+    /// Whether a line names a stat that is not this one.
+    ///
+    /// The guard that matters: a box may be cropped to bare numbers, but if the
+    /// words "Shield" or "Ward" are in it, the numbers beside them are not your
+    /// life - and life reading shield is the direction that kills people.
+    /// </summary>
+    private static bool NamesAnotherStat(string text, string mine)
+    {
+        foreach (string other in new[] { "Life", "Shield", "Ward", "Mana", "Spirit", "Rage" })
+        {
+            if (other.Equals(mine, StringComparison.OrdinalIgnoreCase)) continue;
+            if (HasLabel(text, other)) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Whether a line carries this label, allowing for the engine getting a
     /// letter of it wrong.
     ///
@@ -407,10 +425,30 @@ internal sealed partial class TextOcr : IDisposable
         // The word beside the numbers is the surest anchor there is, and your
         // own maximum is the next surest. Only failing both does position
         // decide anything.
+        // Only when there is one pair in the crop. Three stacked pairs with no
+        // word between them are life, shield and ward, and picking the first is
+        // how life comes to read shield - which is the direction that kills
+        // people. One pair in a box assigned to one stat is not ambiguous.
+        int pairs = 0;
+        foreach (string one in lines) if (PairPattern().IsMatch(one)) pairs++;
+        bool alone = pairs == 1;
+
         var strategies = new Func<string, bool>[]
         {
             l => label.Length > 0 && HasLabel(l, label),
             l => expectedMax > 0 && LineMax(l) == expectedMax,
+
+            // A box was set up for one stat and nothing else. A pair of numbers
+            // read out of it is that stat's, whether or not the word happens to
+            // be inside the crop - and cropping tightly to the numbers is a
+            // perfectly sensible thing to have done.
+            //
+            // The word is how a line is FOUND. Demanding it to validate a box
+            // somebody has already assigned threw away "3,096/2,078" for not
+            // saying "Life", left the maximum stale at 2,065, and had memory
+            // hunting a number that no longer existed.
+            l => label.Length > 0 && alone && !NamesAnotherStat(l, label),
+
             _ => label.Length == 0 && expectedMax == 0,
         };
 

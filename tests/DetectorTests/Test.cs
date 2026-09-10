@@ -420,6 +420,20 @@ static class T
                               + $"  overheal is still accepted -> {oc}/{om}");
         }
 
+        // A box cropped to the numbers alone, which is a sensible thing to have
+        // done and which the label check used to refuse - leaving the maximum
+        // stale and memory hunting a number that no longer existed.
+        {
+            bool tight = TextOcr.TryParse("3,096/2,078", out int tc, out int tm, "Life", 0);
+            Console.WriteLine((tight && tc == 3096 && tm == 2078 ? "PASS" : "FAIL")
+                              + "  numbers alone in a box assigned to Life -> "
+                              + (tight ? $"{tc}/{tm}" : "refused"));
+
+            bool wrong = TextOcr.TryParse("Shield 512/3,357", out _, out _, "Life", 0);
+            Console.WriteLine((!wrong ? "PASS" : "FAIL")
+                              + "  another stat's line is still refused for Life");
+        }
+
         // OCR reads small pale text over a moving background; the label came
         // back a letter short or a letter wrong often enough that demanding it
         // exactly threw away good numbers several times a minute.
