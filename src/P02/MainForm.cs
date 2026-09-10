@@ -989,6 +989,11 @@ public sealed class MainForm : Form
                     _cfg.OverlayClickThrough = through;
                     Save();
                 };
+                _overlay.ManaShownChanged += show =>
+                {
+                    _cfg.OverlayShowMana = show;
+                    Save();
+                };
                 _overlay.Moved += () =>
                 {
                     if (_overlay is not { IsDisposed: false }) return;
@@ -1261,6 +1266,7 @@ public sealed class MainForm : Form
         _overlay.ClickThrough = _cfg.OverlayClickThrough;
         _overlay.Slot = Math.Clamp(_cfg.Slot, 0, 2);
         _overlay.SlotAuto = _cfg.SlotAuto;
+        _overlay.ShowMana = _cfg.OverlayShowMana;
     }
 
     private void ResetOverlay()
@@ -1294,7 +1300,14 @@ public sealed class MainForm : Form
                     // Nothing true to say while a shop or the passive tree
                     // covers the HUD, and nothing can fire either - so getting
                     // out of the way says something rather than hides it.
-                    bool blind = life.Note == "numbers not on screen";
+                    // Asked of the engine rather than read off a note.
+                    //
+                    // The note it used to look for is only written when nothing
+                    // can read the pool at all, so as soon as memory locked on
+                    // - reading happily through a shop or the passive tree -
+                    // the note stopped appearing and the overlay stopped
+                    // hiding. The tickbox has meant nothing since.
+                    bool blind = !_engine.HudVisible;
                     bool wanted = !_cfg.OverlayAutoHide || (!blind && focused);
 
                     // Following the bar means sharing its fate: when the game
@@ -1759,30 +1772,9 @@ public sealed class MainForm : Form
         try { found = _engine.FindAllNumbers(); }
         catch { Show(); throw; }
 
-        // Then the globes, where one is missing. They are only the fallback,
-        // but "no region" stops a watcher dead - and this button is supposed to
-        // leave nothing for anyone to go and find another button for.
-        var area = Native.FindWindowRect(_cfg.WindowMatch)
-                   ?? (Screen.PrimaryScreen ?? Screen.AllScreens[0]).Bounds;
-
-        foreach (var (cfg, blue) in new[] { (_cfg.Life, false), (_cfg.Mana, true) })
-        {
-            if (cfg.Region.IsValid) continue;
-
-            int gw = (int)(area.Width * 0.25);
-            int gh = (int)(area.Height * 0.36);
-            var look = blue
-                ? new Rectangle(area.Right - gw, area.Bottom - gh, gw, gh)
-                : new Rectangle(area.Left, area.Bottom - gh, gw, gh);
-
-            var globe = OrbDetector.AutoLocate(look, blue, margin: 18, minV: 45);
-            if (globe is null) continue;
-
-            cfg.Region = Box.From(globe.Value);
-            cfg.FullRow = 0;
-            cfg.EmptyRow = 0;
-            Log.Write($"setup: {(blue ? "mana" : "life")} globe found at {globe.Value}");
-        }
+        // Then the globes, where one is missing. Same code the automatic
+        // repair runs, so the button and the repair cannot drift apart.
+        _engine.FindGlobes();
 
         Show();
 

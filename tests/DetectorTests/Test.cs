@@ -425,6 +425,33 @@ static class T
                               + $"  overheal is still accepted -> {oc}/{om}");
         }
 
+        // Short enough to paste into a chat message, and carrying nobody's keys.
+        {
+            var mine = new AppConfig();
+            mine.Life.Key = "5";
+            mine.Life.Threshold = 0.42;
+            mine.ArmHotkey = "F9";
+            mine.OverlayShowMana = false;
+
+            string block = SettingsShare.Export(mine, "9.9.9");
+
+            var theirs = new AppConfig();
+            theirs.Life.Key = "0";
+            theirs.ArmHotkey = "F8";
+            string? why = SettingsShare.Import(block, theirs, "9.9.9");
+
+            Console.WriteLine((block.Length <= 300 ? "PASS" : "FAIL")
+                              + $"  shared settings are {block.Length} chars (want <= 300)");
+            Console.WriteLine((why is null ? "PASS" : "FAIL")
+                              + $"  they load back ({why ?? "ok"})");
+            Console.WriteLine((theirs.Life.Key == "0" && theirs.ArmHotkey == "F8"
+                               ? "PASS" : "FAIL")
+                              + $"  their own keys survive -> flask {theirs.Life.Key}, arm {theirs.ArmHotkey}");
+            Console.WriteLine((Math.Abs(theirs.Life.Threshold - 0.42) < 1e-9
+                               && !theirs.OverlayShowMana ? "PASS" : "FAIL")
+                              + $"  the behaviour travels -> fire below {theirs.Life.Threshold:P0}, mana row {theirs.OverlayShowMana}");
+        }
+
         // The misread that emptied a flask belt at full life. OCR turned
         // "Life 1,496/1,496" into "1,49 6/1149 6s", and a perfectly plausible
         // "6/1149" was sitting in the middle of it - six out of fourteen

@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -5,14 +6,18 @@ using System.Text.Json.Nodes;
 namespace P02;
 
 /// <summary>
-/// Settings as a block of text, so one setup can be handed to another.
+/// Settings as a short block of text, so one setup can be handed to another.
 ///
-/// Everything that describes how it behaves travels; everything that describes
-/// where things are on a particular screen does not. Two machines rarely share
-/// a resolution or a monitor layout, and a region copied from someone else's
-/// screen is worse than no region at all - it points confidently at nothing.
-/// The same goes for a character's own maxima, which are read back in seconds
-/// anyway.
+/// Only the settings that describe how it behaves travel. Where things are on
+/// a particular screen does not: two machines rarely share a resolution, and a
+/// region copied from someone else's screen is worse than none at all - it
+/// points confidently at nothing. Nor do a character's own maxima, which read
+/// themselves back in seconds.
+///
+/// Nor, now, do keys. A shared block used to arrive and quietly rebind the
+/// flask keys of whoever loaded it, which is both a surprise and a hazard: the
+/// keys are the one setting where being wrong means pressing something else
+/// mid-fight. Everyone keeps their own.
 ///
 /// It carries the version it came from and refuses to load into a different
 /// one. Settings gain meanings between releases - a hold time that was a rate
@@ -21,52 +26,88 @@ namespace P02;
 /// </summary>
 internal static class SettingsShare
 {
-    private const string Marker = "P02-SETTINGS";
+    private const string Marker = "P02";
 
-    /// <summary>Screen geography and per-character values, which do not travel.</summary>
-    private static readonly string[] Local =
+    /// <summary>
+    /// What actually travels.
+    ///
+    /// A whitelist rather than a list of exclusions, because the old block was
+    /// the entire configuration file with a handful of keys removed - thousands
+    /// of characters of screen geometry, colour calibration and per-character
+    /// numbers, none of which mean anything on another machine, all of it
+    /// pasted into chat windows that cut it off halfway.
+    /// </summary>
+    private static readonly string[] Shared =
     [
-        "region", "textRegion", "fullRow", "emptyRow", "knownMax",
-        "overlayX", "overlayY", "windowX", "windowY", "repairs",
+        "pollHz", "combatGraceMs", "useMemory", "numbersOnly", "inputMethod",
+        "soundOnFire", "soundGapMs", "soundGainDb", "soundWhenDisarmed",
+        "overlayOn", "overlaySnap", "overlayAutoHide", "overlayShowMana",
+        "overlayFollowBar", "overlayLocked", "overlayClickThrough", "slotAuto",
+        "checkUpdatesOnStart", "autoInstall", "autoInstallMaxBehind",
+        "resumeArmed", "hideFromCapture", "startMinimised", "warnAtLaunch",
     ];
+
+    /// <summary>Per-pool tunables. Keys are deliberately absent.</summary>
+    private static readonly string[] SharedPool =
+    [
+        "enabled", "useText", "threshold", "panicBelow", "uberBelow",
+        "lastDitchBelow", "cooldownMs", "panicCooldownMs", "holdMs",
+        "burstCount", "burstGapMs", "confirmFrames", "ignoreBelow",
+        "blindGraceMs", "actOnStaleMs", "requireTextMs", "verifyEffect",
+        "verifyWindowMs", "fastDropPctPerSec", "noEffectBackoffMs",
+        "noEffectBefore",
+    ];
+
+    private static readonly string[] Pools = ["life", "mana", "shield"];
 
     public static string Export(AppConfig cfg, string version)
     {
-        var node = JsonNode.Parse(JsonSerializer.Serialize(cfg, Options))!.AsObject();
-        Strip(node);
+        var all = JsonNode.Parse(JsonSerializer.Serialize(cfg, Options))!.AsObject();
 
-        var text = new StringBuilder();
-        text.AppendLine($"{Marker} v{version}");
-        text.AppendLine("# Everything except the screen regions and your own maxima.");
-        text.AppendLine("# Those are found again on the machine this is loaded into.");
-        text.AppendLine(node.ToJsonString(Options));
-        return text.ToString();
+        // Positional, not named.
+        //
+        // Named, the same block came to 680 characters, and almost all of that
+        // was the names: "fastDropPctPerSec" costs more than the number it
+        // introduces, three times over. Both sides already refuse to talk
+        // across versions, so both sides already agree on the order, and the
+        // names are pure overhead on a thing meant to be pasted into chat.
+        var flat = new JsonArray();
+
+        foreach (string key in Shared)
+            flat.Add(all[key]?.DeepClone());
+
+        foreach (string pool in Pools)
+        {
+            var from = all[pool] as JsonObject;
+            foreach (string key in SharedPool)
+                flat.Add(from?[key]?.DeepClone());
+        }
+
+        return $"{Marker} {version} {Pack(flat.ToJsonString(Compact))}";
     }
 
     /// <summary>
-    /// Applies a block onto an existing config, leaving the local parts alone.
+    /// Applies a block onto an existing config, leaving everything local alone.
     /// Returns null on success, or why it was refused.
     /// </summary>
     public static string? Import(string text, AppConfig into, string version)
     {
-        string[] lines = text.Split((char)10);
-        if (lines.Length == 0 || !lines[0].TrimStart().StartsWith(Marker, StringComparison.Ordinal))
-            return "That does not look like exported P02 settings - the first line should "
-                   + $"say {Marker}.";
+        var parts = text.Trim().Split((char[])[' ', '\n', '\r', '\t'],
+                                      StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 3 || parts[0] != Marker)
+            return "That does not look like exported P02 settings - it should start with "
+                   + $"\"{Marker}\" and be one line long.";
 
-        string from = lines[0].Trim()[Marker.Length..].Trim().TrimStart('v', 'V');
+        string from = parts[1].TrimStart('v', 'V');
         if (from != version)
             return $"Those settings came from v{from} and this is v{version}. Settings gain "
                    + "meanings between releases, so a block from another version cannot be "
                    + "trusted to mean the same thing here. Update both sides to match.";
 
-        int start = text.IndexOf('{');
-        if (start < 0) return "There is no settings block in that text.";
-
-        JsonObject incoming;
+        JsonArray incoming;
         try
         {
-            incoming = JsonNode.Parse(text[start..])?.AsObject()
+            incoming = JsonNode.Parse(Unpack(parts[2]))?.AsArray()
                        ?? throw new JsonException("empty");
         }
         catch (Exception ex)
@@ -74,12 +115,28 @@ internal static class SettingsShare
             return $"That text is not readable as settings: {ex.Message}";
         }
 
-        Strip(incoming);
+        if (incoming.Count != Shared.Length + Pools.Length * SharedPool.Length)
+            return "Those settings are the right version but the wrong shape - the block "
+                   + "looks truncated. Copy the whole line.";
 
-        // Merge onto what is here, so the regions and maxima already set up on
-        // this machine survive untouched.
         var mine = JsonNode.Parse(JsonSerializer.Serialize(into, Options))!.AsObject();
-        Merge(mine, incoming);
+
+        int at = 0;
+        foreach (string key in Shared)
+        {
+            if (incoming[at] is { } v) mine[key] = v.DeepClone();
+            at++;
+        }
+
+        foreach (string pool in Pools)
+        {
+            var target = mine[pool] as JsonObject;
+            foreach (string key in SharedPool)
+            {
+                if (target is not null && incoming[at] is { } v) target[key] = v.DeepClone();
+                at++;
+            }
+        }
 
         var merged = JsonSerializer.Deserialize<AppConfig>(mine.ToJsonString(Options), Options);
         if (merged is null) return "Those settings could not be applied.";
@@ -88,32 +145,42 @@ internal static class SettingsShare
         return null;
     }
 
-    private static void Strip(JsonObject node)
+    /// <summary>
+    /// Squeezed and base64'd, because this is meant to be pasted into a chat
+    /// message rather than attached to one.
+    /// </summary>
+    private static string Pack(string json)
     {
-        foreach (string key in Local) node.Remove(key);
-
-        foreach (var pair in node.ToArray())
-            if (pair.Value is JsonObject child)
-                Strip(child);
+        using var into = new MemoryStream();
+        using (var zip = new DeflateStream(into, CompressionLevel.SmallestSize, true))
+        {
+            byte[] raw = Encoding.UTF8.GetBytes(json);
+            zip.Write(raw, 0, raw.Length);
+        }
+        return Convert.ToBase64String(into.ToArray()).TrimEnd('=')
+                      .Replace('+', '-').Replace('/', '_');
     }
 
-    private static void Merge(JsonObject into, JsonObject from)
+    private static string Unpack(string packed)
     {
-        foreach (var pair in from)
-        {
-            if (pair.Value is JsonObject sub && into[pair.Key] is JsonObject mine)
-            {
-                Merge(mine, sub);
-                continue;
-            }
+        string b64 = packed.Replace('-', '+').Replace('_', '/');
+        b64 += new string('=', (4 - b64.Length % 4) % 4);
 
-            into[pair.Key] = pair.Value?.DeepClone();
-        }
+        using var from = new MemoryStream(Convert.FromBase64String(b64));
+        using var zip = new DeflateStream(from, CompressionMode.Decompress);
+        using var text = new StreamReader(zip, Encoding.UTF8);
+        return text.ReadToEnd();
     }
 
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    };
+
+    private static readonly JsonSerializerOptions Compact = new()
+    {
+        WriteIndented = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 }

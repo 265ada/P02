@@ -253,6 +253,10 @@ public sealed class OverlayForm : Form
     }
 
     private ContextMenuStrip? _menu;
+    private ToolStripMenuItem? _manaItem;
+
+    /// <summary>Raised when the mana row is turned on or off from the menu.</summary>
+    public event Action<bool>? ManaShownChanged;
     private ToolStripMenuItem? _lockItem;
     private ToolStripMenuItem? _throughItem;
     private ToolStripMenuItem[]? _slotItems;
@@ -292,6 +296,21 @@ public sealed class OverlayForm : Form
             {
                 ClickThrough = _throughItem.Checked;
                 OptionsChanged?.Invoke(Locked, ClickThrough);
+            };
+
+            _manaItem = new ToolStripMenuItem("Show mana")
+            {
+                CheckOnClick = true,
+                ToolTipText = "Whether the mana bar appears here at all. Plenty of "
+                              + "builds never touch a mana flask, and a row that never "
+                              + "changes is a row in the way.",
+            };
+            _manaItem.Click += (_, _) =>
+            {
+                ShowMana = _manaItem.Checked;
+                FitHeight();
+                Render();
+                ManaShownChanged?.Invoke(ShowMana);
             };
 
             var remember = new ToolStripMenuItem("Remember this spot")
@@ -345,6 +364,8 @@ public sealed class OverlayForm : Form
             _menu.Items.Add(new ToolStripSeparator());
             _menu.Items.Add(places);
             _menu.Items.Add(new ToolStripSeparator());
+            _menu.Items.Add(_manaItem);
+            _menu.Items.Add(new ToolStripSeparator());
             _menu.Items.Add(_lockItem);
             _menu.Items.Add(_throughItem);
             _menu.Items.Add(new ToolStripSeparator());
@@ -355,6 +376,7 @@ public sealed class OverlayForm : Form
         _throughItem!.Checked = ClickThrough;
         for (int i = 0; i < _slotItems!.Length; i++) _slotItems[i].Checked = i == Slot;
         _autoItem!.Checked = SlotAuto;
+        _manaItem!.Checked = ShowMana;
         _menu.Show(this, at);
     }
 
@@ -386,8 +408,23 @@ public sealed class OverlayForm : Form
         return to - from > 3 ? raw[from..to] : "";
     }
 
+    /// <summary>
+    /// Mana on the readout, lit the colour it is in the game.
+    ///
+    /// Both bars were drawn green, which makes the readout a pair of identical
+    /// green bars sitting under a red globe and a blue one. Brighter than the
+    /// game's own blue, because this is read at a glance over whatever the
+    /// screen happens to be showing.
+    /// </summary>
+    private static readonly Color ManaBlue = Color.FromArgb(86, 142, 226);
+
+    /// <summary>Whether the mana row is wanted at all.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(
+        System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool ShowMana { get; set; } = true;
+
     /// <summary>A globe that is not watched has nothing to say, so it takes no room.</summary>
-    private bool ManaShown => !(_mana.Note == "off" && !_mana.Ok);
+    private bool ManaShown => ShowMana && !(_mana.Note == "off" && !_mana.Ok);
 
     private void FitHeight()
     {
@@ -501,12 +538,12 @@ public sealed class OverlayForm : Form
             g.FillPath(ghost, path);
 
         int y = Pad;
-        Row(g, "Life", _life, _lifeTrigger, _lifeKey, y);
+        Row(g, "Life", _life, _lifeTrigger, _lifeKey, y, Theme.Good);
         y += RowH;
 
         if (ManaShown)
         {
-            Row(g, "Mana", _mana, _manaTrigger, _manaKey, y);
+            Row(g, "Mana", _mana, _manaTrigger, _manaKey, y, ManaBlue);
             y += RowH;
         }
 
@@ -570,7 +607,7 @@ public sealed class OverlayForm : Form
     }
 
     private void Row(Graphics g, string name, GlobeReading r, double trigger,
-                     string key, int y)
+                     string key, int y, Color full)
     {
         Glyph(g, name, Theme.Dim, Theme.Small, Pad, y + 2);
 
@@ -591,7 +628,7 @@ public sealed class OverlayForm : Form
             int w = (int)Math.Round(inner.Width * Math.Clamp(r.Fraction, 0, 1));
             if (w > 2)
             {
-                var fill = r.Fraction < trigger ? Theme.Bad : Theme.Good;
+                var fill = r.Fraction < trigger ? Theme.Bad : full;
                 var lit = new Rectangle(inner.X, inner.Y, w, inner.Height);
                 using var brush = new LinearGradientBrush(
                     new Rectangle(lit.X, lit.Y - 1, lit.Width, lit.Height + 2),

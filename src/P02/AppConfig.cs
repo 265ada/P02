@@ -456,6 +456,14 @@ public sealed class AppConfig
     /// something rather than hiding something.
     /// </summary>
     public bool OverlayAutoHide { get; set; }
+
+    /// <summary>
+    /// Whether the readout carries a mana bar.
+    ///
+    /// Plenty of builds never touch a mana flask, and a row that never changes
+    /// is a row in the way of the one that matters.
+    /// </summary>
+    public bool OverlayShowMana { get; set; } = true;
     /// <summary>The size the window was left at, so it is not reset each launch.</summary>
     public int WindowW { get; set; }
 

@@ -85,6 +85,40 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>Forces a fresh search.</summary>
     public void RescanMemory() => _mem.Rescan();
 
+    /// <summary>
+    /// Finds a globe for any pool that has lost one.
+    ///
+    /// Lifted out of the setup button so the automatic repair can do it too.
+    /// A region is only replaced when there is nothing usable there, because a
+    /// globe somebody has positioned by hand is better than one found by
+    /// guessing at the corner it usually lives in.
+    /// </summary>
+    public void FindGlobes()
+    {
+        if (Native.FindWindowRect(_cfg.WindowMatch) is not { } area) return;
+
+        foreach (var (cfg, blue, what) in new[]
+                 { (_cfg.Life, false, "life"), (_cfg.Mana, true, "mana") })
+        {
+            if (cfg.Region.IsValid) continue;
+
+            int gw = (int)(area.Width * 0.25);
+            int gh = (int)(area.Height * 0.36);
+            var look = blue
+                ? new Rectangle(area.Right - gw, area.Bottom - gh, gw, gh)
+                : new Rectangle(area.Left, area.Bottom - gh, gw, gh);
+
+            var globe = OrbDetector.AutoLocate(look, blue, margin: 18, minV: 45);
+            if (globe is null) continue;
+
+            cfg.Region = Box.From(globe.Value);
+            cfg.FullRow = 0;
+            cfg.EmptyRow = 0;
+            Log.Write($"setup: {what} globe found at {globe.Value}");
+        }
+    }
+
+
     /// <summary>True when Windows can do OCR at all.</summary>
     public bool TextAvailable => _ocr.Available;
 
@@ -265,6 +299,17 @@ public sealed class MonitorEngine : IDisposable
             try
             {
                 string what = FindAllNumbers();
+
+                // The rest of what setup does, without the button or the box.
+                //
+                // Repairing only the numbers was repairing the part that was
+                // easiest to name. A globe region left behind by a resolution
+                // change, or a memory search still hunting the previous
+                // character's maximum, are the same fault wearing different
+                // clothes, and both of them used to wait for somebody to think
+                // of pressing a button.
+                FindGlobes();
+                if (_cfg.UseMemory) _mem.Rescan();
                 Log.Write($"numbers: {what.Replace(Environment.NewLine, " / ")}");
             }
             catch (Exception ex)
@@ -912,6 +957,31 @@ public sealed class MonitorEngine : IDisposable
     private bool _lifeMemMoved;
 
     /// <summary>Whether this pool's numbers have produced a reading recently.</summary>
+    /// <summary>
+    /// Whether the game's own HUD numbers are on screen right now.
+    ///
+    /// Asked so the overlay can get out of the way when a shop, the passive
+    /// tree or an inventory covers the HUD. It has to be its own question,
+    /// because the obvious answer stopped being true: the overlay used to hide
+    /// on the reading note "numbers not on screen", and that note is only
+    /// produced when nothing else can read the pool. The moment memory locks
+    /// on - which is the goal - it reads straight through a shop, no note is
+    /// ever produced, and the overlay sat there over the passive tree while
+    /// the tickbox insisted it should not.
+    ///
+    /// With no text region set up there is nothing to judge by, and something
+    /// permanently hidden is worse than something occasionally in the way.
+    /// </summary>
+    public bool HudVisible
+    {
+        get
+        {
+            var c = _cfg.Life;
+            if (!c.UseText || !c.TextRegion.IsValid || !_ocr.Available) return true;
+            return NumbersReading("Life");
+        }
+    }
+
     public bool NumbersReading(string name) =>
         _ocr.TryGet(name, out var r) && _ocr.NowMs - r.AtMs < 4000;
 
