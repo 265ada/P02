@@ -737,7 +737,7 @@ public sealed class MonitorEngine : IDisposable
     private long _started;
 
     /// <summary>Whether memory has an address it is willing to read from.</summary>
-    public bool MemoryLocked => _lifeMemConfirmed && _lifeMemMoved;
+    public bool MemoryLocked => _lifeMemConfirmed && (_lifeMemMoved || _mem.Structured);
 
     private bool _lifeMemMoved;
 
@@ -1096,8 +1096,13 @@ public sealed class MonitorEngine : IDisposable
             // Never used to decide anything until it has been seen to move.
             // Until then the numbers stay in charge, which is slower but is
             // reading something that certainly exists.
+            // A structural match is trusted at once. The probation exists to
+            // catch an address found by matching loose numbers, which cannot be
+            // told from a coincidence until it moves; a component whose vitals
+            // point back at it is not that.
             bool trusted = max > 0 && (expectedMax == 0 || max == expectedMax)
-                           && matchesOcr && st.MemConfirmed && st.MemMoved;
+                           && matchesOcr && st.MemConfirmed
+                           && (st.MemMoved || _mem.Structured);
 
 
             if (trusted)

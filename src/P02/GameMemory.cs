@@ -73,6 +73,33 @@ internal sealed class GameMemory : IDisposable
     private long _address;          // address of MaxHP
     private int _manaDelta;         // learned, not assumed
     private int _curOffset = 4;     // learned: which side of maximum current sits
+
+    // The game's own layout, from a published memory model of this client
+    // rather than from guessing at adjacent numbers.
+    //
+    // A Life component holds three of these vitals at fixed offsets, and each
+    // vital carries a pointer back to the component that owns it. That back
+    // pointer is what makes this certain: an integer pair can look like a pool
+    // by luck, but a pair whose neighbour points exactly back at the structure
+    // it belongs to cannot.
+    private const int HealthInLife = 0x1A8;
+    private const int ManaInLife = 0x200;
+    private const int ShieldInLife = 0x240;
+    private const int VitalOwner = 0x10;    // pointer back to the Life component
+    private const int VitalTotal = 0x34;
+    private const int VitalCurrent = 0x38;
+
+    /// <summary>Set once the structure has been found properly, rather than guessed.</summary>
+    private bool _structured;
+
+    /// <summary>
+    /// Whether the address came from matching the game's own structure.
+    ///
+    /// A structural match is not a guess that has to earn trust by moving: the
+    /// vitals point back at the component that owns them, which no stray copy
+    /// of a maximum does.
+    /// </summary>
+    public bool Structured => _structured;
     private int _badReads;
 
     private Stats _latest;
@@ -266,12 +293,61 @@ internal sealed class GameMemory : IDisposable
     private bool ReadStats(long addr, out Stats s)
     {
         s = default;
-        if (!ReadInt(addr, out int maxHp)) return false;
-        if (!ReadInt(addr + _curOffset, out int curHp)) return false;
-        if (!ReadInt(addr + _manaDelta, out int maxMp)) return false;
-        if (!ReadInt(addr + _manaDelta + _curOffset, out int curMp)) return false;
 
-        s = new Stats(curHp, maxHp, curMp, maxMp, 0, 0, _clock.ElapsedMilliseconds);
+        // Found properly: addr is the Life component, and everything else is at
+        // a known offset from it. Nothing is learned, so nothing can drift.
+        if (_structured)
+        {
+            if (!ReadVital(addr + HealthInLife, out int curHp, out int maxHp)) return false;
+            if (!ReadVital(addr + ManaInLife, out int curMp, out int maxMp)) return false;
+            ReadVital(addr + ShieldInLife, out int curEs, out int maxEs);
+
+            s = new Stats(curHp, maxHp, curMp, maxMp, curEs, maxEs,
+                          _clock.ElapsedMilliseconds);
+            return true;
+        }
+
+        if (!ReadInt(addr, out int oldMaxHp)) return false;
+        if (!ReadInt(addr + _curOffset, out int oldCurHp)) return false;
+        if (!ReadInt(addr + _manaDelta, out int oldMaxMp)) return false;
+        if (!ReadInt(addr + _manaDelta + _curOffset, out int oldCurMp)) return false;
+
+        s = new Stats(oldCurHp, oldMaxHp, oldCurMp, oldMaxMp, 0, 0,
+                      _clock.ElapsedMilliseconds);
+        return true;
+    }
+
+    /// <summary>One vital: its total and its current, at the game's own offsets.</summary>
+    private bool ReadVital(long vital, out int current, out int total)
+    {
+        current = total = 0;
+        if (!ReadInt(vital + VitalTotal, out total)) return false;
+        if (!ReadInt(vital + VitalCurrent, out current)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Whether a vital really is one, by its own back pointer.
+    ///
+    /// Every vital carries the address of the Life component that owns it. A
+    /// pair of integers can look like a pool by coincidence - thousands do -
+    /// but a pair sitting at exactly the right offset inside a structure that
+    /// points back at itself cannot.
+    /// </summary>
+    private bool OwnsItself(long life, int vitalOffset)
+    {
+        if (!ReadPtr(life + vitalOffset + VitalOwner, out long owner)) return false;
+        return owner == life;
+    }
+
+    private bool ReadPtr(long addr, out long value)
+    {
+        value = 0;
+        var got = new byte[8];
+        if (!ReadProcessMemory(_handle, (nint)addr, got, 8, out var read) || read.ToInt64() != 8)
+            return false;
+
+        value = BitConverter.ToInt64(got, 0);
         return true;
     }
 
@@ -335,6 +411,43 @@ internal sealed class GameMemory : IDisposable
         }
 
         Log.Write($"memory: {lifeAt.Count} places hold {wantHp}, {manaAt.Count} hold {wantMp}");
+
+        // The structure first, before any guessing at distances.
+        //
+        // Each place holding your maximum life might be the Total field of a
+        // health vital. If it is, the Life component that owns it sits a known
+        // distance below, that component's mana vital holds your maximum mana,
+        // and the vital points back at the component. Three fixed relationships
+        // and a self-reference - a coincidence can satisfy one of those, not
+        // all of them.
+        foreach (long total in lifeAt)
+        {
+            if (_stop.IsCancellationRequested) return 0;
+
+            long life = total - VitalTotal - HealthInLife;
+            if (life <= 0) continue;
+
+            if (!OwnsItself(life, HealthInLife)) continue;
+            if (!OwnsItself(life, ManaInLife)) continue;
+
+            if (!ReadVital(life + ManaInLife, out int curMp, out int maxMp)) continue;
+            if (maxMp != wantMp) continue;
+
+            if (!ReadVital(life + HealthInLife, out int curHp, out int maxHp)) continue;
+            if (maxHp != wantHp) continue;
+
+            _structured = true;
+            _manaDelta = ManaInLife - HealthInLife;
+            _curOffset = VitalCurrent - VitalTotal;
+
+            Log.Write($"memory: found the Life component at {life:X} - health and mana "
+                      + $"both point back to it. life {curHp}/{maxHp}, mana {curMp}/{maxMp}");
+            return life;
+        }
+
+        Log.Write("memory: no structure matched; falling back to matching numbers by "
+                  + "distance, which is weaker");
+        _structured = false;
         if (lifeAt.Count == 0 || manaAt.Count == 0)
         {
             Status = $"no {wantHp} and {wantMp} found together - are those your maxima?";
