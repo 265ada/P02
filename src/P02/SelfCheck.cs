@@ -24,6 +24,11 @@ internal static class SelfCheck
     {
         var found = new List<Finding>();
 
+        // Whether anything exact is actually reading right now. Several of the
+        // checks below are about the numbers, and the numbers are only the
+        // thing keeping you alive while memory is not.
+        bool memoryReading = cfg.UseMemory && engine.MemoryLocked;
+
         void Say(int rank, string what, string fix) => found.Add(new Finding(rank, what, fix));
 
         if (!cfg.Life.Enabled && !cfg.Mana.Enabled)
@@ -50,7 +55,7 @@ internal static class SelfCheck
             if (!w.Enabled) continue;
 
             bool numbers = w.UseText && w.TextRegion.IsValid;
-            if (!numbers && !cfg.UseMemory)
+            if (!numbers && !memoryReading)
                 Say(0, $"{name} has nothing exact to read.",
                     "Press \"Set it up for me\" with the game on screen.");
 
@@ -58,11 +63,23 @@ internal static class SelfCheck
             // start, and asking at launch always answered "nothing is coming
             // back" - which is how a working setup was accused of being broken
             // every single time it opened.
+            // Not a fault that stops anything while memory is reading the pool
+            // exactly. It said "this is not protecting you yet" on a machine
+            // whose own panel read "memory, life 1,340/1,504" - which is not
+            // merely wrong, it is the opposite of what was happening, and it
+            // teaches people to ignore the one warning that matters.
             if (numbers && engine.TextAvailable && engine.UptimeMs > 6000
                 && !engine.NumbersReading(name))
-                Say(0, $"{name}'s numbers are set up but nothing is coming back from them.",
-                    "Press \"Set it up for me\" while standing somewhere safe with the "
-                    + "numbers on screen. They are not drawn in menus or on the death screen.");
+                Say(memoryReading ? 2 : 0,
+                    memoryReading
+                        ? $"{name} is being read from memory; its numbers are not coming back."
+                        : $"{name}'s numbers are set up but nothing is coming back from them.",
+                    memoryReading
+                        ? "Nothing is wrong with the reading. The numbers are only a "
+                          + "cross-check while memory has your character."
+                        : "Press \"Set it up for me\" while standing somewhere safe with the "
+                          + "numbers on screen. They are not drawn in menus or on the death "
+                          + "screen.");
 
             if (w.Key.Trim().Length == 0)
                 Say(0, $"{name} has no key set, so it has nothing to press.",
@@ -103,7 +120,7 @@ internal static class SelfCheck
                 "Memory refreshes every 15 ms where reading the screen manages 60-900, "
                 + "and it cannot misread a digit.");
 
-        if (!cfg.NumbersOnly)
+        if (!cfg.NumbersOnly && !memoryReading)
             Say(1, "The globe colours are allowed to decide.",
                 "Tick \"Numbers only\". The globe cannot tell life from energy shield "
                 + "and reads a poisoned globe as empty; nearly every misfire came from it.");

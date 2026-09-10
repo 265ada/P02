@@ -1790,15 +1790,23 @@ public sealed class MainForm : Form
 
         var said = new System.Text.StringBuilder();
 
-        said.AppendLine(lifeOk
-            ? $"Set up. It is reading your life as {lifeSays.Trim()} from the numbers "
-              + "beside the globe, which is exact."
-            : "It could NOT read your life numbers, so it is not protecting you yet.");
+        // Memory counts. It is the better of the two sources, and reporting
+        // "not protecting you" while it reads your life exactly is the app
+        // calling itself broken in front of its own working readout.
+        bool memoryOk = _cfg.UseMemory && _engine.MemoryLocked;
+
+        said.AppendLine(memoryOk
+            ? "Set up. It is reading your life straight from the game, which is exact "
+              + "and immediate."
+            : lifeOk
+                ? $"Set up. It is reading your life as {lifeSays.Trim()} from the numbers "
+                  + "beside the globe, which is exact."
+                : "It could NOT read your life, so it is not protecting you yet.");
         said.AppendLine();
         said.AppendLine(found);
         said.AppendLine();
 
-        if (lifeOk)
+        if (lifeOk || memoryOk)
         {
             said.AppendLine($"It will press \"{_cfg.Life.Key}\" when life falls below "
                             + $"{_cfg.Life.Threshold:P0}. Nothing is sent until you arm it.");
@@ -1827,7 +1835,7 @@ public sealed class MainForm : Form
 
         MessageBox.Show(this, said.ToString().TrimEnd(), "Set it up",
                         MessageBoxButtons.OK,
-                        lifeOk && !left.Any(f => f.Stops)
+                        (lifeOk || memoryOk) && !left.Any(f => f.Stops)
                             ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
