@@ -415,6 +415,9 @@ public sealed class MonitorEngine : IDisposable
         var report = new List<string>();
         var seen = new Dictionary<string, int>();
 
+        // Taken before anything is adopted, so a change of character shows.
+        int lifeBefore = _cfg.Life.KnownMax;
+
         foreach (var (label, cfg) in new[]
                  { ("Life", _cfg.Life), ("Mana", _cfg.Mana), ("Shield", _cfg.Shield) })
         {
@@ -452,7 +455,45 @@ public sealed class MonitorEngine : IDisposable
 
             seen[label] = max;
             report.Add($"{label}: {cur:N0}/{max:N0}");
+
+            // Adopt it. All of them, not just life.
+            //
+            // Setup read "Mana 117/117" off the screen, put it in the report,
+            // and threw the number away - because only life's maximum was ever
+            // taken from here. So a new character showed 138 life correctly
+            // beside a maximum mana of 581 belonging to the last one, and the
+            // memory search went hunting a number that no longer existed
+            // anywhere in the game. That is the same staleness that stopped
+            // memory working for days, in a second place.
+            if (cfg.KnownMax != max)
+            {
+                Log.Write(cfg.KnownMax == 0
+                    ? $"setup: maximum {label.ToLowerInvariant()} set to {max} from the numbers"
+                    : $"setup: maximum {label.ToLowerInvariant()} {cfg.KnownMax} is out of "
+                      + $"date - the numbers say {max}");
+                cfg.KnownMax = max;
+                MaxAdopted?.Invoke(label, 0, max);
+            }
         }
+
+        // A different life total is a different character, and the maxima that
+        // were not re-read belong to whoever it was before. A stored number
+        // nothing has confirmed is worse than no number at all: it is what the
+        // memory search hunts for, and it will never be found.
+        if (seen.TryGetValue("Life", out int nowLife) && lifeBefore != 0
+            && nowLife != lifeBefore)
+        {
+            foreach (var (label, cfg) in new[]
+                     { ("Mana", _cfg.Mana), ("Shield", _cfg.Shield) })
+            {
+                if (seen.ContainsKey(label) || cfg.KnownMax == 0) continue;
+                Log.Write($"setup: this is a different character - forgetting the stored "
+                          + $"maximum {label.ToLowerInvariant()} of {cfg.KnownMax}");
+                cfg.KnownMax = 0;
+                report.Add($"{label}: stored maximum was the last character's - cleared");
+            }
+        }
+
 
         // Two stats reading the same numbers means one box is on the other's
         // line. Life reading shield is the dangerous direction.
