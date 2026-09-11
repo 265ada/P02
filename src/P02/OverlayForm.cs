@@ -620,13 +620,13 @@ public sealed class OverlayForm : Form
 
         int y = Pad;
         Row(g, "Life", _life, _lifeTrigger, _lifeKey, y, Theme.Good, LifeRed,
-                _lifeFires, true);
+                _lifeFires);
         y += RowH;
 
         if (ManaShown)
         {
             Row(g, "Mana", _mana, _manaTrigger, _manaKey, y, ManaBlue, ManaBlue,
-                    0, false);
+                    _manaFires);
             y += RowH;
         }
 
@@ -636,7 +636,7 @@ public sealed class OverlayForm : Form
         // here rather than on mana's own row because that row can be switched
         // off, and the count still matters when it is.
         _mpWidth = 0;
-        if (_manaFires > 0 || _inCombat)
+        if (!ManaShown && (_manaFires > 0 || _inCombat))
         {
             string mp = $"MP {_manaFires}";
             int w = (int)Math.Ceiling(g.MeasureString(mp, Theme.Big).Width);
@@ -706,41 +706,22 @@ public sealed class OverlayForm : Form
 
     private void Row(Graphics g, string name, GlobeReading r, double trigger,
                      string key, int y, Color full, Color tallyInk,
-                     int fires, bool countLeft)
+                     int fires)
     {
-        Glyph(g, name, Theme.Dim, Theme.Small, Pad, y + 2);
-
-        // The tally for this pool, on the side its globe is on.
+        // The tally IS the label.
         //
-        // One combined number could not answer the question anyone actually
-        // has mid-fight, which is not "how many flasks went out" but "how many
-        // of MY LIFE flasks went out" - and a mana flask firing three times a
-        // second hid behind a total that merely looked like a busy fight.
-        //
-        // Life sits left and mana right because that is where the globes are:
-        // the number is found by the same glance that finds the globe, without
-        // having to read a label to know which pool it belongs to.
-        string tally = fires > 0 || _inCombat ? $"HP {fires}" : "";
-        int countW = tally.Length == 0
-            ? 0
-            : (int)Math.Ceiling(g.MeasureString(tally, Theme.Big).Width) + 6;
+        // Reserving a column for it pushed the bar across and made it shorter,
+        // which is the one thing the readout can least afford to lose - the bar
+        // is the part you read at a glance, and it was the right size already.
+        // "HP" says everything the word "Life" said in half the room, so the
+        // count goes where the word was and the bar keeps every pixel it had.
+        string tag = name == "Life" ? "HP" : "MP";
+        string tally = fires > 0 || _inCombat ? $"{tag} {fires}" : tag;
+        Glyph(g, tally, _inCombat ? tallyInk : Theme.Dim, Theme.UiBold, Pad, y + 1);
 
-        int barX = Pad + NameW + (countLeft ? countW : 0);
-        var bar = new Rectangle(barX, y + 4,
-                                ClientSize.Width - barX - ValueW - Pad
-                                    - (countLeft ? 0 : countW),
-                                BarH);
+        int barX = Pad + NameW;
+        var bar = new Rectangle(barX, y + 4, ClientSize.Width - barX - ValueW - Pad, BarH);
 
-        if (tally.Length > 0)
-        {
-            // Not the bar's colour. A red bar already means "below your
-            // trigger", and a life bar that is red all the time would throw
-            // that away; the tally is red because the globe it counts for is.
-            var ink = _inCombat ? tallyInk : Theme.Dim;
-            Glyph(g, tally, ink, Theme.Big,
-                  countLeft ? Pad + NameW : ClientSize.Width - Pad - countW + 3,
-                  y - 2);
-        }
         int radius = BarH / 2;
 
         // A bed under the bar, so an empty one reads as an empty bar rather
