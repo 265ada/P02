@@ -438,8 +438,9 @@ public sealed class MainForm : Form
         method.Items.AddRange(["Injected input", "Posted to window", "Controller"]);
         method.SelectedIndex = cfg.UseController ? 2
             : cfg.InputMethod.Equals("postmessage", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-        method.SelectedIndexChanged += (_, _) =>
+        void ChoseMethod()
         {
+            Log.Write($"input: \"{method.SelectedItem}\" chosen (index {method.SelectedIndex})");
             _cfg.UseController = method.SelectedIndex == 2;
             if (!_cfg.UseController)
                 _cfg.InputMethod = method.SelectedIndex == 1 ? "postmessage" : "sendinput";
@@ -465,7 +466,18 @@ public sealed class MainForm : Form
             _life.RefreshFromConfig();
             _mana.RefreshFromConfig();
             Save();
-        };
+        }
+
+        // Both, because the two fire in different circumstances and the one
+        // thing this must not do again is change nothing and say nothing.
+        method.SelectedIndexChanged += (_, _) => ChoseMethod();
+        method.SelectionChangeCommitted += (_, _) => ChoseMethod();
+
+        Log.Write($"input: presses go by "
+                  + (cfg.UseController ? "controller" : cfg.InputMethod)
+                  + $", life button \"{cfg.Life.PadButton}\", mana button "
+                  + $"\"{cfg.Mana.PadButton}\"");
+
         Controls.Add(method);
         Tips.On(method, Tips.SendBy);
 

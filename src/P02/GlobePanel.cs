@@ -39,8 +39,6 @@ public sealed class GlobePanel : Card
     private readonly Label _warn = new();
     private readonly KeyBindBox _key = new();
     private readonly ComboBox _pad = new();
-    private Label? _keyLabel;
-    private Label? _padLabel;
 
     /// <summary>
     /// Whether presses are going to a controller, asked of whoever owns the
@@ -171,20 +169,25 @@ public sealed class GlobePanel : Card
         Tips.On(_threshold, Tips.FireBelow);
         Controls.Add(Lab("%", 156, y + 4));
 
-        _keyLabel = Lab("Key", 190, y + 4);
-        Controls.Add(_keyLabel);
+        Controls.Add(Lab("Key", 190, y + 4));
         _key.SetBounds(222, y, 84, 24);
         _key.Key = cfg.Key;
         _key.KeyBound += k => { _cfg.Key = k; _onChange(); };
         Controls.Add(_key);
         Tips.On(_key, Tips.Key);
+        y += 32;
 
-        // The same slot, for people on a pad. Both are kept in the settings, so
-        // switching between a controller and a keyboard does not mean setting
-        // the whole thing up twice.
-        _padLabel = Lab("Button", 176, y + 4);
-        Controls.Add(_padLabel);
-        _pad.SetBounds(226, y, 150, 24);
+        // Always here, not swapped in.
+        //
+        // It used to appear only once "Send keys by" had been set to
+        // Controller, which put a settings box behind a mechanism that could
+        // fail - and did: the panel asked whether a controller was in use
+        // before anything had said, got nothing, and drew a key box. A row
+        // that is always present cannot fail to appear, and the dropdown then
+        // decides which of the two is actually pressed rather than which one
+        // you are allowed to fill in.
+        Controls.Add(Lab("Controller", 14, y + 4, Tips.PadButton));
+        _pad.SetBounds(90, y, 216, 24);
         _pad.DropDownStyle = ComboBoxStyle.DropDownList;
         _pad.Items.Add("not set");
         foreach (var (_, says) in Gamepad.Buttons) _pad.Items.Add(says);
@@ -196,16 +199,12 @@ public sealed class GlobePanel : Card
             _cfg.PadButton = _pad.SelectedIndex <= 0
                 ? ""
                 : Gamepad.Buttons[_pad.SelectedIndex - 1].Name;
+            Log.Write($"{title}: controller button set to "
+                      + (_cfg.PadButton.Length == 0 ? "nothing" : _cfg.PadButton));
             _onChange();
         };
         Controls.Add(_pad);
         Tips.On(_pad, Tips.PadButton);
-
-        bool onPad = UsingController?.Invoke() ?? false;
-        _keyLabel.Visible = !onPad;
-        _key.Visible = !onPad;
-        _padLabel.Visible = onPad;
-        _pad.Visible = onPad;
         y += 32;
 
         Controls.Add(Lab("Cooldown", 14, y + 4, Tips.Cooldown));
@@ -1403,13 +1402,6 @@ public sealed class GlobePanel : Card
     {
         _region.Text = _cfg.Region.ToString();
 
-        // One or the other, never both: two ways to say what gets pressed is
-        // two things to get wrong.
-        bool pad = UsingController?.Invoke() ?? false;
-        if (_keyLabel is not null) _keyLabel.Visible = !pad;
-        _key.Visible = !pad;
-        if (_padLabel is not null) _padLabel.Visible = pad;
-        _pad.Visible = pad;
 
         // Find numbers fills the maxima in as it goes, and the boxes were left
         // showing whatever was in them before.
