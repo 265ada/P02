@@ -343,6 +343,26 @@ public sealed class AppConfig
     public string OnClose { get; set; } = "ask";
 
     /// <summary>
+    /// Which pad to pretend to be: "xbox" or "sony".
+    ///
+    /// Steam Input does not pass a controller through - it reads yours and
+    /// presents its own - and it handles PlayStation pads by a different path
+    /// from Xbox ones. If one is being swallowed, the other is the next thing
+    /// to try.
+    /// </summary>
+    public string PadKind { get; set; } = "xbox";
+
+    /// <summary>
+    /// Send the key as well as the button.
+    ///
+    /// Belt and braces for a machine with Steam Input in the middle, where it
+    /// is genuinely hard to know which layer a press will survive. A flask that
+    /// fires twice is not a problem - the second press lands on a flask already
+    /// going and does nothing - and a flask that does not fire is.
+    /// </summary>
+    public bool AlsoPressKey { get; set; } = true;
+
+    /// <summary>
     /// Read life and mana from the game's memory instead of from the screen.
     /// Exact and instant, and by far the most intrusive thing here - reading
     /// another process is what anti-cheat looks for, where watching the screen

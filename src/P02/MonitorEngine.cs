@@ -2094,7 +2094,8 @@ public sealed class MonitorEngine : IDisposable
             if (floor <= 0) return false;
             if (frac > floor + 0.05) used = false;
             if (frac > floor || used || _keys.Busy) return false;
-            if (!_keys.Send(c.Key, c.HoldMs, 1, 40, PostingKeys, GameWindow, PadFor(c))) return false;
+            if (!_keys.Send(c.Key, c.HoldMs, 1, 40, PostingKeys, GameWindow, PadFor(c),
+                        _cfg.UseController && _cfg.AlsoPressKey)) return false;
 
             used = true;
             st.LastFireMs = now;
@@ -2150,7 +2151,8 @@ public sealed class MonitorEngine : IDisposable
 
         int shots = Math.Clamp(c.BurstCount, 1, 5);
         if (!_keys.Send(c.Key, c.HoldMs, shots, Math.Clamp(c.BurstGapMs, 5, 500),
-                        PostingKeys, GameWindow, PadFor(c)))
+                        PostingKeys, GameWindow, PadFor(c),
+                        _cfg.UseController && _cfg.AlsoPressKey))
             return new GlobeReading(name, frac, true, "", fromText, textRaw);
 
         st.LastFireMs = now;

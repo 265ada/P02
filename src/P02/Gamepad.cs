@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Nefarius.ViGEm.Client;
 using Nefarius.ViGEm.Client.Targets;
+using Nefarius.ViGEm.Client.Targets.DualShock4;
 using Nefarius.ViGEm.Client.Targets.Xbox360;
 
 namespace P02;
@@ -26,8 +27,21 @@ namespace P02;
 internal static class Gamepad
 {
     private static ViGEmClient? _client;
-    private static IXbox360Controller? _pad;
+    private static IXbox360Controller? _xbox;
+    private static IDualShock4Controller? _sony;
     private static bool _tried;
+
+    /// <summary>
+    /// Which kind of pad to pretend to be.
+    ///
+    /// It matters more than it sounds. Steam Input does not pass a controller
+    /// through to a game - it reads yours and presents one of its own - and
+    /// what it does with a third pad that turns up depends on which sort it
+    /// thinks that pad is. Steam handles PlayStation controllers by a different
+    /// path from Xbox ones, so if one is being swallowed the other is the next
+    /// thing to try, and it costs nothing to offer both.
+    /// </summary>
+    public static string Kind { get; set; } = "xbox";
 
     /// <summary>Why it is not working, in words worth showing somebody.</summary>
     public static string Why { get; private set; } = "";
@@ -37,8 +51,19 @@ internal static class Gamepad
         get
         {
             Connect();
-            return _pad is not null;
+            return _xbox is not null || _sony is not null;
         }
+    }
+
+    /// <summary>Drops the pad so a different kind can be put in its place.</summary>
+    public static void Rebuild()
+    {
+        try { _xbox?.Disconnect(); } catch { }
+        try { _sony?.Disconnect(); } catch { }
+        _xbox = null;
+        _sony = null;
+        _client = null;
+        _tried = false;
     }
 
     /// <summary>
@@ -100,7 +125,8 @@ internal static class Gamepad
         }
         catch (Exception ex)
         {
-            _pad = null;
+            _xbox = null;
+            _sony = null;
             _client = null;
             Why = "The ViGEmBus driver is not installed, so there is no controller to "
                   + "press. Get it from github.com/nefarius/ViGEmBus/releases, install "
@@ -114,8 +140,17 @@ internal static class Gamepad
     private static void Open()
     {
         _client = new ViGEmClient();
-        _pad = _client.CreateXbox360Controller();
-        _pad.Connect();
+
+        if (Kind.Equals("sony", StringComparison.OrdinalIgnoreCase))
+        {
+            _sony = _client.CreateDualShock4Controller();
+            _sony.Connect();
+        }
+        else
+        {
+            _xbox = _client.CreateXbox360Controller();
+            _xbox.Connect();
+        }
     }
 
     /// <summary>Forgets a failed attempt, so installing the driver needs no restart.</summary>
@@ -135,7 +170,7 @@ internal static class Gamepad
     public static bool Press(string button, int holdMs)
     {
         Connect();
-        if (_pad is null) return false;
+        if (_xbox is null && _sony is null) return false;
 
         try
         {
@@ -151,7 +186,8 @@ internal static class Gamepad
         {
             Log.Write($"controller: press failed - {ex.Message}");
             Why = $"The virtual pad stopped answering: {ex.Message}";
-            _pad = null;
+            _xbox = null;
+            _sony = null;
             _tried = false;
             return false;
         }
@@ -161,33 +197,87 @@ internal static class Gamepad
     private static void Tap(string button, int holdMs)
     {
         Set(button, true);
-        _pad!.SubmitReport();
+        Submit();
         Thread.Sleep(Math.Clamp(holdMs, 20, 400));
         Set(button, false);
-        _pad.SubmitReport();
+        Submit();
+    }
+
+    private static void Submit()
+    {
+        _xbox?.SubmitReport();
+        _sony?.SubmitReport();
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void Set(string button, bool down)
     {
-        if (_pad is null) return;
+        if (_sony is not null) { Sony(button, down); return; }
+        if (_xbox is null) return;
 
         switch (button.ToUpperInvariant())
         {
-            case "A": _pad.SetButtonState(Xbox360Button.A, down); break;
-            case "B": _pad.SetButtonState(Xbox360Button.B, down); break;
-            case "X": _pad.SetButtonState(Xbox360Button.X, down); break;
-            case "Y": _pad.SetButtonState(Xbox360Button.Y, down); break;
-            case "LB": _pad.SetButtonState(Xbox360Button.LeftShoulder, down); break;
-            case "RB": _pad.SetButtonState(Xbox360Button.RightShoulder, down); break;
-            case "UP": _pad.SetButtonState(Xbox360Button.Up, down); break;
-            case "DOWN": _pad.SetButtonState(Xbox360Button.Down, down); break;
-            case "LEFT": _pad.SetButtonState(Xbox360Button.Left, down); break;
-            case "RIGHT": _pad.SetButtonState(Xbox360Button.Right, down); break;
-            case "LS": _pad.SetButtonState(Xbox360Button.LeftThumb, down); break;
-            case "RS": _pad.SetButtonState(Xbox360Button.RightThumb, down); break;
-            case "LT": _pad.SetSliderValue(Xbox360Slider.LeftTrigger, down ? (byte)255 : (byte)0); break;
-            case "RT": _pad.SetSliderValue(Xbox360Slider.RightTrigger, down ? (byte)255 : (byte)0); break;
+            case "A": _xbox.SetButtonState(Xbox360Button.A, down); break;
+            case "B": _xbox.SetButtonState(Xbox360Button.B, down); break;
+            case "X": _xbox.SetButtonState(Xbox360Button.X, down); break;
+            case "Y": _xbox.SetButtonState(Xbox360Button.Y, down); break;
+            case "LB": _xbox.SetButtonState(Xbox360Button.LeftShoulder, down); break;
+            case "RB": _xbox.SetButtonState(Xbox360Button.RightShoulder, down); break;
+            case "UP": _xbox.SetButtonState(Xbox360Button.Up, down); break;
+            case "DOWN": _xbox.SetButtonState(Xbox360Button.Down, down); break;
+            case "LEFT": _xbox.SetButtonState(Xbox360Button.Left, down); break;
+            case "RIGHT": _xbox.SetButtonState(Xbox360Button.Right, down); break;
+            case "LS": _xbox.SetButtonState(Xbox360Button.LeftThumb, down); break;
+            case "RS": _xbox.SetButtonState(Xbox360Button.RightThumb, down); break;
+            case "LT": _xbox.SetSliderValue(Xbox360Slider.LeftTrigger, down ? (byte)255 : (byte)0); break;
+            case "RT": _xbox.SetSliderValue(Xbox360Slider.RightTrigger, down ? (byte)255 : (byte)0); break;
+        }
+    }
+    /// <summary>
+    /// The same buttons on a PlayStation pad.
+    ///
+    /// Named for Xbox throughout, because that is what the picker offers and
+    /// because a face button is a position before it is a letter: A is where
+    /// Cross is, and both of them are the bottom one.
+    /// </summary>
+    private static void Sony(string button, bool down)
+    {
+        if (_sony is null) return;
+
+        switch (button.ToUpperInvariant())
+        {
+            case "A": _sony.SetButtonState(DualShock4Button.Cross, down); break;
+            case "B": _sony.SetButtonState(DualShock4Button.Circle, down); break;
+            case "X": _sony.SetButtonState(DualShock4Button.Square, down); break;
+            case "Y": _sony.SetButtonState(DualShock4Button.Triangle, down); break;
+            case "LB": _sony.SetButtonState(DualShock4Button.ShoulderLeft, down); break;
+            case "RB": _sony.SetButtonState(DualShock4Button.ShoulderRight, down); break;
+            case "LS": _sony.SetButtonState(DualShock4Button.ThumbLeft, down); break;
+            case "RS": _sony.SetButtonState(DualShock4Button.ThumbRight, down); break;
+
+            case "LT":
+                _sony.SetButtonState(DualShock4Button.TriggerLeft, down);
+                _sony.SetSliderValue(DualShock4Slider.LeftTrigger, down ? (byte)255 : (byte)0);
+                break;
+            case "RT":
+                _sony.SetButtonState(DualShock4Button.TriggerRight, down);
+                _sony.SetSliderValue(DualShock4Slider.RightTrigger, down ? (byte)255 : (byte)0);
+                break;
+
+            // A PlayStation pad reports its d-pad as one direction rather than
+            // four buttons, so letting go is a direction of its own.
+            case "UP":
+                _sony.SetDPadDirection(down ? DualShock4DPadDirection.North : DualShock4DPadDirection.None);
+                break;
+            case "DOWN":
+                _sony.SetDPadDirection(down ? DualShock4DPadDirection.South : DualShock4DPadDirection.None);
+                break;
+            case "LEFT":
+                _sony.SetDPadDirection(down ? DualShock4DPadDirection.West : DualShock4DPadDirection.None);
+                break;
+            case "RIGHT":
+                _sony.SetDPadDirection(down ? DualShock4DPadDirection.East : DualShock4DPadDirection.None);
+                break;
         }
     }
 }

@@ -297,6 +297,30 @@ internal static class Tips
         "sense, and when your maximum changes. Use it after switching character.",
     ];
 
+    public static readonly string[] PadKind =
+    [
+        "Which sort of controller P02 pretends to be.",
+        "",
+        "Steam Input does not pass your controller through to the game - it",
+        "reads yours and hands the game one of its own. What it does with a",
+        "third pad that turns up depends on which sort it thinks that pad is,",
+        "and it treats PlayStation controllers differently from Xbox ones.",
+        "",
+        "If one of them is being swallowed, try the other.",
+    ];
+
+    public static readonly string[] AlsoKey =
+    [
+        "Sends the keyboard key as well as the controller button.",
+        "",
+        "With Steam Input in the middle it is genuinely hard to know which",
+        "layer a press will survive, so this sends both and lets whichever",
+        "works get through.",
+        "",
+        "A flask that fires twice is not a problem - the second press lands on",
+        "a flask already going and does nothing. A flask that does not fire is.",
+    ];
+
     public static readonly string[] PadButton =
     [
         "Which button on the pad this flask sits on, in the game's own",

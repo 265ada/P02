@@ -531,6 +531,65 @@ public sealed class MainForm : Form
         Controls.Add(method);
         Tips.On(method, Tips.SendBy);
 
+        // Which pad to be, and whether to send the key as well.
+        //
+        // Both exist because of Steam Input, which reads your controller and
+        // hands the game one of its own - so a third pad turning up is at the
+        // mercy of what Steam decides it is. Neither of these can be reasoned
+        // out from here; they are two things to try, and trying them should
+        // not mean editing a settings file.
+        y += 30;
+        var padKindLbl = Cap(new Label { Text = "Pretend to be", AutoSize = true },
+                             Tips.PadKind);
+        Controls.Add(padKindLbl);
+
+        var padKind = new ComboBox
+        {
+            Bounds = new Rectangle(84, y, 150, 24),
+            DropDownStyle = ComboBoxStyle.DropDownList,
+        };
+        padKind.Items.AddRange(["An Xbox pad", "A PlayStation pad"]);
+        padKind.SelectedIndex =
+            cfg.PadKind.Equals("sony", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        Gamepad.Kind = cfg.PadKind;
+        Controls.Add(padKind);
+        Tips.On(padKind, Tips.PadKind);
+
+        var alsoKey = new CheckBox
+        {
+            Text = "Send the key too",
+            Checked = cfg.AlsoPressKey,
+            AutoSize = true,
+        };
+        Controls.Add(alsoKey);
+        Tips.On(alsoKey, Tips.AlsoKey);
+
+        // Read rather than awaited, the same as the send method above, because
+        // on this machine a box can be changed without its handler ever
+        // hearing about it.
+        _poll.Tick += (_, _) =>
+        {
+            if (IsDisposed || padKind.IsDisposed) return;
+
+            string kind = padKind.SelectedIndex == 1 ? "sony" : "xbox";
+            if (kind != _cfg.PadKind)
+            {
+                Log.Write($"controller: pretending to be {(kind == "sony" ? "a PlayStation" : "an Xbox")} pad");
+                _cfg.PadKind = kind;
+                Gamepad.Kind = kind;
+                Gamepad.Rebuild();
+                if (_cfg.UseController) _ = Gamepad.Available;
+                Save();
+            }
+
+            if (alsoKey.Checked != _cfg.AlsoPressKey)
+            {
+                _cfg.AlsoPressKey = alsoKey.Checked;
+                Log.Write($"controller: the key is {(alsoKey.Checked ? "also" : "no longer")} sent");
+                Save();
+            }
+        };
+
         var postedNote = Cap(new Label { Text = "Posting reaches a window that is not focused.", AutoSize = true, ForeColor = SystemColors.GrayText }, Tips.SendBy);
         Controls.Add(postedNote);
 
