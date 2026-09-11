@@ -13,7 +13,7 @@
     <RootNamespace>P02</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
-    <Version>2.86.1</Version>
+    <Version>2.87.0</Version>
 
     <!-- One file, no runtime prerequisite: the whole app is the exe you share. -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -30,7 +30,12 @@
     <EmbeddedResource Include="app.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Nefarius.ViGEm.Client" Version="1.21.256" />
+  </ItemGroup>
+
 </Project>
+
 
 
 

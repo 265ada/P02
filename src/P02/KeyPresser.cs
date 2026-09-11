@@ -18,7 +18,7 @@ namespace P02;
 internal sealed class KeyPresser : IDisposable
 {
     private readonly record struct Job(string Key, int HoldMs, int Count, int GapMs,
-                                      bool Post, nint Window);
+                                      bool Post, nint Window, string Pad);
 
     private readonly BlockingCollection<Job> _queue = new(new ConcurrentQueue<Job>(), 1);
     private readonly Thread _thread;
@@ -49,7 +49,7 @@ internal sealed class KeyPresser : IDisposable
     /// was refused. Never blocks the caller.
     /// </summary>
     public bool Send(string key, int holdMs, int count = 1, int gapMs = 40,
-                     bool post = false, nint window = 0)
+                     bool post = false, nint window = 0, string pad = "")
     {
         if (Interlocked.CompareExchange(ref _busy, 1, 0) != 0)
         {
@@ -79,7 +79,7 @@ internal sealed class KeyPresser : IDisposable
 
         Volatile.Write(ref _busySinceMs, _clock.ElapsedMilliseconds);
 
-        if (_queue.TryAdd(new Job(key, holdMs, count, gapMs, post, window))) return true;
+        if (_queue.TryAdd(new Job(key, holdMs, count, gapMs, post, window, pad))) return true;
 
         Volatile.Write(ref _busy, 0);
         return false;
@@ -95,7 +95,12 @@ internal sealed class KeyPresser : IDisposable
                 {
                     for (int i = 0; i < job.Count; i++)
                     {
-                        if (job.Post) KeySender.PostTo(job.Window, job.Key, job.HoldMs);
+                        // A controller button when one is asked for, and the
+                        // keyboard otherwise. The pad is not "another way to
+                        // send a key" - a game in controller mode is not
+                        // listening to the keyboard at all.
+                        if (job.Pad.Length > 0) Gamepad.Press(job.Pad, job.HoldMs);
+                        else if (job.Post) KeySender.PostTo(job.Window, job.Key, job.HoldMs);
                         else KeySender.Tap(job.Key, job.HoldMs);
                         if (i < job.Count - 1) Thread.Sleep(job.GapMs);
                     }

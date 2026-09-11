@@ -112,9 +112,23 @@ internal static class SelfCheck
                         + "press \"Set it up for me\" while the numbers are on screen.");
             }
 
-            if (w.Key.Trim().Length == 0)
+            if (cfg.UseController)
+            {
+                if (w.PadButton.Trim().Length == 0)
+                    Say(0, $"{name} has no controller button set, so it has nothing to "
+                         + "press.",
+                        $"Pick one on the {name} panel - whichever button your {name} "
+                         + "flask sits on in the game's controller layout.");
+                else if (!Gamepad.Available)
+                    Say(0, "A controller button is set, but there is no virtual pad to "
+                         + "press it on.",
+                        Gamepad.Why);
+            }
+            else if (w.Key.Trim().Length == 0)
+            {
                 Say(0, $"{name} has no key set, so it has nothing to press.",
                     $"Click the Key box on the {name} panel and press your flask key.");
+            }
 
             if (w.BurstCount > 1)
                 Say(2, $"{name} sends {w.BurstCount} presses per trigger.",

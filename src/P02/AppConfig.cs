@@ -97,6 +97,14 @@ public sealed class WatcherConfig
     public double Threshold { get; set; } = 0.50;
 
     public string Key { get; set; } = "1";
+
+    /// <summary>
+    /// The controller button for this pool, when pressing a pad rather than a
+    /// keyboard. Kept beside the key rather than replacing it, so switching
+    /// back and forth does not mean setting it up twice.
+    /// </summary>
+    public string PadButton { get; set; } = "";
+
     /// <summary>
     /// How long the key is held down. A game reads input once a frame, so a
     /// press shorter than a frame can go down and back up between two of them
@@ -315,6 +323,15 @@ public sealed class AppConfig
     /// Which works is a matter for testing, so both are here.
     /// </summary>
     public string InputMethod { get; set; } = "postmessage";
+
+    /// <summary>
+    /// Press a controller button instead of a key.
+    ///
+    /// A game in controller mode ignores the keyboard completely, so every key
+    /// sent went nowhere and the flasks never fired. This needs the ViGEmBus
+    /// driver, which presents a virtual pad Windows can be told to press.
+    /// </summary>
+    public bool UseController { get; set; }
 
     /// <summary>
     /// Read life and mana from the game's memory instead of from the screen.

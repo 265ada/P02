@@ -297,6 +297,18 @@ internal static class Tips
         "sense, and when your maximum changes. Use it after switching character.",
     ];
 
+    public static readonly string[] PadButton =
+    [
+        "Which button on the pad this flask sits on, in the game's own",
+        "controller layout. Xbox names first, PlayStation beside them.",
+        "",
+        "This is not a key being sent a different way. A game in controller",
+        "mode ignores the keyboard outright, which is why keys went nowhere.",
+        "P02 presents a virtual pad through the ViGEmBus driver and presses",
+        "that instead - so the driver has to be installed for any of it to",
+        "work, and P02 will say so if it is not.",
+    ];
+
     public static readonly string[] Badge =
     [
         "P02, and nothing else. It is drawn rather than loaded - the orb is",

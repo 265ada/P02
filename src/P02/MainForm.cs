@@ -425,12 +425,33 @@ public sealed class MainForm : Form
             Bounds = new Rectangle(64, y, 150, 24),
             DropDownStyle = ComboBoxStyle.DropDownList,
         };
-        method.Items.AddRange(["Injected input", "Posted to window"]);
-        method.SelectedIndex = cfg.InputMethod.Equals("postmessage",
-            StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        // A controller is not a third way of sending a key. A game in
+        // controller mode is not listening to the keyboard at all, which is why
+        // every press went nowhere and the flasks simply never fired.
+        method.Items.AddRange(["Injected input", "Posted to window", "Controller"]);
+        method.SelectedIndex = cfg.UseController ? 2
+            : cfg.InputMethod.Equals("postmessage", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         method.SelectedIndexChanged += (_, _) =>
         {
-            _cfg.InputMethod = method.SelectedIndex == 1 ? "postmessage" : "sendinput";
+            _cfg.UseController = method.SelectedIndex == 2;
+            if (!_cfg.UseController)
+                _cfg.InputMethod = method.SelectedIndex == 1 ? "postmessage" : "sendinput";
+
+            if (_cfg.UseController)
+            {
+                Gamepad.TryAgain();
+                if (!Gamepad.Available)
+                    Told(NoticeBoard.Level.Alert, "There is no virtual controller to press",
+                         Gamepad.Why);
+                else
+                    Told(NoticeBoard.Level.Info, "A virtual controller is connected",
+                         "Pick the button each flask sits on, on its own panel. The game "
+                         + "sees the presses as coming from a pad, which is the only thing "
+                         + "it listens to while you are playing on one.");
+            }
+
+            _life.RefreshFromConfig();
+            _mana.RefreshFromConfig();
             Save();
         };
         Controls.Add(method);
@@ -597,6 +618,7 @@ public sealed class MainForm : Form
 
         BackColor = Theme.Bg;
         Icon = AppIcon.Load();
+        GlobePanel.UsingController = () => _cfg.UseController;
 
         // The backdrop is one bitmap redrawn on resize, so it has to be told
         // to repaint - and double buffering, or a window this busy tears.
@@ -1893,12 +1915,20 @@ public sealed class MainForm : Form
     /// </summary>
     private void TestKeys()
     {
+        // Whatever it would actually press. Testing a keyboard key on a setup
+        // that presses a controller proves nothing, and proving nothing is
+        // worse than not testing at all - it is the button people press to
+        // find out whether this reaches the game.
+        string What(WatcherConfig c) => _cfg.UseController ? c.PadButton : c.Key;
+
         var keys = new List<string>();
-        if (_cfg.Life.Enabled) keys.Add(_cfg.Life.Key);
-        if (_cfg.Mana.Enabled) keys.Add(_cfg.Mana.Key);
+        if (_cfg.Life.Enabled && What(_cfg.Life).Length > 0) keys.Add(What(_cfg.Life));
+        if (_cfg.Mana.Enabled && What(_cfg.Mana).Length > 0) keys.Add(What(_cfg.Mana));
         if (keys.Count == 0)
         {
-            Told(NoticeBoard.Level.Warn, "Switch on a globe first.");
+            Told(NoticeBoard.Level.Warn, _cfg.UseController
+                     ? "Pick a controller button first."
+                     : "Switch on a globe first.");
             return;
         }
 
@@ -1908,8 +1938,17 @@ public sealed class MainForm : Form
         {
             t.Stop();
             t.Dispose();
-            if (_cfg.Life.Enabled) _engine.TestKey(_cfg.Life.Key, _cfg.Life.HoldMs);
-            if (_cfg.Mana.Enabled) _engine.TestKey(_cfg.Mana.Key, _cfg.Mana.HoldMs);
+            if (_cfg.UseController)
+            {
+                foreach (var c in new[] { _cfg.Life, _cfg.Mana })
+                    if (c.Enabled && c.PadButton.Length > 0)
+                        Gamepad.Press(c.PadButton, c.HoldMs);
+            }
+            else
+            {
+                if (_cfg.Life.Enabled) _engine.TestKey(_cfg.Life.Key, _cfg.Life.HoldMs);
+                if (_cfg.Mana.Enabled) _engine.TestKey(_cfg.Mana.Key, _cfg.Mana.HoldMs);
+            }
             Log.Write($"test keys sent: {string.Join(", ", keys)}");
             BeginInvoke(RefreshArmUi);
         };

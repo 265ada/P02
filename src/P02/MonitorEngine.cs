@@ -1165,6 +1165,17 @@ public sealed class MonitorEngine : IDisposable
         return structured ? Verdict.TrustMemory : Verdict.HoldBoth;
     }
 
+    /// <summary>
+    /// The controller button this pool should press, or nothing for the
+    /// keyboard.
+    ///
+    /// Empty unless a pad is being used and a button has actually been chosen -
+    /// silently pressing a button nobody picked would be worse than pressing
+    /// nothing at all.
+    /// </summary>
+    private string PadFor(WatcherConfig c)
+        => _cfg.UseController && c.PadButton.Length > 0 ? c.PadButton : "";
+
     /// <summary>How often a pool's numbers come back unreadable.</summary>
     public void GarbleRate(string name, out int garbled, out int attempts)
         => _ocr.GarbleRate(name, out garbled, out attempts);
@@ -2083,7 +2094,7 @@ public sealed class MonitorEngine : IDisposable
             if (floor <= 0) return false;
             if (frac > floor + 0.05) used = false;
             if (frac > floor || used || _keys.Busy) return false;
-            if (!_keys.Send(c.Key, c.HoldMs, 1, 40, PostingKeys, GameWindow)) return false;
+            if (!_keys.Send(c.Key, c.HoldMs, 1, 40, PostingKeys, GameWindow, PadFor(c))) return false;
 
             used = true;
             st.LastFireMs = now;
@@ -2139,7 +2150,7 @@ public sealed class MonitorEngine : IDisposable
 
         int shots = Math.Clamp(c.BurstCount, 1, 5);
         if (!_keys.Send(c.Key, c.HoldMs, shots, Math.Clamp(c.BurstGapMs, 5, 500),
-                        PostingKeys, GameWindow))
+                        PostingKeys, GameWindow, PadFor(c)))
             return new GlobeReading(name, frac, true, "", fromText, textRaw);
 
         st.LastFireMs = now;
