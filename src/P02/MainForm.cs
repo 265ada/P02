@@ -538,14 +538,13 @@ public sealed class MainForm : Form
         // mercy of what Steam decides it is. Neither of these can be reasoned
         // out from here; they are two things to try, and trying them should
         // not mean editing a settings file.
-        y += 30;
         var padKindLbl = Cap(new Label { Text = "Pretend to be", AutoSize = true },
                              Tips.PadKind);
         Controls.Add(padKindLbl);
 
         var padKind = new ComboBox
         {
-            Bounds = new Rectangle(84, y, 150, 24),
+            Bounds = new Rectangle(0, 0, 150, 24),
             DropDownStyle = ComboBoxStyle.DropDownList,
         };
         padKind.Items.AddRange(["An Xbox pad", "A PlayStation pad"]);
@@ -770,7 +769,8 @@ public sealed class MainForm : Form
             [[findAll, checkBtn], [howBtn], [updBtn, histBtn, upd], [diagBtn, logBtn]],
             [[numbersOnly], [mem], [rescan], [pollLbl, _pollHz]],
             [[winLbl], [_window, clearBtn], [armKeyLbl, _hotkey],
-             [sendLbl, method], [postedNote], [testBtn]],
+             [sendLbl, method], [padKindLbl, padKind], [alsoKey],
+             [postedNote], [testBtn]],
             [[sound, disarmedDing], [oftenLbl, gap, msLbl], [volLbl, vol, dbLbl]],
             [[shareBtn, applyBtn], [hide]]);
 

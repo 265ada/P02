@@ -914,8 +914,26 @@ public sealed class MonitorEngine : IDisposable
                     // A stored maximum nothing in the game holds is wrong, and
                     // keeping it means searching for it forever. Let it go and
                     // the numbers fill it back in within seconds.
-                    if (_mem.MaxMissing >= 3 && _cfg.Life.KnownMax > 0)
+                    // Unless the screen is saying that very number.
+                    //
+                    // This was meant for a maximum left over from an older
+                    // character, which nothing in the game holds and nothing
+                    // can correct. It does not apply when the numbers beside
+                    // the globe are reading it back at you: there, the number
+                    // is right and the search is what is failing, and throwing
+                    // the number away only means the numbers re-read it a
+                    // moment later and the whole thing goes round again.
+                    //
+                    // It went round four hundred times in a few minutes, and
+                    // every lap threw away the memory search that was halfway
+                    // through finding the answer.
+                    int onScreen = _ocr.StableMaxOf("Life");
+
+                    if (_mem.MaxMissing >= 3 && _cfg.Life.KnownMax > 0
+                        && onScreen != _cfg.Life.KnownMax
+                        && _ocr.NowMs - _forgotMaxAtMs > 60000)
                     {
+                        _forgotMaxAtMs = _ocr.NowMs;
                         Log.Write($"Life: nothing in the game holds a maximum of "
                                   + $"{_cfg.Life.KnownMax} - that number is wrong, so it is "
                                   + "being forgotten and read again from the screen");
@@ -1236,6 +1254,7 @@ public sealed class MonitorEngine : IDisposable
     }
 
     private long _hudSeenMs;
+    private long _forgotMaxAtMs = long.MinValue / 2;
 
     public bool NumbersReading(string name) =>
         _ocr.TryGet(name, out var r) && _ocr.NowMs - r.AtMs < 4000;
