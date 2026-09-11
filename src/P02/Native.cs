@@ -359,6 +359,25 @@ internal static class Native
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_TRANSPARENT = 0x00000020;
 
+    /// <summary>Every top-level window, for the "I am already running" nudge.</summary>
+    public const nint HWND_BROADCAST = 0xFFFF;
+
+    /// <summary>
+    /// A message of our own, so a second launch can ask the first to show
+    /// itself.
+    ///
+    /// Registered by name, which Windows turns into the same number in every
+    /// process that asks for it - so the copy being started and the copy
+    /// already running agree on what it means without sharing anything else.
+    /// </summary>
+    public static readonly uint WM_P02_SHOW = RegisterWindowMessage("P02.ShowYourself");
+
+    [DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = CharSet.Unicode)]
+    private static extern uint RegisterWindowMessage(string name);
+
+    [DllImport("user32.dll", EntryPoint = "PostMessageW")]
+    public static extern bool PostMessage(nint hWnd, uint msg, nint wParam, nint lParam);
+
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
     public static extern nint GetWindowLongPtr(nint hWnd, int index);
 

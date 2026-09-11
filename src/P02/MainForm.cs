@@ -40,6 +40,9 @@ public sealed class MainForm : Form
     private readonly TextBox _window = new();
     private readonly ComboBox _hotkey = new();
     private readonly NotifyIcon _tray = new();
+
+    /// <summary>Set when quitting for real, so the close question is not asked twice.</summary>
+    private bool _reallyQuitting;
     private readonly Label _live = new();
     private readonly NumericUpDown _pollHz = new();
     private readonly Button _pin = new();
@@ -1542,21 +1545,44 @@ public sealed class MainForm : Form
         _tray.Visible = true;
         _tray.Text = "P02";
         _tray.DoubleClick += (_, _) => RestoreFromTray();
+        _tray.Click += (_, e) =>
+        {
+            // One click too. Hunting for the second click of a double is not a
+            // thing anybody should have to do to get a window back.
+            if (e is MouseEventArgs { Button: MouseButtons.Left }) RestoreFromTray();
+        };
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Show", null, (_, _) => RestoreFromTray());
         menu.Items.Add("Arm / disarm", null, (_, _) => _engine.Toggle());
         menu.Items.Add("Bring overlay back", null, (_, _) => ResetOverlay());
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Quit", null, (_, _) => { _tray.Visible = false; Application.Exit(); });
+        menu.Items.Add("Quit", null, (_, _) =>
+        {
+            // Chosen deliberately from the tray, so it is not asked about again.
+            _reallyQuitting = true;
+            _tray.Visible = false;
+            Application.Exit();
+        });
         _tray.ContextMenuStrip = menu;
     }
 
-    private void RestoreFromTray()
+    /// <summary>
+    /// Brings the window back, properly.
+    ///
+    /// Show and Activate ask politely, and Windows refuses a background process
+    /// the foreground - it flashes the taskbar instead, which behind a
+    /// fullscreen game is nothing at all. Taking it is the only thing that
+    /// actually puts the window in front of somebody.
+    /// </summary>
+    public void RestoreFromTray()
     {
         Show();
-        WindowState = FormWindowState.Normal;
+        if (WindowState == FormWindowState.Minimized)
+            WindowState = FormWindowState.Normal;
         Activate();
+        BringToFront();
+        Native.ForceForeground(Handle);
     }
 
     // ---- hotkey ----------------------------------------------------------
@@ -1609,6 +1635,13 @@ public sealed class MainForm : Form
 
     protected override void WndProc(ref Message m)
     {
+        // A second copy of P02 being started, asking this one to show itself.
+        if (m.Msg == Native.WM_P02_SHOW)
+        {
+            Log.Write("another launch asked for the window - bringing it to the front");
+            BeginInvoke(RestoreFromTray);
+        }
+
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HotkeyId)
             _engine.Toggle();
         else if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == SetupHotkeyId)
@@ -2176,12 +2209,53 @@ public sealed class MainForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        // The X button hides to tray; Application.Exit really quits.
-        if (e.CloseReason == CloseReason.UserClosing)
+        // The X button used to hide to the tray, always, without a word - which
+        // is indistinguishable from a program that ignored you, and sent people
+        // hunting the tray for something they thought they had shut. It asks
+        // now, and remembers the answer if you say so.
+        if (e.CloseReason == CloseReason.UserClosing && !_reallyQuitting)
         {
-            e.Cancel = true;
-            Hide();
-            return;
+            string want = _cfg.OnClose;
+
+            if (want == "ask")
+            {
+                var box = new TaskDialogPage
+                {
+                    Caption = "P02",
+                    Heading = "Close P02, or leave it running?",
+                    Text = "Left running it keeps watching and can still fire. Closed, it "
+                           + "does nothing at all until you start it again.",
+                    Icon = TaskDialogIcon.Information,
+                    AllowCancel = true,
+                    Verification = new TaskDialogVerificationCheckBox("Always do this"),
+                    Buttons =
+                    {
+                        new TaskDialogButton("Leave it running") { Tag = "hide" },
+                        new TaskDialogButton("Close it") { Tag = "close" },
+                        TaskDialogButton.Cancel,
+                    },
+                };
+
+                var chose = TaskDialog.ShowDialog(this, box);
+                string? tag = chose.Tag as string;
+
+                if (tag is null) { e.Cancel = true; return; }
+                if (box.Verification.Checked)
+                {
+                    _cfg.OnClose = tag;
+                    _cfg.SaveNow();
+                    Log.Write($"close: the X button will {tag} from now on");
+                }
+
+                want = tag;
+            }
+
+            if (want != "close")
+            {
+                e.Cancel = true;
+                Hide();
+                return;
+            }
         }
         _engine.Dispose();
         if (WindowState == FormWindowState.Normal)

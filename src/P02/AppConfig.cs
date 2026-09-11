@@ -334,6 +334,15 @@ public sealed class AppConfig
     public bool UseController { get; set; }
 
     /// <summary>
+    /// What the X button does: ask, hide to the tray, or close for good.
+    ///
+    /// It used to hide, always, without saying so - which is indistinguishable
+    /// from a program that ignored you, and left people hunting the tray for
+    /// something they thought they had shut.
+    /// </summary>
+    public string OnClose { get; set; } = "ask";
+
+    /// <summary>
     /// Read life and mana from the game's memory instead of from the screen.
     /// Exact and instant, and by far the most intrusive thing here - reading
     /// another process is what anti-cheat looks for, where watching the screen

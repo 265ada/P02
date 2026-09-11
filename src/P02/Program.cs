@@ -9,8 +9,10 @@ internal static class Program
         using var single = new Mutex(true, @"Local\P02-singleton", out bool first);
         if (!first)
         {
-            MessageBox.Show("P02 is already running — look in the system tray.",
-                            "P02", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            // Clicking the icon again means "show me P02", not "tell me where
+            // it is". Being informed that the thing you just asked for is
+            // already somewhere else is a worse answer than simply doing it.
+            Native.PostMessage(Native.HWND_BROADCAST, Native.WM_P02_SHOW, 0, 0);
             return;
         }
 
