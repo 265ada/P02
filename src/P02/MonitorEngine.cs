@@ -1342,17 +1342,64 @@ public sealed class MonitorEngine : IDisposable
 
             if (ocrMax > 0 && max > 0 && max != ocrMax)
             {
-                if (st.MemConfirmed)
+                // Two maxima that disagree means one of these is not your pool,
+                // and this is the branch that decides which - the one that
+                // actually runs, rather than the one further down that only
+                // sees a disagreement with the STORED maximum.
+                //
+                // It used to assume the screen was the witness and jump past
+                // memory entirely, keeping the reading from the box. That was
+                // right when memory was a guessed address. It is wrong now, and
+                // what it produced is in the log: mana firing three times a
+                // second at a box reading "19/100" for a pool holding 191,
+                // with memory sitting there reading the pool correctly and
+                // being thrown away every time.
+                //
+                // A structured lock is a component whose vitals point back at
+                // it and whose three pools are self-consistent. A box is a
+                // rectangle somebody dragged once. When they disagree about
+                // something as basic as the size of the pool, the box is on the
+                // wrong line.
+                if (_mem.Structured)
                 {
-                    st.MemConfirmed = false;
-                    if (name == "Life") _lifeMemConfirmed = false;
-                    Log.Write($"{name}: memory says the maximum is {max:N0} but the numbers "
-                              + $"say {ocrMax:N0} - wrong address, searching again");
-                    _mem.Rescan();
-                }
+                    if (now - st.LastMemBadMs > 20000)
+                    {
+                        st.LastMemBadMs = now;
+                        Log.Write($"{name}: the numbers read a maximum of {ocrMax:N0} and "
+                                  + $"the pool holds {max:N0} - that box is on the wrong "
+                                  + "line, so it is being ignored and looked for again");
 
-                textRaw = $"memory max {max:N0}, numbers say {ocrMax:N0} - ignored";
-                goto pastMemory;
+                        // Heal the stored maximum too, or the search keeps
+                        // hunting a number the box invented.
+                        c.KnownMax = max;
+                        RefindNow();
+                    }
+
+                    // Memory carries the pool; the box carries nothing until it
+                    // has been found again.
+                    haveOcr = false;
+                    ocrFrac = 0;
+                }
+                else
+                {
+                    if (st.MemConfirmed)
+                    {
+                        st.MemConfirmed = false;
+                        if (name == "Life") _lifeMemConfirmed = false;
+                        Log.Write($"{name}: memory says the maximum is {max:N0} but the "
+                                  + $"numbers say {ocrMax:N0} - wrong address, searching "
+                                  + "again");
+                        _mem.Rescan();
+                    }
+
+                    // Nothing structural to appeal to, so neither of them fires.
+                    // A flask not thrown costs a charge; firing on the wrong
+                    // pool costs the belt, and has three times now.
+                    textRaw = $"memory max {max:N0}, numbers say {ocrMax:N0} - not acting "
+                              + "on either until they agree";
+                    holdOnDisagreement = true;
+                    goto pastMemory;
+                }
             }
 
             if (!st.MemConfirmed && max > 0 && expectedMax > 0 && max == expectedMax)
