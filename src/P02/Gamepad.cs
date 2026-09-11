@@ -86,8 +86,16 @@ internal static class Gamepad
         // the call is inside the try.
         try
         {
+            string before = Native.ControllerSlots();
             Open();
-            Log.Write("controller: a virtual pad is connected and ready");
+
+            // A game looks for controllers when it starts and when one arrives.
+            // A pad that appears in the same instant as the button press it is
+            // meant to carry has not been noticed yet by anything - so it is
+            // worth a moment, and worth saying where it landed.
+            Thread.Sleep(400);
+            Log.Write($"controller: a virtual pad is connected. Windows had slots "
+                      + $"[{before}] before and [{Native.ControllerSlots()}] now");
             Why = "";
         }
         catch (Exception ex)
@@ -131,7 +139,12 @@ internal static class Gamepad
 
         try
         {
-            Tap(button, holdMs);
+            // Longer than a keyboard tap. A key is read as an event and a
+            // single frame of it is enough; a controller button is read as a
+            // state, polled once a frame, and a game running at sixty frames
+            // can miss anything held for less than a couple of them.
+            Tap(button, Math.Max(holdMs, 120));
+            Log.Write($"controller: pressed {button} for {Math.Max(holdMs, 120)} ms");
             return true;
         }
         catch (Exception ex)

@@ -362,6 +362,38 @@ internal static class Native
     /// <summary>Every top-level window, for the "I am already running" nudge.</summary>
     public const nint HWND_BROADCAST = 0xFFFF;
 
+    [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")]
+    private static extern uint XInputGetState(uint index, out XInputState state);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct XInputState
+    {
+        public uint Packet;
+        public ushort Buttons;
+        public byte LeftTrigger, RightTrigger;
+        public short LX, LY, RX, RY;
+    }
+
+    /// <summary>
+    /// Which of the four controller slots Windows currently has something in.
+    ///
+    /// Worth knowing because a virtual pad is only useful if the game can see
+    /// it, and a game that reads one slot will not look in another. If this
+    /// comes back empty while a pad is supposedly connected, the pad is the
+    /// problem; if it comes back with two, something else is holding the slot
+    /// the game is watching.
+    /// </summary>
+    public static string ControllerSlots()
+    {
+        var found = new List<string>();
+        for (uint i = 0; i < 4; i++)
+        {
+            try { if (XInputGetState(i, out _) == 0) found.Add(i.ToString()); }
+            catch { return "XInput is not available on this machine"; }
+        }
+        return found.Count == 0 ? "none" : string.Join(", ", found);
+    }
+
     /// <summary>
     /// A message of our own, so a second launch can ask the first to show
     /// itself.

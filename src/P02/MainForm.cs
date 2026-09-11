@@ -508,6 +508,21 @@ public sealed class MainForm : Form
         };
         _poll.Start();
 
+        // Connected now, not at the first press.
+        //
+        // A game enumerates controllers when it starts and when one arrives. A
+        // pad that springs into existence in the same instant as the press it
+        // is carrying has not been seen by anything yet, and that press goes
+        // nowhere - which is indistinguishable from the press not working.
+        if (cfg.UseController)
+        {
+            Task.Run(() =>
+            {
+                if (Gamepad.Available) return;
+                Log.Write($"controller: {Gamepad.Why}");
+            });
+        }
+
         Log.Write($"input: presses go by "
                   + (cfg.UseController ? "controller" : cfg.InputMethod)
                   + $", life button \"{cfg.Life.PadButton}\", mana button "
