@@ -1006,6 +1006,46 @@ public sealed class MonitorEngine : IDisposable
     private long _started;
 
     /// <summary>Whether memory has an address it is willing to read from.</summary>
+    /// <summary>What to do when memory and the numbers name different maxima.</summary>
+    internal enum Verdict
+    {
+        /// <summary>They agree, or there is nothing to compare.</summary>
+        Agree,
+
+        /// <summary>The box is on the wrong line. Memory carries the pool.</summary>
+        TrustMemory,
+
+        /// <summary>Nothing to appeal to. Neither of them fires.</summary>
+        HoldBoth,
+    }
+
+    /// <summary>
+    /// Which of two disagreeing maxima to believe.
+    ///
+    /// Written once because it was written twice. The same decision existed in
+    /// two branches a few lines apart - one comparing memory against the stored
+    /// maximum, one against what the numbers had just read - and only the
+    /// second ever ran. Fixing the first and shipping it changed nothing at
+    /// all, and the log went on printing the old message while mana emptied
+    /// its flask at a box reading "19/100" for a pool holding 191. Two copies
+    /// of a rule is one copy of a rule and one bug waiting.
+    ///
+    /// A maximum is not a wobble. A box whose maximum is not the pool's
+    /// maximum is on some other line entirely, and everything it reads is about
+    /// something else. A structured memory lock is a component whose vitals
+    /// point back at it and whose pools are self-consistent; a box is a
+    /// rectangle somebody dragged once. So memory wins where it has one.
+    ///
+    /// Where it has not, neither fires. A flask not thrown costs a charge;
+    /// firing on the wrong pool has cost a belt three times.
+    /// </summary>
+    internal static Verdict Judge(bool structured, int memoryMax, int boxMax)
+    {
+        if (memoryMax <= 0 || boxMax <= 0) return Verdict.Agree;
+        if (memoryMax == boxMax) return Verdict.Agree;
+        return structured ? Verdict.TrustMemory : Verdict.HoldBoth;
+    }
+
     /// <summary>How often a pool's numbers come back unreadable.</summary>
     public void GarbleRate(string name, out int garbled, out int attempts)
         => _ocr.GarbleRate(name, out garbled, out attempts);
@@ -1340,7 +1380,8 @@ public sealed class MonitorEngine : IDisposable
                 MaxAdopted?.Invoke(name, wasLevelled, max);
             }
 
-            if (ocrMax > 0 && max > 0 && max != ocrMax)
+            var verdict = Judge(_mem.Structured, max, ocrMax);
+            if (verdict != Verdict.Agree)
             {
                 // Two maxima that disagree means one of these is not your pool,
                 // and this is the branch that decides which - the one that
@@ -1360,7 +1401,7 @@ public sealed class MonitorEngine : IDisposable
                 // rectangle somebody dragged once. When they disagree about
                 // something as basic as the size of the pool, the box is on the
                 // wrong line.
-                if (_mem.Structured)
+                if (verdict == Verdict.TrustMemory)
                 {
                     if (now - st.LastMemBadMs > 20000)
                     {
@@ -1544,7 +1585,7 @@ public sealed class MonitorEngine : IDisposable
             // 1490 but the max is 1490 - wrong structure", then threw the
             // address away and found the same one again ten seconds later,
             // forever. Memory was never once used.
-            else if (max > 0 && expectedMax > 0 && max != expectedMax)
+            else if (Judge(_mem.Structured, max, expectedMax) != Verdict.Agree)
             {
                 // Two maxima that disagree means one of these is not your pool.
                 //
@@ -1563,7 +1604,7 @@ public sealed class MonitorEngine : IDisposable
                 // back at it and whose three pools are self-consistent; the
                 // box is a rectangle somebody once dragged, that OCR returned
                 // "IVI" from a minute ago.
-                if (_mem.Structured)
+                if (Judge(_mem.Structured, max, expectedMax) == Verdict.TrustMemory)
                 {
                     frac = name switch
                     {

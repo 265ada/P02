@@ -439,6 +439,25 @@ static class T
                               + "  a maximum with a phantom digit is still refused");
         }
 
+        // Mana emptying its flask three times a second at a box reading
+        // "19/100" for a pool holding 191. The box was on some other line
+        // entirely, and the reading it produced was about something else.
+        {
+            var onWrongLine = MonitorEngine.Judge(structured: true, memoryMax: 191, boxMax: 100);
+            var noLock = MonitorEngine.Judge(structured: false, memoryMax: 191, boxMax: 100);
+            var fine = MonitorEngine.Judge(structured: true, memoryMax: 191, boxMax: 191);
+            var nothingToSay = MonitorEngine.Judge(structured: true, memoryMax: 0, boxMax: 100);
+
+            Console.WriteLine((onWrongLine == MonitorEngine.Verdict.TrustMemory ? "PASS" : "FAIL")
+                              + $"  a box reading 100 for a pool of 191 loses -> {onWrongLine}");
+            Console.WriteLine((noLock == MonitorEngine.Verdict.HoldBoth ? "PASS" : "FAIL")
+                              + $"  with no structural lock, neither fires -> {noLock}");
+            Console.WriteLine((fine == MonitorEngine.Verdict.Agree ? "PASS" : "FAIL")
+                              + $"  agreement is left alone -> {fine}");
+            Console.WriteLine((nothingToSay == MonitorEngine.Verdict.Agree ? "PASS" : "FAIL")
+                              + $"  nothing to compare is not a disagreement -> {nothingToSay}");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();
