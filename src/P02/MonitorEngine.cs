@@ -804,6 +804,7 @@ public sealed class MonitorEngine : IDisposable
         public bool HadGoodSource;
         public double LastGoodFrac;
         public bool UberUsed;
+        public double NetHeldAt = -1;
         public long ZeroSinceMs;
         public bool LastDitchUsed;
         public long BackoffUntilMs;
@@ -2034,6 +2035,30 @@ public sealed class MonitorEngine : IDisposable
         // not repeat: it fires a single press and then stays quiet until you
         // have climbed back out, so it is a net rather than a second trigger
         // spending charges alongside the first.
+        // A net does not fire on a single frame either.
+        //
+        // The confirming look was added for panic presses and the nets were
+        // left out of it, which is backwards: they are the paths that fire
+        // instantly, from one reading, with no cooldown to slow them. A crop
+        // clipping its own left edge turns "211/211" into "1/211" - a
+        // perfectly well-formed pair, nothing about it looks wrong, and it
+        // reads as half a percent of mana. Both nets went out on it.
+        //
+        // Nothing falls from full to nothing between two frames sixteen
+        // milliseconds apart. If it says you did, look once more before
+        // spending the charge; a misread does not survive into the next frame
+        // and a real emergency still does.
+        bool impossible = st.RecentHigh - frac > 0.4;
+        if (impossible && st.NetHeldAt != frac)
+        {
+            st.NetHeldAt = frac;
+            Log.Write($"{name}: {frac:P1} arrived straight from {st.RecentHigh:P0} - "
+                      + "looking again before spending a charge on it");
+            return new GlobeReading(name, frac, true, "", fromText, textRaw);
+        }
+
+        st.NetHeldAt = -1;
+
         if (frac > 0)
         {
             if (Net(c.UberBelow, ref st.UberUsed, "EMERGENCY")) 
