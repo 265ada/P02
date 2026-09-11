@@ -116,7 +116,17 @@ public sealed class OverlayForm : Form
         if (!IsHandleCreated) return;
 
         bool wanted = _clickThrough && !Native.CtrlHeld;
-        if (wanted == _throughNow) return;
+
+        // Asked of the window, not of a variable we kept.
+        //
+        // The cached flag went stale the moment Windows rebuilt the handle -
+        // which it does for reasons of its own - and the rebuilt window comes
+        // back without the transparent bit, because the style is declared fresh
+        // in CreateParams. The flag still said "already click-through", so the
+        // work was skipped and the setting silently stopped applying. A window
+        // knows whether clicks pass through it; there is no reason to remember
+        // it on its behalf.
+        if (wanted == Native.IsClickThrough(Handle)) { _throughNow = wanted; return; }
 
         _throughNow = wanted;
         Native.ClickThrough(Handle, wanted);
@@ -500,9 +510,17 @@ public sealed class OverlayForm : Form
     {
         base.OnHandleCreated(e);
         Native.ExcludeFromCapture(Handle, false);
+
+        // A rebuilt handle is a window with none of this applied to it: the
+        // extended style is declared from scratch in CreateParams, so anything
+        // stamped on afterwards is gone. Everything that lives in the window
+        // rather than in this object has to be put back.
         _throughNow = false;
         ApplyClickThrough();
         if (_clickThrough) _ctrlWatch.Start();
+        Log.Write($"overlay: ready - click through {(_clickThrough ? "on" : "off")}, "
+                  + $"{(Locked ? "locked" : "movable")}, mana row "
+                  + $"{(ShowMana ? "on" : "off")}");
         Render();
     }
 

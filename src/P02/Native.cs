@@ -373,6 +373,10 @@ internal static class Native
     /// cannot receive the click that would turn it off - so whatever switches
     /// it on must leave a way out somewhere else.
     /// </summary>
+    /// <summary>Whether clicks are passing straight through this window now.</summary>
+    public static bool IsClickThrough(nint hWnd)
+        => hWnd != 0 && (GetWindowLongPtr(hWnd, GWL_EXSTYLE) & WS_EX_TRANSPARENT) != 0;
+
     public static void ClickThrough(nint hWnd, bool on)
     {
         if (hWnd == 0) return;
