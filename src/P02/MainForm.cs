@@ -30,6 +30,9 @@ public sealed class MainForm : Form
     /// What the app has to say, beside the window rather than on top of it.
     /// </summary>
     private readonly NoticeBoard _notices = new();
+
+    /// <summary>The turning orb in the corner, which is only ever decoration.</summary>
+    private readonly OrbBadge _badge = new();
     private readonly Label _focus = new();
     private readonly TextBox _window = new();
     private readonly ComboBox _hotkey = new();
@@ -596,6 +599,10 @@ public sealed class MainForm : Form
         // to repaint - and double buffering, or a window this busy tears.
         DoubleBuffered = true;
         ResizeRedraw = true;
+
+        _badge.SetBounds(10, 4, 26, 26);
+        Controls.Add(_badge);
+        Tips.On(_badge, Tips.Badge);
         ForeColor = Theme.Text;
         Font = Theme.Ui;
         // Rows, written out, rather than a bag of controls packed until they

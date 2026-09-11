@@ -1,4 +1,4 @@
-namespace P02;
+﻿namespace P02;
 
 /// <summary>
 /// Every explanation in one place.
@@ -295,6 +295,17 @@ internal static class Tips
         "",
         "Rarely needed - it re-searches on its own when a reading stops making",
         "sense, and when your maximum changes. Use it after switching character.",
+    ];
+
+    public static readonly string[] Badge =
+    [
+        "P02, and nothing else. It is drawn rather than loaded - the orb is",
+        "built out of geometry every time the app starts, at whatever size it",
+        "is asked for, which is why it can turn.",
+        "",
+        "It does no work and reports nothing. If you would rather have your own",
+        "picture behind the window, put one in the P02 folder beside the log,",
+        "named backdrop.png.",
     ];
 
     public static readonly string[] Pin =
