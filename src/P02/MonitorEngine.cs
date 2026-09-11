@@ -362,8 +362,11 @@ public sealed class MonitorEngine : IDisposable
         return best;
     }
 
+    private long st_LastArgueMs;
+
     private void AdoptChangedMax(string name, WatcherConfig c)
     {
+        long now = _ocr.NowMs;
         if (!c.UseText || !c.TextRegion.IsValid) return;
 
         // Nothing entered: learn it. This is the whole chain - the numbers give
@@ -374,6 +377,44 @@ public sealed class MonitorEngine : IDisposable
         // is a stored maximum that is wrong for the whole of a level.
         int seen = _ocr.StableMaxOf(name);
         if (seen <= 0 || seen == c.KnownMax) return;
+
+        // Two things were adopting maxima and neither would yield.
+        //
+        // The log shows them trading the same setting back and forth ten
+        // milliseconds apart, five times a minute, forever:
+        //
+        //     Mana: maximum 187 refreshed from memory (was 100)
+        //     Mana: maximum changed from 187 to 100 - adopted
+        //
+        // Every one of those adoptions threw the memory address away and
+        // started the search again, which is why memory could never settle.
+        // The mana box was reading rubbish - it had returned "IVI" a moment
+        // earlier - and memory was reading 187 out of the game consistently.
+        //
+        // So memory wins where it has actually locked on. It is the better
+        // source; letting the worse one overrule it, repeatedly, was never
+        // going to end.
+        if (_mem.Structured && _mem.TryGet(out var known))
+        {
+            int fromMemory = name switch
+            {
+                "Life" => known.MaxHp,
+                "Shield" => known.MaxEs,
+                _ => known.MaxMp,
+            };
+
+            if (fromMemory > 0 && fromMemory != seen)
+            {
+                if (now - st_LastArgueMs > 30000)
+                {
+                    st_LastArgueMs = now;
+                    Log.Write($"{name}: the numbers say the maximum is {seen} and memory "
+                              + $"says {fromMemory} - keeping memory's, and leaving the "
+                              + "box alone until it agrees");
+                }
+                return;
+            }
+        }
 
         int was = c.KnownMax;
         c.KnownMax = seen;
@@ -641,6 +682,17 @@ public sealed class MonitorEngine : IDisposable
         // Short history, so we can tell a slow bleed from a hit that is about
         // to kill us and react differently to each.
         private readonly Queue<(long Ms, double Frac)> _hist = new();
+
+        /// <summary>The highest reading in the last third of a second.</summary>
+        public double RecentHigh
+        {
+            get
+            {
+                double top = 0;
+                foreach (var (_, f) in _hist) top = Math.Max(top, f);
+                return top;
+            }
+        }
 
         public void Push(long ms, double frac)
         {
@@ -1744,6 +1796,21 @@ public sealed class MonitorEngine : IDisposable
         bool panic = frac < c.PanicBelow || dropRate >= c.FastDropPctPerSec;
         int gap = panic ? c.PanicCooldownMs : c.CooldownMs;
         int confirm = panic ? 1 : Math.Max(1, c.ConfirmFrames);
+
+        // A fall this steep has to be seen twice.
+        //
+        // Panic exists so that real burst damage is not made to wait for a
+        // confirming frame, and that is right - but it also meant a single
+        // misread frame could fire on its own, and one did. The numbers read
+        // 293 of 298 for a solid second, returned 98 once, and a flask went
+        // out on that one sample: 293 misread as 98 is a leading digit lost,
+        // which is the commonest way for these to fail.
+        //
+        // Waiting for the next reading costs about sixteen milliseconds at
+        // sixty polls a second. Nothing dies in sixteen milliseconds, and a
+        // misread never survives into the following frame.
+        if (panic && st.RecentHigh > 0 && frac < st.RecentHigh - 0.4)
+            confirm = 2;
 
         // Presses are doing nothing: no charges, or they are not arriving.
         // Either way, more of them will not help, so wait instead of emptying
