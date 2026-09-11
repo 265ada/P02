@@ -1398,6 +1398,33 @@ public sealed class GlobePanel : Card
         FitRows();
     }
 
+    /// <summary>
+    /// Takes what the controller box actually says, rather than waiting to be
+    /// told it changed.
+    ///
+    /// Same reason as the send-method box: a selection that never reaches its
+    /// handler leaves a setting that disagrees with the screen, and the screen
+    /// is the thing somebody looked at and believed.
+    /// </summary>
+    public void SyncFromControls()
+    {
+        if (IsDisposed || _pad.IsDisposed) return;
+
+        string says = _pad.SelectedIndex <= 0
+            ? ""
+            : Gamepad.Buttons[_pad.SelectedIndex - 1].Name;
+
+        if (says == _cfg.PadButton) return;
+
+        Log.Write($"{Text}: the controller box says "
+                  + (says.Length == 0 ? "nothing" : says)
+                  + $" and the settings said "
+                  + (_cfg.PadButton.Length == 0 ? "nothing" : _cfg.PadButton)
+                  + " - taking the box");
+        _cfg.PadButton = says;
+        _onChange();
+    }
+
     public void RefreshFromConfig()
     {
         _region.Text = _cfg.Region.ToString();

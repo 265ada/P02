@@ -18,6 +18,7 @@ public sealed class MainForm : Form
     private readonly MonitorEngine _engine;
     private readonly System.Windows.Forms.Timer _critical = new();
     private readonly System.Windows.Forms.Timer _watch = new();
+    private readonly System.Windows.Forms.Timer _poll = new();
     private int _criticalLeft = 31;
     private bool _criticalDone;
 
@@ -471,10 +472,41 @@ public sealed class MainForm : Form
             Save();
         }
 
-        // Both, because the two fire in different circumstances and the one
-        // thing this must not do again is change nothing and say nothing.
         method.SelectedIndexChanged += (_, _) => ChoseMethod();
         method.SelectionChangeCommitted += (_, _) => ChoseMethod();
+
+        // And, because neither of those has ever once fired on this machine.
+        //
+        // The wiring above is correct and the events are attached to the box
+        // that is on screen - and the box has been sitting on "Controller"
+        // through three releases while the settings file said otherwise and the
+        // log recorded no choice at all. Something between the click and the
+        // handler is eating it, and four attempts at guessing what have each
+        // cost a release and changed nothing.
+        //
+        // So this stops asking to be told. Once a second it reads what the box
+        // actually says and makes that true. It is not elegant; it cannot fail
+        // to notice.
+        _poll.Interval = 1000;
+        _poll.Tick += (_, _) =>
+        {
+            if (IsDisposed || method.IsDisposed) return;
+            bool shown = method.SelectedIndex == 2;
+            string shouldBe = method.SelectedIndex == 1 ? "postmessage" : "sendinput";
+
+            _life.SyncFromControls();
+            _mana.SyncFromControls();
+
+            if (shown == _cfg.UseController
+                && (shown || _cfg.InputMethod.Equals(shouldBe, StringComparison.OrdinalIgnoreCase)))
+                return;
+
+            Log.Write($"input: the box says \"{method.SelectedItem}\" and the settings said "
+                      + $"{(_cfg.UseController ? "controller" : _cfg.InputMethod)} - "
+                      + "taking the box");
+            ChoseMethod();
+        };
+        _poll.Start();
 
         Log.Write($"input: presses go by "
                   + (cfg.UseController ? "controller" : cfg.InputMethod)
