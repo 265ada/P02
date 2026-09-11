@@ -755,7 +755,16 @@ public sealed class MonitorEngine : IDisposable
                     // finding anything at all for days: it was hunting a number
                     // the game no longer held. Nothing tells you a saved number
                     // has gone stale, so the fix is to stop letting it.
-                    if (_mem.Structured && _mem.TryGet(out var live))
+                    // Only from an address the numbers have vouched for.
+                    //
+                    // Taken from any structured address, this wrote a maximum
+                    // life of 322 into the settings from an address that was
+                    // declared stale sixteen seconds later. The screen said
+                    // 278 throughout. Everything downstream then hunted 322:
+                    // the numbers were refused for disagreeing with it, which
+                    // made every read count as garbled, which triggered a
+                    // repair, which re-ran setup - once per level.
+                    if (_mem.Structured && _lifeMemConfirmed && _mem.TryGet(out var live))
                     {
                         if (live.MaxMp > 0 && _cfg.Mana.KnownMax != live.MaxMp)
                         {

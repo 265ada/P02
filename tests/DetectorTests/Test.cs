@@ -425,6 +425,20 @@ static class T
                               + $"  overheal is still accepted -> {oc}/{om}");
         }
 
+        // Levelling. The stored maximum is always a moment behind the screen,
+        // and refusing every reading until somebody notices is how it came to
+        // "lose it" once per level.
+        {
+            bool levelled = TextOcr.TryParse("Life 288/288", out int lc, out int lm,
+                                             "Life", 278);
+            bool phantom = TextOcr.TryParse("Life 1,465/11,465", out _, out _,
+                                            "Life", 1465);
+            Console.WriteLine((levelled && lc == 288 && lm == 288 ? "PASS" : "FAIL")
+                              + $"  a levelled maximum is accepted -> {lc}/{lm}");
+            Console.WriteLine((!phantom ? "PASS" : "FAIL")
+                              + "  a maximum with a phantom digit is still refused");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();

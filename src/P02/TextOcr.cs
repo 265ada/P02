@@ -284,17 +284,23 @@ internal sealed partial class TextOcr : IDisposable
         int expected;
         lock (_gate) { label = slot.Label; expected = slot.ExpectedMax; }
 
+        bool got = TryParse(text, out int cur, out int max, label, expected);
+
         lock (_gate)
         {
             slot.Attempts++;
+            if (!got) slot.Garbled++;
+
             // Kept short so a box repaired ten minutes ago is not still being
-            // judged on how it read before.
+            // judged on how it read before. Counted together and under one
+            // lock, or the reader sees a garbled count taken after an
+            // increment against an attempt count taken before it - which is
+            // how the log came to say "41 of the last 40".
             if (slot.Attempts > 60) { slot.Attempts /= 2; slot.Garbled /= 2; }
         }
 
-        if (!TryParse(text, out int cur, out int max, label, expected))
+        if (!got)
         {
-            lock (_gate) slot.Garbled++;
             // Silence here is correct - a refused reading is better than the
             // wrong line - but it should be explicable.
             if (label.Length > 0
@@ -506,10 +512,23 @@ internal sealed partial class TextOcr : IDisposable
                 if (TryNumber(m.Groups[1].Value, out cur)
                     && TryNumber(m.Groups[2].Value, out max)
                     && Sane(cur, max)
-                    // A label can find the right line and still carry a misread
-                    // maximum. If you have said what yours is, anything else is
-                    // wrong however convincing the line looked.
-                    && (expectedMax <= 0 || max == expectedMax))
+                    // A maximum near the one we know, rather than equal to it.
+                    //
+                    // Demanding equality is what made levelling unbearable. The
+                    // moment life went from 278 to 288 every reading was
+                    // refused - the line was found, parsed and sane, and thrown
+                    // away for disagreeing with a number that was simply out of
+                    // date. With nothing readable, the stored maximum could
+                    // never be corrected either, so it stayed wrong until
+                    // something else noticed and re-ran setup, at which point
+                    // the next level did it again.
+                    //
+                    // What the check was really guarding is a stray digit
+                    // turning 1,465 into 11,465, and that is caught just as
+                    // well by asking whether the new maximum is anywhere near
+                    // the old one. A level adds a few percent; a phantom digit
+                    // adds a factor of ten.
+                    && Believable(max, expectedMax))
                     return true;
             }
         }
@@ -601,6 +620,13 @@ internal sealed partial class TextOcr : IDisposable
     /// 100% no matter how little life is actually left. The maximum being right
     /// does not vouch for the current beside it.
     /// </summary>
+    /// <summary>
+    /// Whether a maximum read off the screen is near enough to the one already
+    /// known to be the same pool, levelled, rather than a misread.
+    /// </summary>
+    private static bool Believable(int max, int expected)
+        => expected <= 0 || (max * 2 >= expected && max <= expected * 2);
+
     private static bool Sane(int cur, int max) =>
         max >= 10 && max <= 1_000_000 && cur >= 0 && cur <= max * 2;
 
