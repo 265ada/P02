@@ -22,10 +22,29 @@ public sealed class NoticeBoard : Panel
 {
     public enum Level { Info, Warn, Alert }
 
-    private sealed record Notice(DateTime At, Level Level, string What, string Detail);
+    /// <summary>
+    /// One line on the board, with the size it came out at.
+    ///
+    /// Measuring text is not free, and this used to measure every notice on
+    /// every paint - four hundred measurements for a panel that repaints
+    /// whenever anything is written to the log, which is often. Each line now
+    /// remembers how tall it was at a given width and only works it out again
+    /// when the panel is resized.
+    /// </summary>
+    private sealed class Notice
+    {
+        public DateTime At;
+        public Level Level;
+        public string What = "";
+        public string Detail = "";
+        public int MeasuredAt;
+        public float WhatHigh;
+        public float DetailHigh;
+    }
 
     private readonly List<Notice> _notices = [];
     private const int Keep = 200;
+    private bool _sizing;
 
     public NoticeBoard()
     {
@@ -121,12 +140,15 @@ public sealed class NoticeBoard : Panel
         var last = _notices.Count > 0 ? _notices[0] : null;
         if (last is not null && last.What == what && last.Detail == detail)
         {
-            _notices[0] = last with { At = DateTime.Now };
-            Rebuild();
+            last.At = DateTime.Now;
+            Invalidate();
             return;
         }
 
-        _notices.Insert(0, new Notice(DateTime.Now, level, what, detail));
+        _notices.Insert(0, new Notice
+        {
+            At = DateTime.Now, Level = level, What = what, Detail = detail,
+        });
         if (_notices.Count > Keep) _notices.RemoveRange(Keep, _notices.Count - Keep);
 
         Rebuild();
@@ -153,8 +175,9 @@ public sealed class NoticeBoard : Panel
 
     private void Rebuild()
     {
+        // Not AutoScrollPosition. Setting it runs a layout pass, and this is
+        // called every time anything is written to the log.
         Invalidate();
-        AutoScrollPosition = new Point(0, 0);
     }
 
     private static Color Ink(Level level) => level switch
@@ -196,51 +219,70 @@ public sealed class NoticeBoard : Panel
         {
             var ink = Ink(n.Level);
 
-            // A stripe rather than a background wash: colour that says which
-            // line it belongs to without making the words harder to read,
-            // which is the failure of every coloured log panel there is.
-            var whatSize = g.MeasureString(n.What, Theme.UiBold, wide - 60);
-            int h = (int)whatSize.Height;
-
-            SizeF detailSize = SizeF.Empty;
-            if (n.Detail.Length > 0)
+            if (n.MeasuredAt != wide)
             {
-                detailSize = g.MeasureString(n.Detail, Theme.Small, wide - 10);
-                h += (int)detailSize.Height + 2;
+                n.MeasuredAt = wide;
+                n.WhatHigh = g.MeasureString(n.What, Theme.UiBold, wide - 60).Height;
+                n.DetailHigh = n.Detail.Length == 0
+                    ? 0
+                    : g.MeasureString(n.Detail, Theme.Small, wide - 10).Height;
             }
 
-            if (y + h > 0 && y < Height)
+            int h = (int)n.WhatHigh + (n.Detail.Length == 0 ? 0 : (int)n.DetailHigh + 2);
+
+            // Past the bottom of the panel there is nothing to draw and no
+            // reason to keep walking the list - but the total still has to be
+            // known for the scrollbar, so the rest is counted rather than
+            // drawn.
+            if (y > Height)
+            {
+                y += h + 12;
+                continue;
+            }
+
+            if (y + h > 0)
             {
                 using (var stripe = new SolidBrush(ink))
                     g.FillRectangle(stripe, pad, y + 2, 3, h - 2);
 
                 using (var when = new SolidBrush(Theme.Dim))
-                    // Twelve-hour, because that is the clock in the corner of the
-                    // screen this sits next to.
                     g.DrawString(n.At.ToString("h:mm tt"), Theme.Small, when,
                                  Width - pad - 52, y);
 
                 using (var words = new SolidBrush(
                            n.Level == Level.Info ? Theme.Text : ink))
                     g.DrawString(n.What, Theme.UiBold, words,
-                                 new RectangleF(pad + 10, y, wide - 60, whatSize.Height));
+                                 new RectangleF(pad + 10, y, wide - 60, n.WhatHigh));
 
                 if (n.Detail.Length > 0)
                 {
                     using var quiet = new SolidBrush(Theme.Dim);
                     g.DrawString(n.Detail, Theme.Small, quiet,
-                                 new RectangleF(pad + 10, y + whatSize.Height + 1,
-                                                wide - 10, detailSize.Height));
+                                 new RectangleF(pad + 10, y + n.WhatHigh + 1,
+                                                wide - 10, n.DetailHigh));
                 }
             }
 
             y += h + 12;
         }
 
-        // Room to scroll to the oldest entry.
+        // Room to scroll to the oldest entry - set after the paint, never
+        // during it.
+        //
+        // Changing the scrollable size lays the panel out again, and laying it
+        // out again asks for another paint. Doing that from inside a paint is
+        // how a panel ends up repainting itself in a loop, which costs exactly
+        // as much as it sounds like it does.
         int total = y - AutoScrollPosition.Y + pad;
-        if (AutoScrollMinSize.Height != total)
-            AutoScrollMinSize = new Size(0, total);
+        if (AutoScrollMinSize.Height != total && !_sizing)
+        {
+            _sizing = true;
+            BeginInvoke(() =>
+            {
+                _sizing = false;
+                if (!IsDisposed) AutoScrollMinSize = new Size(0, total);
+            });
+        }
     }
 
     private static GraphicsPath Rounded(Rectangle r, int radius)

@@ -33,6 +33,9 @@ public sealed class MainForm : Form
 
     /// <summary>The turning orb in the corner, which is only ever decoration.</summary>
     private readonly OrbBadge _badge = new();
+
+    /// <summary>Waits for a drag to stop before doing the expensive part.</summary>
+    private readonly System.Windows.Forms.Timer _settle = new();
     private readonly Label _focus = new();
     private readonly TextBox _window = new();
     private readonly ComboBox _hotkey = new();
@@ -666,6 +669,16 @@ public sealed class MainForm : Form
 
         ResizeEnd += (_, _) =>
         {
+            // Let go of the edge and it catches up at once rather than waiting
+            // out the timer.
+            _settle.Stop();
+            if (WindowState != FormWindowState.Minimized)
+            {
+                Backdrop.Forget();
+                Relayout();
+                Invalidate();
+            }
+
             if (WindowState != FormWindowState.Normal) return;
             _cfg.WindowW = ClientSize.Width;
             _cfg.WindowH = ClientSize.Height;
@@ -673,8 +686,34 @@ public sealed class MainForm : Form
         };
 
         // The groups reflow to the width they are given, so anything that
-        // changes it lays them out again.
-        Resize += (_, _) => { if (WindowState != FormWindowState.Minimized) Relayout(); };
+        // changes it lays them out again - but not on every message.
+        //
+        // Laying out means rebuilding the cards: five panels disposed and
+        // remade, every control in the window re-parented, and the backdrop
+        // redrawn at the new size. Windows sends a resize message for every
+        // pixel of a drag, so dragging an edge was asking for all of that a
+        // hundred times a second, which is exactly how the window came to feel
+        // like it was wading.
+        //
+        // A tenth of a second of stillness is imperceptible when you are
+        // dragging, and it turns a hundred rebuilds into one.
+        _settle.Interval = 90;
+        _settle.Tick += (_, _) =>
+        {
+            _settle.Stop();
+            if (WindowState == FormWindowState.Minimized) return;
+            Backdrop.Forget();
+            Relayout();
+            Invalidate();
+        };
+
+        Resize += (_, _) =>
+        {
+            if (WindowState == FormWindowState.Minimized) return;
+            _settle.Stop();
+            _settle.Start();
+        };
+
         Relayout();
 
         RefreshArmUi();

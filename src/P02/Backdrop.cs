@@ -30,14 +30,30 @@ internal static class Backdrop
     {
         if (area.Width <= 0 || area.Height <= 0) return;
 
-        if (_cache is null || _for != area.Size)
+        // Never rendered while the window is being dragged about.
+        //
+        // Drawing this is a few hundred gradient fills, and Windows asks for a
+        // repaint on every pixel of a resize. Re-rendering each time made
+        // dragging an edge feel like wading. The one already in hand is
+        // stretched to fit instead - nobody can see the difference in a window
+        // that is moving - and the real one is drawn again once somebody has
+        // let go and asked for it with Forget.
+        if (_cache is null)
         {
-            _cache?.Dispose();
             _cache = Render(area.Size);
             _for = area.Size;
         }
 
-        g.DrawImageUnscaled(_cache, 0, 0);
+        if (_for == area.Size)
+        {
+            g.DrawImageUnscaled(_cache, 0, 0);
+            return;
+        }
+
+        var was = g.InterpolationMode;
+        g.InterpolationMode = InterpolationMode.NearestNeighbor;
+        g.DrawImage(_cache, 0, 0, area.Width, area.Height);
+        g.InterpolationMode = was;
     }
 
     /// <summary>Throws the cached picture away, so a new one is drawn next paint.</summary>
