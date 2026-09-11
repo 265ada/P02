@@ -1107,6 +1107,7 @@ public sealed class MonitorEngine : IDisposable
         // both claim to be exact and disagree cannot both be right, and the
         // one printed on your screen is the one that is.
         bool haveOcr = false;
+        bool holdOnDisagreement = false;
         double ocrFrac = 0;
         int ocrMax = 0;
         bool textLostOverride = true;
@@ -1496,15 +1497,65 @@ public sealed class MonitorEngine : IDisposable
             // 1490 but the max is 1490 - wrong structure", then threw the
             // address away and found the same one again ten seconds later,
             // forever. Memory was never once used.
-            else if (max > 0 && expectedMax > 0 && max != expectedMax && matchesOcr)
+            else if (max > 0 && expectedMax > 0 && max != expectedMax)
             {
-                textRaw = $"memory says max {max:N0}, yours is {expectedMax:N0} - ignored";
-                if (now - st.LastMemBadMs > 10000)
+                // Two maxima that disagree means one of these is not your pool.
+                //
+                // This branch used to shrug - log "ignored", keep the reading
+                // from the numbers, and carry on firing on it. What that looked
+                // like in practice was mana emptying its flask three times a
+                // second, indefinitely, at a mana box reading "19/100" while
+                // the pool it claimed to be watching held 187.
+                //
+                // A maximum is not a wobble. A box whose maximum is not your
+                // maximum is on the wrong line, and every reading it produces
+                // is about something else - so it does not get to fire.
+                //
+                // Which of the two is yours is not a toss-up either. A
+                // structured memory reading is a component whose vitals point
+                // back at it and whose three pools are self-consistent; the
+                // box is a rectangle somebody once dragged, that OCR returned
+                // "IVI" from a minute ago.
+                if (_mem.Structured)
                 {
-                    st.LastMemBadMs = now;
-                    Log.Write($"{name}: memory found max {max} but the max is {expectedMax}"
-                              + " - wrong structure, searching again");
-                    _mem.Rescan();
+                    frac = name switch
+                    {
+                        "Life" => ms.LifeFraction,
+                        "Shield" => ms.ShieldFraction,
+                        _ => ms.ManaFraction,
+                    };
+                    fromText = true;
+                    textLostOverride = false;
+                    textRaw = $"memory, {name.ToLowerInvariant()} {cur:N0}/{max:N0} - the "
+                              + $"numbers box says {expectedMax:N0} and is on the wrong line";
+
+                    if (now - st.LastMemBadMs > 20000)
+                    {
+                        st.LastMemBadMs = now;
+                        Log.Write($"{name}: the numbers box has a maximum of {expectedMax} "
+                                  + $"and the pool holds {max} - it is on the wrong line, "
+                                  + "so it is being ignored and looked for again");
+                        c.KnownMax = max;
+                        RefindNow();
+                    }
+                }
+                else
+                {
+                    // Nothing structural to appeal to, so neither can be
+                    // trusted to fire. Holding is the safe half of the choice:
+                    // the cost is a flask not thrown, not a character.
+                    textRaw = $"memory says max {max:N0}, the numbers say {expectedMax:N0}"
+                              + " - not acting on either until they agree";
+                    holdOnDisagreement = true;
+
+                    if (now - st.LastMemBadMs > 10000)
+                    {
+                        st.LastMemBadMs = now;
+                        Log.Write($"{name}: memory found max {max} but the box says "
+                                  + $"{expectedMax} - one of them is the wrong line, "
+                                  + "searching again");
+                        _mem.Rescan();
+                    }
                 }
             }
         }
@@ -1561,7 +1612,8 @@ public sealed class MonitorEngine : IDisposable
             Log.Write($"{name}: exact reading is back");
         }
 
-        bool textLost = exactGone && !globeCovers;
+        // Two exact sources naming different maxima is not a reading at all.
+        bool textLost = (exactGone && !globeCovers) || holdOnDisagreement;
 
         // Anything above the floor is a real reading, and the moment it happens
         // is what separates "nearly dead" from "cannot see it".
@@ -1836,7 +1888,16 @@ public sealed class MonitorEngine : IDisposable
         st.Below = 0;
         FiresThisFight++;
 
-        if (c.VerifyEffect)
+        // A check already running is left to finish.
+        //
+        // Panic presses every 260 ms and the effect is judged over 900, so each
+        // press reset the window before it could ever elapse. The verdict was
+        // therefore never reached, "presses changed nothing" never counted, and
+        // the pause that exists precisely to stop a belt being emptied into a
+        // pool that is not moving could never engage. That is how mana came to
+        // fire three times a second, indefinitely, at a box reading someone
+        // else's numbers.
+        if (c.VerifyEffect && !st.Verifying)
         {
             st.Verifying = true;
             st.FireMs = now;
