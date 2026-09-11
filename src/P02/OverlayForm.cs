@@ -47,6 +47,8 @@ public sealed class OverlayForm : Form
     private bool _armed;
     private bool _firing;
     private int _fired;
+    private int _lifeFires;
+    private int _manaFires;
     private bool _inCombat;
     private string _detail = "";
     private string _alert = "";
@@ -235,10 +237,12 @@ public sealed class OverlayForm : Form
         Render();
     }
 
-    public void SetFightCount(int fired, bool inCombat)
+    public void SetFightCount(int life, int mana, bool inCombat)
     {
-        if (fired == _fired && inCombat == _inCombat) return;
-        _fired = fired;
+        if (life == _lifeFires && mana == _manaFires && inCombat == _inCombat) return;
+        _lifeFires = life;
+        _manaFires = mana;
+        _fired = life + mana;
         _inCombat = inCombat;
         Render();
     }
@@ -433,6 +437,9 @@ public sealed class OverlayForm : Form
     /// </summary>
     private static readonly Color ManaBlue = Color.FromArgb(86, 142, 226);
 
+    /// <summary>Life, lit the colour of its own globe.</summary>
+    private static readonly Color LifeRed = Color.FromArgb(214, 86, 78);
+
     /// <summary>
     /// Turns the mana row on or off, from wherever the request came.
     ///
@@ -588,12 +595,14 @@ public sealed class OverlayForm : Form
             g.FillPath(ghost, path);
 
         int y = Pad;
-        Row(g, "Life", _life, _lifeTrigger, _lifeKey, y, Theme.Good);
+        Row(g, "Life", _life, _lifeTrigger, _lifeKey, y, Theme.Good, LifeRed,
+                _lifeFires, true);
         y += RowH;
 
         if (ManaShown)
         {
-            Row(g, "Mana", _mana, _manaTrigger, _manaKey, y, ManaBlue);
+            Row(g, "Mana", _mana, _manaTrigger, _manaKey, y, ManaBlue, ManaBlue,
+                    _manaFires, false);
             y += RowH;
         }
 
@@ -657,12 +666,42 @@ public sealed class OverlayForm : Form
     }
 
     private void Row(Graphics g, string name, GlobeReading r, double trigger,
-                     string key, int y, Color full)
+                     string key, int y, Color full, Color tallyInk,
+                     int fires, bool countLeft)
     {
         Glyph(g, name, Theme.Dim, Theme.Small, Pad, y + 2);
 
-        int barX = Pad + NameW;
-        var bar = new Rectangle(barX, y + 4, ClientSize.Width - barX - ValueW - Pad, BarH);
+        // The tally for this pool, on the side its globe is on.
+        //
+        // One combined number could not answer the question anyone actually
+        // has mid-fight, which is not "how many flasks went out" but "how many
+        // of MY LIFE flasks went out" - and a mana flask firing three times a
+        // second hid behind a total that merely looked like a busy fight.
+        //
+        // Life sits left and mana right because that is where the globes are:
+        // the number is found by the same glance that finds the globe, without
+        // having to read a label to know which pool it belongs to.
+        string tally = fires > 0 || _inCombat ? fires.ToString() : "";
+        int countW = tally.Length == 0
+            ? 0
+            : (int)Math.Ceiling(g.MeasureString(tally, Theme.Big).Width) + 6;
+
+        int barX = Pad + NameW + (countLeft ? countW : 0);
+        var bar = new Rectangle(barX, y + 4,
+                                ClientSize.Width - barX - ValueW - Pad
+                                    - (countLeft ? 0 : countW),
+                                BarH);
+
+        if (tally.Length > 0)
+        {
+            // Not the bar's colour. A red bar already means "below your
+            // trigger", and a life bar that is red all the time would throw
+            // that away; the tally is red because the globe it counts for is.
+            var ink = _inCombat ? tallyInk : Theme.Dim;
+            Glyph(g, tally, ink, Theme.Big,
+                  countLeft ? Pad + NameW : ClientSize.Width - Pad - countW + 3,
+                  y - 2);
+        }
         int radius = BarH / 2;
 
         // A bed under the bar, so an empty one reads as an empty bar rather
@@ -737,15 +776,6 @@ public sealed class OverlayForm : Form
             g.FillEllipse(dot, ClientSize.Width - Pad - 41, y + 4, 9, 9);
         }
 
-        if (_inCombat || _fired > 0)
-        {
-            // The one number you look for mid-fight, so it is sized to be read
-            // at a glance from the corner of an eye rather than squinted at.
-            string n = _fired.ToString();
-            int w = (int)Math.Ceiling(g.MeasureString(n, Theme.Big).Width);
-            Glyph(g, n, _inCombat ? Theme.Warn : Theme.Dim, Theme.Big,
-                  ClientSize.Width - Pad - w, y - 4);
-        }
     }
 
     /// <summary>

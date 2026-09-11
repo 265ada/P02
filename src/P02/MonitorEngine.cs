@@ -30,6 +30,25 @@ public sealed class MonitorEngine : IDisposable
     /// <summary>Keys sent since this fight started.</summary>
     public int FiresThisFight { get; private set; }
 
+    /// <summary>
+    /// Presses this fight, per pool.
+    ///
+    /// One combined number could not answer the question anyone actually has
+    /// mid-fight, which is not "how many flasks" but "how many of MY life
+    /// flasks". Life and mana empty at different rates and for different
+    /// reasons, and a single tally hid a mana flask firing three times a second
+    /// behind a total that looked like a busy fight.
+    /// </summary>
+    private readonly Dictionary<string, int> _firesByPool = new()
+    {
+        ["Life"] = 0, ["Mana"] = 0, ["Shield"] = 0,
+    };
+
+    public int FiresThisFightFor(string pool)
+    {
+        lock (_firesByPool) return _firesByPool.TryGetValue(pool, out int n) ? n : 0;
+    }
+
     /// <summary>Life has dropped recently enough to still count as fighting.</summary>
     public bool InCombat { get; private set; }
 
@@ -921,8 +940,18 @@ public sealed class MonitorEngine : IDisposable
                     if (!fighting)
                     {
                         if (FiresThisFight > 0)
-                            Log.Write($"fight over: {FiresThisFight} press(es) sent");
+                        {
+                            lock (_firesByPool)
+                                Log.Write("fight over: "
+                                    + string.Join(", ", _firesByPool
+                                        .Where(p => p.Value > 0)
+                                        .Select(p => $"{p.Value} {p.Key.ToLowerInvariant()}"))
+                                    + " press(es) sent");
+                        }
                         FiresThisFight = 0;
+                        lock (_firesByPool)
+                            foreach (string pool in _firesByPool.Keys.ToList())
+                                _firesByPool[pool] = 0;
                     }
                 }
 
@@ -1922,6 +1951,7 @@ public sealed class MonitorEngine : IDisposable
             st.LastFireMs = now;
             st.Below = 0;
             FiresThisFight++;
+        lock (_firesByPool) _firesByPool[name] = FiresThisFightFor(name) + 1;
             if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
             Log.Write($"{name}: '{c.Key}' x1 at {frac:P1} {what} - one press, "
                       + "will not repeat until recovered");
@@ -1977,6 +2007,7 @@ public sealed class MonitorEngine : IDisposable
         st.LastFireMs = now;
         st.Below = 0;
         FiresThisFight++;
+        lock (_firesByPool) _firesByPool[name] = FiresThisFightFor(name) + 1;
 
         // A check already running is left to finish.
         //

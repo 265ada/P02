@@ -1360,7 +1360,9 @@ public sealed class MainForm : Form
                         _overlay.SetKeys(_cfg.Life.Enabled ? _cfg.Life.Key.ToUpperInvariant() : "",
                                          _cfg.Mana.Enabled ? _cfg.Mana.Key.ToUpperInvariant() : "");
                         _overlay.Show(life, mana, _cfg.Life.Threshold, _cfg.Mana.Threshold);
-                        _overlay.SetFightCount(_engine.FiresThisFight, _engine.InCombat);
+                        _overlay.SetFightCount(_engine.FiresThisFightFor("Life"),
+                                               _engine.FiresThisFightFor("Mana"),
+                                               _engine.InCombat);
                         if (_cfg.OverlaySnap) PlaceOverlay();
                         else FollowPanels();
                     }
