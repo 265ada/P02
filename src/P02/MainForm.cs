@@ -19,6 +19,11 @@ public sealed class MainForm : Form
     private readonly GlobePanel _mana;
     private readonly Button _arm = new();
     private readonly Label _status = new();
+
+    /// <summary>
+    /// What the app has to say, beside the window rather than on top of it.
+    /// </summary>
+    private readonly NoticeBoard _notices = new();
     private readonly Label _focus = new();
     private readonly TextBox _window = new();
     private readonly ComboBox _hotkey = new();
@@ -43,7 +48,11 @@ public sealed class MainForm : Form
         MaximizeBox = true;
         AutoScroll = true;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(900, 856);
+        ClientSize = new Size(1210, 856);
+
+        _notices.Visible = true;
+        _notices.FollowLog();
+        Controls.Add(_notices);
 
         _pin.SetBounds(864, 6, 24, 22);
         _pin.Text = "P";
@@ -288,10 +297,10 @@ public sealed class MainForm : Form
         checkBtn.Click += (_, _) =>
         {
             var found = SelfCheck.Run(_cfg, _engine, Version);
-            MessageBox.Show(this, SelfCheck.Describe(found), "What is wrong?",
-                            MessageBoxButtons.OK,
-                            found.Any(f => f.Stops) ? MessageBoxIcon.Warning
-                                                    : MessageBoxIcon.Information);
+            Told(found.Any(f => f.Stops) ? NoticeBoard.Level.Alert
+                     : found.Count > 0 ? NoticeBoard.Level.Warn : NoticeBoard.Level.Info,
+                 found.Count == 0 ? "Nothing is wrong." : "What is wrong",
+                 SelfCheck.Describe(found));
         };
         Controls.Add(checkBtn);
         Tips.On(checkBtn, Tips.WhatIsWrong);
@@ -675,6 +684,22 @@ public sealed class MainForm : Form
 
     private bool _laying;
 
+    /// <summary>
+    /// Says something on the board beside the window.
+    ///
+    /// This used to be a MessageBox every time. A box stops the game, has to be
+    /// dismissed before anything else can happen, and erases itself the moment
+    /// it is - so the one occasion it said something that mattered, it said it
+    /// mid-fight and then removed the evidence. And a box that appears often is
+    /// a box people learn to click through without reading, which is precisely
+    /// what happened to the setup warning.
+    /// </summary>
+    private void Told(NoticeBoard.Level level, string what, string detail = "")
+    {
+        if (InvokeRequired) { BeginInvoke(() => Told(level, what, detail)); return; }
+        _notices.Say(level, what, detail);
+    }
+
     private void Relayout()
     {
         if (_groups is null) return;
@@ -692,16 +717,27 @@ public sealed class MainForm : Form
         // fixed coordinates, so any other window width left them off-centre
         // with a growing empty strip down one side.
         int Edge = S(12), Gap = S(10);
-        int half = (ClientSize.Width - Edge * 2 - Gap) / 2;
+
+        // The board keeps a column of its own down the right, and everything
+        // else lays out inside what is left. Narrow the window far enough and
+        // it steps aside rather than squeezing the controls into strips.
+        int boardW = ClientSize.Width >= S(1000) ? S(300) : 0;
+        _notices.Visible = boardW > 0;
+        if (boardW > 0)
+            _notices.SetBounds(ClientSize.Width - Edge - boardW, S(44),
+                               boardW, ClientSize.Height - S(56));
+
+        int room = ClientSize.Width - (boardW > 0 ? boardW + Gap : 0);
+        int half = (room - Edge * 2 - Gap) / 2;
 
         _life.SetBounds(Edge, _life.Top, half, _life.Height);
         _mana.SetBounds(Edge + half + Gap, _mana.Top, half, _mana.Height);
 
         // The arm button keeps its size; the status beside it takes the rest.
         _status.SetBounds(_arm.Right + S(14), _status.Top,
-                          ClientSize.Width - _arm.Right - S(26), _status.Height);
+                          room - _arm.Right - S(26), _status.Height);
         _focus.SetBounds(_arm.Right + S(14), _focus.Top,
-                         ClientSize.Width - _arm.Right - S(26), _focus.Height);
+                         room - _arm.Right - S(26), _focus.Height);
 
         Regroup(_groups[0], _groups[1], _groups[2], _groups[3], _groups[4]);
         }
@@ -730,7 +766,9 @@ public sealed class MainForm : Form
         // Three columns where there is room for them, two where there is not.
         // A narrow window with three columns is three columns of wrapped
         // single words.
-        int usable = ClientSize.Width - Edge * 2;
+        int boardW = _notices.Visible ? _notices.Width + Gap : 0;
+        int room = ClientSize.Width - boardW;
+        int usable = room - Edge * 2;
         int columns = usable >= S(780) ? 3 : 2;
         int wide = (usable - Gap * (columns - 1)) / columns;
 
@@ -746,7 +784,7 @@ public sealed class MainForm : Form
             // The last card on a row takes the remaining pixels, so the right
             // edge lines up with the left one instead of leaving a ragged gap.
             bool last = column == columns - 1 || i == titles.Length - 1;
-            int w = last ? ClientSize.Width - Edge - x : wide;
+            int w = last ? room - Edge - x : wide;
 
             var card = Group(titles[i], x, rowTop, w, contents[i]);
             _groupCards.Add(card);
@@ -854,21 +892,18 @@ public sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Could not write the settings out: {ex.Message}",
-                            "Share settings", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Told(NoticeBoard.Level.Alert, "Could not write the settings out", ex.Message);
             return;
         }
 
         Log.Write($"settings exported to {path}");
-        MessageBox.Show(this,
-            "Copied to the clipboard, and saved as:" + Environment.NewLine
-            + path + Environment.NewLine + Environment.NewLine
+        Told(NoticeBoard.Level.Info, "Settings copied to the clipboard",
+            "Saved as " + path + ". "
             + "It carries every setting except the screen regions and your own "
             + "maxima - those belong to this machine and this character, and are "
             + "found again wherever it is loaded."
             + Environment.NewLine + Environment.NewLine
-            + $"It only loads into v{Version}.",
-            "Share settings", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            + $" It only loads into v{Version}.");
     }
 
     /// <summary>Reads a shared block off the clipboard and applies it.</summary>
@@ -879,18 +914,15 @@ public sealed class MainForm : Form
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            MessageBox.Show(this,
-                "Copy the exported settings text first - all of it, including the "
-                + "first line.",
-                "Apply shared settings", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Told(NoticeBoard.Level.Warn, "Nothing to apply",
+                 "Copy the exported settings text first - all of it, it is one line.");
             return;
         }
 
         string? why = SettingsShare.Import(text, _cfg, Version);
         if (why is not null)
         {
-            MessageBox.Show(this, why, "Apply shared settings",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            Told(NoticeBoard.Level.Warn, "Those settings were not applied", why);
             return;
         }
 
@@ -1463,12 +1495,8 @@ public sealed class MainForm : Form
     private void ReportRepairs()
     {
         if (_cfg.Repairs.Count == 0) return;
-        MessageBox.Show(this,
-            "Some settings were changed by this update:"
-            + Environment.NewLine + Environment.NewLine
-            + " - " + string.Join(Environment.NewLine + Environment.NewLine + " - ",
-                                  _cfg.Repairs),
-            "Settings updated", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        Told(NoticeBoard.Level.Info, "Some settings were changed by this update",
+             string.Join("  ", _cfg.Repairs));
         _cfg.Repairs.Clear();
     }
 
@@ -1491,13 +1519,8 @@ public sealed class MainForm : Form
         _life.RefreshFromConfig();
         _mana.RefreshFromConfig();
 
-        MessageBox.Show(this,
-            "The numbers were not set up yet, so they have been found for you:"
-            + Environment.NewLine + Environment.NewLine + result
-            + Environment.NewLine + Environment.NewLine
-            + "These are exact, need no calibration, and stop it acting on menu "
-            + "screens. Your maximums fill in from them on their own.",
-            "Set up", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        Told(NoticeBoard.Level.Info, "The numbers were not set up, so they were found "
+             + "for you", result);
     }
 
     protected override void OnShown(EventArgs e)
@@ -1550,22 +1573,8 @@ public sealed class MainForm : Form
                 settle.Stop();
                 settle.Dispose();
 
-                var box = new TaskDialogPage
-                {
-                    Caption = "P02 is not ready",
-                    Heading = "This has been wrong for a minute now",
-                    Text = SelfCheck.Describe(wrong),
-                    Icon = TaskDialogIcon.Warning,
-                    Verification = new TaskDialogVerificationCheckBox(
-                        "Don't check this at launch again"),
-                    Buttons = { TaskDialogButton.OK },
-                };
-                TaskDialog.ShowDialog(this, box);
-                if (box.Verification.Checked)
-                {
-                    _cfg.WarnAtLaunch = false;
-                    Save();
-                }
+                Told(NoticeBoard.Level.Alert, "This has been wrong for a minute",
+                     SelfCheck.Describe(wrong));
             };
             settle.Start();
         }
@@ -1713,8 +1722,7 @@ public sealed class MainForm : Form
         if (_cfg.Mana.Enabled) keys.Add(_cfg.Mana.Key);
         if (keys.Count == 0)
         {
-            MessageBox.Show(this, "Switch on a globe first.", "Test keys",
-                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Told(NoticeBoard.Level.Warn, "Switch on a globe first.");
             return;
         }
 
@@ -1753,12 +1761,9 @@ public sealed class MainForm : Form
     {
         if (Native.FindWindowRect(_cfg.WindowMatch) is null)
         {
-            MessageBox.Show(this,
-                "The game does not seem to be on screen." + Environment.NewLine
-                + Environment.NewLine
-                + "Start Path of Exile 2, stand somewhere safe with your life and mana "
-                + "numbers showing, then press this again.",
-                "Set it up", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Told(NoticeBoard.Level.Warn, "The game does not seem to be on screen",
+                "Start Path of Exile 2, stand somewhere safe with your life and mana "
+                + "numbers showing, then press this again.");
             return;
         }
 
@@ -1863,10 +1868,9 @@ public sealed class MainForm : Form
             said.AppendLine(SelfCheck.Describe(left));
         }
 
-        MessageBox.Show(this, said.ToString().TrimEnd(), "Set it up",
-                        MessageBoxButtons.OK,
-                        (lifeOk || memoryOk) && !left.Any(f => f.Stops)
-                            ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        Told((lifeOk || memoryOk) && !left.Any(f => f.Stops)
+                 ? NoticeBoard.Level.Info : NoticeBoard.Level.Alert,
+             "Setup ran", said.ToString().TrimEnd());
     }
 
     private void FindAllNumbers()
@@ -1883,8 +1887,7 @@ public sealed class MainForm : Form
 
         bool trouble = result.Contains("WARNING") || result.Contains("could not")
                        || result.Contains("Could not");
-        MessageBox.Show(this, result, "Find numbers", MessageBoxButtons.OK,
-                        trouble ? MessageBoxIcon.Warning : MessageBoxIcon.Information);
+        Told(NoticeBoard.Level.Info, "Looked for the numbers", result);
     }
 
     private void ExportDiagnostics()

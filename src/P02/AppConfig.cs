@@ -746,10 +746,23 @@ internal static class Log
         t.Start();
     }
 
+    /// <summary>
+    /// Every line, as it is written, for anything that wants to show them.
+    ///
+    /// The panel in the window reads this rather than tailing the file: the
+    /// file is the record, and something being written to it is exactly the
+    /// moment it is worth showing.
+    /// </summary>
+    public static event Action<string>? Line;
+
     public static void Write(string msg)
     {
         // Dropping a line is better than stalling the poll loop behind a disk.
         Queue.TryAdd($"{DateTime.Now:HH:mm:ss.fff}  {msg}");
+
+        // Never allowed to take the caller down, and the caller is often the
+        // poll loop deciding whether to press a key.
+        try { Line?.Invoke(msg); } catch { /* a log must never break anything */ }
     }
 
     private static void Pump()
