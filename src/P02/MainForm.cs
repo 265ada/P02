@@ -6,6 +6,12 @@ namespace P02;
 public sealed class MainForm : Form
 {
     private const int HotkeyId = 0xA02;
+
+    /// <summary>Ctrl+/ runs the whole setup, from anywhere, without alt-tabbing.</summary>
+    private const int SetupHotkeyId = 0xA03;
+    private const uint MOD_CONTROL = 0x0002;
+    private const uint VK_OEM_2 = 0xBF;   // the / key
+    private bool _setupHotkeyRegistered;
     private const int WM_HOTKEY = 0x0312;
 
     private readonly AppConfig _cfg;
@@ -244,7 +250,7 @@ public sealed class MainForm : Form
 
         var findAll = new Button
         {
-            Text = "Set it up for me",
+            Text = "Set it up for me   (Ctrl+/)",
             Bounds = new Rectangle(12, y, 164, 28),
         };
         findAll.Click += (_, _) => FixSetup();
@@ -1471,6 +1477,17 @@ public sealed class MainForm : Form
         _hotkeyRegistered = Native.RegisterHotKey(Handle, HotkeyId, 0, vk);
         if (!_hotkeyRegistered)
             Log.Write($"could not register {_cfg.ArmHotkey} — another app owns it");
+
+        // Ctrl+/ for setup, because the moment you need it is the moment you
+        // are in the game and cannot reach the button - and alt-tabbing to
+        // press it is itself a reason the numbers cannot be read.
+        if (!_setupHotkeyRegistered)
+        {
+            _setupHotkeyRegistered =
+                Native.RegisterHotKey(Handle, SetupHotkeyId, MOD_CONTROL, VK_OEM_2);
+            if (!_setupHotkeyRegistered)
+                Log.Write("could not register Ctrl+/ for setup - another app owns it");
+        }
     }
 
     protected override void OnHandleCreated(EventArgs e)
@@ -1484,6 +1501,11 @@ public sealed class MainForm : Form
     {
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HotkeyId)
             _engine.Toggle();
+        else if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == SetupHotkeyId)
+        {
+            Log.Write("setup: asked for with Ctrl+/");
+            BeginInvoke(FixSetup);
+        }
         base.WndProc(ref m);
     }
 

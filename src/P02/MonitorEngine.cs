@@ -225,6 +225,27 @@ public sealed class MonitorEngine : IDisposable
     private static bool Overlaps(Rectangle a, Rectangle b) =>
         a.Width > 0 && a.Height > 0 && a.IntersectsWith(b);
 
+    private static bool Overlaps(Rectangle a, Rectangle[] any)
+    {
+        foreach (var b in any) if (Overlaps(a, b)) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Where the life and mana numbers live: the bottom corners, the same
+    /// bands the search itself looks in.
+    /// </summary>
+    private static Rectangle[] NumberCorners(Rectangle game)
+    {
+        int w = Math.Max(320, (int)(game.Width * 0.28));
+        int h = Math.Max(200, (int)(game.Height * 0.40));
+        return
+        [
+            new Rectangle(game.Left, game.Bottom - h, w, h),
+            new Rectangle(game.Right - w, game.Bottom - h, w, h),
+        ];
+    }
+
     private int _refinding;
     private long _refoundAtMs = long.MinValue / 2;
     private long _textOkAtMs;
@@ -253,7 +274,20 @@ public sealed class MonitorEngine : IDisposable
         // screen does not need focus - it needs the game to be drawn and not
         // covered by us.
         if (Native.FindWindowRect(_cfg.WindowMatch) is not { } game) return;
-        if (Overlaps(OwnWindow, game)) return;
+        // Only the corners matter, not the whole game window.
+        //
+        // This used to refuse to repair anything while our own window overlapped
+        // the game at all - and the app is a window somebody has open on top of
+        // the game while they read it, so that is nearly always. The result was
+        // a setup that could not fix itself precisely while being watched: the
+        // log filled with the life box reading "071 (Q 71" and the mana box
+        // reading "Spirit 0/90" for minutes on end, with the repair standing by
+        // and never once running.
+        //
+        // What actually stops a re-find is our window sitting over the numbers,
+        // which live in the bottom corners. Anywhere else on the screen is none
+        // of its business.
+        if (Overlaps(OwnWindow, NumberCorners(game))) return;
 
         // Never set up at all is exactly as worth repairing as set up and
         // broken - more so, since nothing has ever worked.
@@ -1807,7 +1841,7 @@ public sealed class MonitorEngine : IDisposable
                 st.Blind = true;
                 Log.Write($"{name}: reading {frac:P1} for 8 seconds - "
                           + (_cfg.NumbersOnly
-                              ? "nothing is being read; press Set it up for me"
+                              ? "nothing is being read - looking for the numbers again"
                               : "the region is not on the globe"));
                 Blind?.Invoke(name, true);
             }
