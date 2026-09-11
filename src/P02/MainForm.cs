@@ -512,14 +512,15 @@ public sealed class MainForm : Form
 
         _engine.Sampled += OnSampled;
         _engine.ArmedChanged += _ => BeginInvoke(RefreshArmUi);
-        _engine.Fired += (_, _) =>
+        _engine.Fired += (pool, _) =>
         {
             if (IsDisposed || !IsHandleCreated) return;
             try
             {
                 BeginInvoke(() =>
                 {
-                    if (_overlay is { IsDisposed: false, Visible: true }) _overlay.Fired();
+                    if (_overlay is { IsDisposed: false, Visible: true })
+                        _overlay.Fired(pool);
                 });
             }
             catch (ObjectDisposedException) { /* closing */ }

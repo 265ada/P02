@@ -47,6 +47,8 @@ public sealed class OverlayForm : Form
     private bool _armed;
     private bool _firing;
     private int _fired;
+    private string _firedPool = "Life";
+    private int _mpWidth;
     private int _lifeFires;
     private int _manaFires;
     private bool _inCombat;
@@ -258,8 +260,12 @@ public sealed class OverlayForm : Form
     }
 
     /// <summary>Blinks when a key is actually sent.</summary>
-    public void Fired()
+    public void Fired(string pool = "Life")
     {
+        // Which pool it was, so the flash is that pool's colour. A single
+        // coloured dot that means "something fired" is one glance short of
+        // useful when two flasks can fire.
+        _firedPool = pool;
         _firing = true;
         Render();
         _fade.Stop();
@@ -620,8 +626,23 @@ public sealed class OverlayForm : Form
         if (ManaShown)
         {
             Row(g, "Mana", _mana, _manaTrigger, _manaKey, y, ManaBlue, ManaBlue,
-                    _manaFires, false);
+                    0, false);
             y += RowH;
+        }
+
+        // Mana's tally sits under life's percentage, in the same column, a
+        // couple of pixels in - so the two read as one stack down the right
+        // rather than as two things that happen to be near each other. It is
+        // here rather than on mana's own row because that row can be switched
+        // off, and the count still matters when it is.
+        _mpWidth = 0;
+        if (_manaFires > 0 || _inCombat)
+        {
+            string mp = $"MP {_manaFires}";
+            int w = (int)Math.Ceiling(g.MeasureString(mp, Theme.Big).Width);
+            _mpWidth = w + 8;
+            Glyph(g, mp, _inCombat ? ManaBlue : Theme.Dim, Theme.Big,
+                  ClientSize.Width - Pad - 2 - w, y - 4);
         }
 
         Status(g, y + 4);
@@ -699,7 +720,7 @@ public sealed class OverlayForm : Form
         // Life sits left and mana right because that is where the globes are:
         // the number is found by the same glance that finds the globe, without
         // having to read a label to know which pool it belongs to.
-        string tally = fires > 0 || _inCombat ? fires.ToString() : "";
+        string tally = fires > 0 || _inCombat ? $"HP {fires}" : "";
         int countW = tally.Length == 0
             ? 0
             : (int)Math.Ceiling(g.MeasureString(tally, Theme.Big).Width) + 6;
@@ -788,10 +809,11 @@ public sealed class OverlayForm : Form
         {
             // A dot rather than a word: it is lit for a quarter of a second and
             // only has to be noticed, not read.
-            using var glow = new SolidBrush(Color.FromArgb(70, Theme.Good));
-            g.FillEllipse(glow, ClientSize.Width - Pad - 44, y + 1, 15, 15);
-            using var dot = new SolidBrush(Theme.Good);
-            g.FillEllipse(dot, ClientSize.Width - Pad - 41, y + 4, 9, 9);
+            var lit = _firedPool == "Mana" ? ManaBlue : LifeRed;
+            using var glow = new SolidBrush(Color.FromArgb(70, lit));
+            g.FillEllipse(glow, ClientSize.Width - Pad - 44 - _mpWidth, y + 1, 15, 15);
+            using var dot = new SolidBrush(lit);
+            g.FillEllipse(dot, ClientSize.Width - Pad - 41 - _mpWidth, y + 4, 9, 9);
         }
 
     }
