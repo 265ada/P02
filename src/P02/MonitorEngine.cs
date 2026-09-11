@@ -853,6 +853,20 @@ public sealed class MonitorEngine : IDisposable
                         }
                     }
 
+                    // A stored maximum nothing in the game holds is wrong, and
+                    // keeping it means searching for it forever. Let it go and
+                    // the numbers fill it back in within seconds.
+                    if (_mem.MaxMissing >= 3 && _cfg.Life.KnownMax > 0)
+                    {
+                        Log.Write($"Life: nothing in the game holds a maximum of "
+                                  + $"{_cfg.Life.KnownMax} - that number is wrong, so it is "
+                                  + "being forgotten and read again from the screen");
+                        _cfg.Life.KnownMax = 0;
+                        _ocr.ForgetGarble("Life");
+                        MaxAdopted?.Invoke("Life", 0, 0);
+                        RefindNow();
+                    }
+
                     _mem.HintMaxHp = ExpectedMax("Life", _cfg.Life, 0);
                     _mem.HintMaxMp = ExpectedMax("Mana", _cfg.Mana, 0);
                     _mem.HintMaxEs = _cfg.Shield.KnownMax;
@@ -1129,18 +1143,25 @@ public sealed class MonitorEngine : IDisposable
 
             if (NumbersReading("Life")) { _hudSeenMs = _ocr.NowMs; return true; }
 
-            // Absence only means "covered" if the numbers were working a moment
-            // ago.
+            // The numbers being gone is only evidence of a menu if something
+            // else can still see your character.
             //
-            // Otherwise a box that has simply gone wrong - misaligned, ignored
-            // for disagreeing, reading a menu - reads as a shop being open
-            // forever, and the readout vanishes for the rest of the session on
-            // a screen with nothing covering anything. Which is what happened:
-            // the numbers were set aside over a four-percent disagreement and
-            // the overlay went with them.
+            // Memory reads straight through a shop, an inventory or the passive
+            // tree - so memory reading fine while the numbers have vanished is
+            // exactly the shape of a panel sitting over the HUD, and that is
+            // worth getting out of the way for.
+            //
+            // Both of them failing at once says nothing about menus. It is a
+            // setup in trouble, and hiding the readout is the last thing that
+            // helps: that is how the overlay disappeared for a whole session on
+            // a screen with nothing covering anything.
             //
             // Something permanently hidden is worse than something occasionally
             // in the way.
+            if (!MemoryLocked) return true;
+
+            // And only if the numbers were ever working, so a box that has
+            // never read does not pass for a shop that never closes.
             return _hudSeenMs == 0 || _ocr.NowMs - _hudSeenMs > 60000;
         }
     }

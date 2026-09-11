@@ -440,6 +440,22 @@ internal sealed partial class TextOcr : IDisposable
             if (word.Length == label.Length && Off(word, label) <= 1) return true;
         }
 
+        // Last, the line with everything that is not a letter taken out.
+        //
+        // OCR puts spaces and specks inside words as readily as it mistakes
+        // letters: "Life" came back as "I i-fe", which splits into "I" and a
+        // four-character word that is two letters wrong, and so failed every
+        // test above. Squeezed down to its letters it reads "Iife", which is
+        // one letter out and unmistakable. Nothing else in a life box looks
+        // remotely like this.
+        var letters = new System.Text.StringBuilder(text.Length);
+        foreach (char c in text)
+            if (char.IsAsciiLetter(c)) letters.Append(c);
+
+        string squeezed = letters.ToString();
+        for (int i = 0; i + label.Length <= squeezed.Length; i++)
+            if (Off(squeezed.Substring(i, label.Length), label) <= 1) return true;
+
         return false;
 
         static int Off(string a, string b)

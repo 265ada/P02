@@ -103,6 +103,12 @@ internal sealed class GameMemory : IDisposable
     /// <summary>Waiting for one of several equal matches to give itself away.</summary>
     public bool Pending => _pending.Count > 1;
 
+    /// <summary>
+    /// Searches in a row in which no vital anywhere held the maximum life we
+    /// were given. Three of those means the number is wrong, not the search.
+    /// </summary>
+    public int MaxMissing { get; private set; }
+
     private bool _structured;
 
     // Where each vital sits inside the Life component, taken from the game
@@ -545,6 +551,15 @@ internal sealed class GameMemory : IDisposable
         }
 
         Log.Write($"memory: {hpSeen} vitals hold {wantHp}, {mpSeen} hold {wantMp}");
+
+        // A maximum that nothing in the game holds is not your maximum.
+        //
+        // The search will hunt a wrong number forever and report nothing found,
+        // which is exactly what it did: "0 vitals hold 346" every ten seconds
+        // for as long as anyone cared to watch, because life was 362 and 346
+        // had been written into the settings by an earlier guess. Counting the
+        // misses lets somebody upstream stop believing the number.
+        MaxMissing = hpSeen == 0 ? MaxMissing + 1 : 0;
 
         // Which of those owners is a Life component.
         //

@@ -466,6 +466,22 @@ static class T
                               + $"  346 against 362 is one pool, four percent apart -> {levelled}");
         }
 
+        // OCR puts specks and spaces inside words. "Life" came back as
+        // "I i-fe", which failed every label test and so threw away the
+        // numbers beside it - which is how a stuck maximum could never correct
+        // itself.
+        {
+            bool speckled = TextOcr.HasLabel("I i-fe 362/362", "Life");
+            bool truncated = TextOcr.HasLabel("Li 362/362", "Life");
+            bool notMana = TextOcr.HasLabel("Mana 207/207", "Life");
+            Console.WriteLine((speckled ? "PASS" : "FAIL")
+                              + "  \"I i-fe\" is still the word Life");
+            Console.WriteLine((truncated ? "PASS" : "FAIL")
+                              + "  a truncated \"Li\" is still Life");
+            Console.WriteLine((!notMana ? "PASS" : "FAIL")
+                              + "  the mana line is not mistaken for Life");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();
