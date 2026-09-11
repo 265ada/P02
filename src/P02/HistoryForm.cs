@@ -17,6 +17,7 @@ internal sealed class HistoryForm : Form
     public HistoryForm(string current)
     {
         Text = "What has changed";
+        Icon = AppIcon.Load();
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(820, 560);
         MinimumSize = new Size(560, 360);

@@ -590,6 +590,12 @@ public sealed class MainForm : Form
         _lastKnownMana = cfg.Mana.KnownMax;
 
         BackColor = Theme.Bg;
+        Icon = AppIcon.Load();
+
+        // The backdrop is one bitmap redrawn on resize, so it has to be told
+        // to repaint - and double buffering, or a window this busy tears.
+        DoubleBuffered = true;
+        ResizeRedraw = true;
         ForeColor = Theme.Text;
         Font = Theme.Ui;
         // Rows, written out, rather than a bag of controls packed until they
@@ -1489,6 +1495,18 @@ public sealed class MainForm : Form
             if (!_setupHotkeyRegistered)
                 Log.Write("could not register Ctrl+/ for setup - another app owns it");
         }
+    }
+
+    /// <summary>
+    /// The scene behind the panels.
+    ///
+    /// Painted here rather than as a control, because every card sits on top at
+    /// full opacity and only the margins show - which is exactly as much flair
+    /// as something read mid-fight should carry.
+    /// </summary>
+    protected override void OnPaintBackground(PaintEventArgs e)
+    {
+        Backdrop.Draw(e.Graphics, ClientRectangle);
     }
 
     protected override void OnHandleCreated(EventArgs e)

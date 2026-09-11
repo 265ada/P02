@@ -129,6 +129,7 @@ internal sealed class HowToForm : Form
     public HowToForm()
     {
         Text = "How to use P02";
+        Icon = AppIcon.Load();
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(680, 620);
         MinimumSize = new Size(520, 400);
