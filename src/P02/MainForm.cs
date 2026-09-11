@@ -1685,6 +1685,15 @@ public sealed class MainForm : Form
         _cfg.ResumeArmed = _engine.Armed;
         _cfg.SaveNow();
 
+        // Every update pauses the game, not only the critical ones.
+        //
+        // An unattended install restarts the app, and a restart takes the
+        // readout, the memory lock and the armed state with it for a few
+        // seconds. Doing that silently behind a live fight is the same hazard
+        // as doing it behind a critical one - it is only the reason for
+        // updating that differs, not what the update does to you mid-pack.
+        PauseGame();
+
         if (!critical)
         {
             Log.Write($"update: taking {what} unattended, armed={_cfg.ResumeArmed}");
@@ -1694,12 +1703,6 @@ public sealed class MainForm : Form
         }
 
         Log.Write($"update: pausing the session for critical release {Updater.Critical}");
-
-        if (_engine.GameWindow != 0)
-        {
-            KeySender.PostTo(_engine.GameWindow, "Escape", 70);
-            KeySender.Tap("Escape", 70);
-        }
 
         Show();
         WindowState = FormWindowState.Normal;
@@ -1732,6 +1735,90 @@ public sealed class MainForm : Form
         // paused, warned, and still on the broken version.
         _ = Updater.CheckAsync(this, silent: true, beforeExit: _cfg.SaveNow,
                                ui: false, install: true);
+    }
+
+    /// <summary>
+    /// Pauses the game and checks that it actually paused.
+    ///
+    /// Sending Escape and hoping was never verification. The key can land in
+    /// the wrong window, arrive while a panel is open and close that instead,
+    /// or be swallowed entirely - and the update then went ahead on a character
+    /// standing in a pack, which is the one thing the pause exists to prevent.
+    ///
+    /// The game says so itself, in large letters across the middle of the
+    /// screen, so that is what gets read. And it is read BEFORE anything is
+    /// sent as well as after: pressing Escape at an already-paused game
+    /// un-pauses it, which would be a perfect way to cause the very thing being
+    /// guarded against.
+    /// </summary>
+    private bool PauseGame()
+    {
+        if (_engine.GameWindow == 0) return false;
+        if (Native.FindWindowRect(_cfg.WindowMatch) is not { } game) return false;
+
+        if (LooksPaused(game))
+        {
+            Log.Write("update: the game is already paused");
+            return true;
+        }
+
+        for (int go = 1; go <= 3; go++)
+        {
+            KeySender.PostTo(_engine.GameWindow, "Escape", 70);
+            KeySender.Tap("Escape", 70);
+
+            // Long enough for the menu to draw. The check is cheap and the
+            // alternative is updating underneath a live character.
+            for (int waited = 0; waited < 12; waited++)
+            {
+                Application.DoEvents();
+                Thread.Sleep(100);
+                if (!LooksPaused(game)) continue;
+
+                Log.Write($"update: the game is paused - confirmed on screen"
+                          + (go > 1 ? $" after {go} tries" : ""));
+                return true;
+            }
+
+            Log.Write($"update: sent Escape {go} time(s) and the game does not say it is "
+                      + "paused");
+        }
+
+        // Said out loud rather than assumed either way. Whoever reads the log
+        // afterwards deserves to know the update went in live.
+        Log.Write("update: could not confirm the game paused - going ahead anyway, "
+                  + "because staying on a version that needs replacing is its own risk");
+        Told(NoticeBoard.Level.Warn, "Could not confirm the game paused before updating",
+             "Escape was sent three times and the words GAME PAUSED never appeared. "
+             + "The update went ahead.");
+        return false;
+    }
+
+    /// <summary>Whether the game is showing its pause screen right now.</summary>
+    private bool LooksPaused(Rectangle game)
+    {
+        // The banner sits across the middle, about a fifth of the way down.
+        var band = new Rectangle(
+            game.Left + game.Width * 3 / 10,
+            game.Top + game.Height / 12,
+            game.Width * 4 / 10,
+            game.Height / 5);
+
+        string seen;
+        try { seen = _engine.ProbeText(band, out var shot); shot?.Dispose(); }
+        catch { return false; }
+
+        // Loosely, because it is large text over whatever the screen was
+        // showing and a letter or two will be wrong.
+        // The whole blob first - large letters often run together - then word
+        // by word, because a banner read as "GAME PAUS ED" is still a banner.
+        if (TextOcr.HasLabel(seen, "PAUSED")) return true;
+
+        foreach (string word in seen.Split([' ', (char)10, (char)13, (char)9],
+                                           StringSplitOptions.RemoveEmptyEntries))
+            if (word.Length >= 5 && TextOcr.HasLabel(word, "PAUSED")) return true;
+
+        return false;
     }
 
     /// <summary>
