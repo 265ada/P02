@@ -388,29 +388,52 @@ public sealed class MonitorEngine : IDisposable
         Rectangle best = box;
         int bestScore = -1;
 
-        foreach (int pad in new[] { 0, 4, 9, 15 })
+        // Up and down as well as wider.
+        //
+        // Padding alone could never fix the fault that actually happens: mana,
+        // spirit and rage are stacked one under the other in the same corner,
+        // and a box a line too low reads "Spirit 0/130" forever. Growing it
+        // only swallowed more of the neighbour. The log shows that box being
+        // re-found every minute, all evening, and landing on Spirit every time,
+        // because nothing in the repair could move it to another line.
+        //
+        // A line is about the height of the box, so the box is offered its own
+        // line and the two either side of it, and whichever crop actually reads
+        // this stat wins. A crop that reads nothing scores nothing, so the
+        // original is kept when none of them is better.
+        int line = Math.Max(12, box.Height);
+
+        foreach (int dy in new[] { 0, -line, line, -line / 2, line / 2, -line * 2 })
         {
-            var tryBox = Rectangle.Inflate(box, pad, pad / 2);
-            if (tryBox.Width <= 0 || tryBox.Height <= 0) continue;
-
-            int clean = 0;
-            for (int i = 0; i < 5; i++)
-                if (_ocr.VerifyRegion(tryBox, label, out _, out _, out _)) clean++;
-
-            if (clean > bestScore)
+            foreach (int pad in new[] { 0, 4, 9, 15 })
             {
-                bestScore = clean;
-                best = tryBox;
-            }
+                var tryBox = Rectangle.Inflate(
+                    box with { Y = box.Y + dy }, pad, pad / 2);
+                if (tryBox.Width <= 0 || tryBox.Height <= 0) continue;
 
-            if (clean == 5) break;
+                int clean = 0;
+                for (int i = 0; i < 5; i++)
+                    if (_ocr.VerifyRegion(tryBox, label, out _, out _, out _)) clean++;
+
+                if (clean > bestScore)
+                {
+                    bestScore = clean;
+                    best = tryBox;
+                }
+
+                if (clean == 5) goto settled;
+            }
         }
 
-        if (bestScore < 5)
+        settled:
+        if (bestScore <= 0)
+            Log.Write($"setup: none of the crops tried read {label}'s numbers - keeping "
+                      + $"{best} and letting it be re-read as you play");
+        else if (bestScore < 5)
             Log.Write($"setup: {label}'s numbers read cleanly {bestScore} times out of 5 "
                       + $"at {best} - the best of the crops tried");
         else if (best != box)
-            Log.Write($"setup: {label}'s box widened to {best} - it read every time there");
+            Log.Write($"setup: {label}'s box moved to {best} - it read every time there");
 
         return best;
     }
