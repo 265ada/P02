@@ -1072,6 +1072,24 @@ public sealed class MonitorEngine : IDisposable
     {
         if (memoryMax <= 0 || boxMax <= 0) return Verdict.Agree;
         if (memoryMax == boxMax) return Verdict.Agree;
+
+        // How far apart they are is the whole of it.
+        //
+        // "Not equal" was far too blunt a test, and it went wrong in both
+        // directions inside an hour. A box reading 100 for a pool of 191 is on
+        // some other line entirely. A box reading 362 where memory has 346 is
+        // the same pool, four percent apart, because one of them is a moment
+        // behind the other - a level, a gear swap, a flask of life - and
+        // declaring that box "on the wrong line" threw away a perfectly good
+        // reading that had matched its own label, left the numbers dark, and
+        // took the overlay with them.
+        //
+        // A pool does not change identity by a few percent. Near enough is the
+        // same pool, and whichever is stale catches up on its own.
+        int bigger = Math.Max(memoryMax, boxMax);
+        int apart = Math.Abs(memoryMax - boxMax);
+        if (apart * 5 <= bigger) return Verdict.Agree;
+
         return structured ? Verdict.TrustMemory : Verdict.HoldBoth;
     }
 
@@ -1108,9 +1126,26 @@ public sealed class MonitorEngine : IDisposable
         {
             var c = _cfg.Life;
             if (!c.UseText || !c.TextRegion.IsValid || !_ocr.Available) return true;
-            return NumbersReading("Life");
+
+            if (NumbersReading("Life")) { _hudSeenMs = _ocr.NowMs; return true; }
+
+            // Absence only means "covered" if the numbers were working a moment
+            // ago.
+            //
+            // Otherwise a box that has simply gone wrong - misaligned, ignored
+            // for disagreeing, reading a menu - reads as a shop being open
+            // forever, and the readout vanishes for the rest of the session on
+            // a screen with nothing covering anything. Which is what happened:
+            // the numbers were set aside over a four-percent disagreement and
+            // the overlay went with them.
+            //
+            // Something permanently hidden is worse than something occasionally
+            // in the way.
+            return _hudSeenMs == 0 || _ocr.NowMs - _hudSeenMs > 60000;
         }
     }
+
+    private long _hudSeenMs;
 
     public bool NumbersReading(string name) =>
         _ocr.TryGet(name, out var r) && _ocr.NowMs - r.AtMs < 4000;

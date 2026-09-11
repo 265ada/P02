@@ -456,6 +456,14 @@ static class T
                               + $"  agreement is left alone -> {fine}");
             Console.WriteLine((nothingToSay == MonitorEngine.Verdict.Agree ? "PASS" : "FAIL")
                               + $"  nothing to compare is not a disagreement -> {nothingToSay}");
+
+            // The other direction, an hour later: the box read "Life 362/362"
+            // with its own label matched and memory was the stale one at 346.
+            // Calling that box wrong left the numbers dark and the overlay
+            // hidden behind them.
+            var levelled = MonitorEngine.Judge(structured: true, memoryMax: 346, boxMax: 362);
+            Console.WriteLine((levelled == MonitorEngine.Verdict.Agree ? "PASS" : "FAIL")
+                              + $"  346 against 362 is one pool, four percent apart -> {levelled}");
         }
 
         // Short enough to paste into a chat message, and carrying nobody's keys.
