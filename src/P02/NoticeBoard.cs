@@ -67,6 +67,15 @@ public sealed class NoticeBoard : Panel
         if (line.Length == 0 || line[0] == ' ') return null;
         if (line.StartsWith("watch ", StringComparison.Ordinal)) return null;
 
+        // The memory search narrates itself while it works - a line per
+        // candidate, a dozen at a time, several times a minute. That belongs in
+        // the file. What belongs here is the answer it arrived at.
+        if (line.StartsWith("memory: candidate ", StringComparison.Ordinal)) return null;
+        if (line.StartsWith("memory: ", StringComparison.Ordinal)
+            && line.Contains(" vitals hold ", StringComparison.Ordinal)) return null;
+        if (line.StartsWith("=== the ", StringComparison.Ordinal)) return null;
+        if (line == "end" || line.Length == 0) return null;
+
         foreach (string loud in Loud)
             if (line.Contains(loud, StringComparison.OrdinalIgnoreCase))
                 return Level.Alert;
@@ -136,7 +145,7 @@ public sealed class NoticeBoard : Panel
         var text = new System.Text.StringBuilder();
         foreach (var n in _notices)
         {
-            text.AppendLine($"{n.At:HH:mm:ss}  {n.Level.ToString().ToUpperInvariant()}  {n.What}");
+            text.AppendLine($"{n.At:h:mm:ss tt}  {n.Level.ToString().ToUpperInvariant()}  {n.What}");
             if (n.Detail.Length > 0) text.AppendLine($"          {n.Detail}");
         }
         return text.ToString();
@@ -190,8 +199,7 @@ public sealed class NoticeBoard : Panel
             // A stripe rather than a background wash: colour that says which
             // line it belongs to without making the words harder to read,
             // which is the failure of every coloured log panel there is.
-            var whatSize = g.MeasureString(n.What, Theme.UiBold,
-                                           wide - 10);
+            var whatSize = g.MeasureString(n.What, Theme.UiBold, wide - 60);
             int h = (int)whatSize.Height;
 
             SizeF detailSize = SizeF.Empty;
@@ -207,13 +215,15 @@ public sealed class NoticeBoard : Panel
                     g.FillRectangle(stripe, pad, y + 2, 3, h - 2);
 
                 using (var when = new SolidBrush(Theme.Dim))
-                    g.DrawString(n.At.ToString("HH:mm"), Theme.Small, when,
-                                 Width - pad - 34, y);
+                    // Twelve-hour, because that is the clock in the corner of the
+                    // screen this sits next to.
+                    g.DrawString(n.At.ToString("h:mm tt"), Theme.Small, when,
+                                 Width - pad - 52, y);
 
                 using (var words = new SolidBrush(
                            n.Level == Level.Info ? Theme.Text : ink))
                     g.DrawString(n.What, Theme.UiBold, words,
-                                 new RectangleF(pad + 10, y, wide - 44, whatSize.Height));
+                                 new RectangleF(pad + 10, y, wide - 60, whatSize.Height));
 
                 if (n.Detail.Length > 0)
                 {

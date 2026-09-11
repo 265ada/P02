@@ -1447,8 +1447,9 @@ public sealed class MonitorEngine : IDisposable
             {
                 st.MemConfirmed = true;
                 if (name == "Life") _lifeMemConfirmed = true;
-                Log.Write($"{name}: memory has the right maximum ({max:N0}) - using this "
-                          + "address until the numbers disagree with it for two seconds");
+                Log.Write($"{name}: reading straight from the game - it has your maximum "
+                          + $"of {max:N0}. The numbers on screen stay on as a cross-check, "
+                          + "and half a second of disagreement hands it back to them.");
             }
 
             // Once the numbers have vouched for an address, they stop being the
@@ -1482,7 +1483,8 @@ public sealed class MonitorEngine : IDisposable
                     st.MemDisagreeSinceMs = 0;
                     if (name == "Life") _lifeMemConfirmed = false;
                     Log.Write($"{name}: memory has read {memFrac:P0} against the numbers' "
-                              + $"{ocrFrac:P0} for two seconds - dropping this address");
+                              + $"{ocrFrac:P0} for half a second - going back to the "
+                              + "numbers and looking for your character again");
                     _mem.Rescan();
                 }
                 else
