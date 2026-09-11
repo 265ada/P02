@@ -187,6 +187,7 @@ public sealed class GlobePanel : Card
         // decides which of the two is actually pressed rather than which one
         // you are allowed to fill in.
         Controls.Add(Lab("Controller", 14, y + 4, Tips.PadButton));
+        _pad.FlatStyle = FlatStyle.Standard;
         _pad.SetBounds(90, y, 216, 24);
         _pad.DropDownStyle = ComboBoxStyle.DropDownList;
         _pad.Items.Add("not set");
@@ -205,6 +206,8 @@ public sealed class GlobePanel : Card
         };
         Controls.Add(_pad);
         Tips.On(_pad, Tips.PadButton);
+        Log.Write($"{title}: controller list has {_pad.Items.Count} entries, showing "
+                  + $"\"{_pad.SelectedItem}\"");
         y += 32;
 
         Controls.Add(Lab("Cooldown", 14, y + 4, Tips.Cooldown));
