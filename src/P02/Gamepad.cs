@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Nefarius.ViGEm.Client;
 using Nefarius.ViGEm.Client.Targets;
 using Nefarius.ViGEm.Client.Targets.Xbox360;
@@ -72,11 +73,20 @@ internal static class Gamepad
         if (_tried) return;
         _tried = true;
 
+        // The work is in a method of its own, called from inside the try.
+        //
+        // A missing or unloadable assembly does not fail where it is used - it
+        // fails when the method that mentions it is compiled, and that happens
+        // on entry to the method, before a single line of it runs. So a try
+        // block wrapped around the code itself is never entered, the catch
+        // never catches, nothing is logged, and from the outside the button
+        // simply does nothing at all. Which is precisely what it did.
+        //
+        // Called across a method boundary, the failure lands at the call - and
+        // the call is inside the try.
         try
         {
-            _client = new ViGEmClient();
-            _pad = _client.CreateXbox360Controller();
-            _pad.Connect();
+            Open();
             Log.Write("controller: a virtual pad is connected and ready");
             Why = "";
         }
@@ -90,6 +100,14 @@ internal static class Gamepad
                   + $"({ex.GetType().Name})";
             Log.Write($"controller: no virtual pad - {ex.Message}");
         }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void Open()
+    {
+        _client = new ViGEmClient();
+        _pad = _client.CreateXbox360Controller();
+        _pad.Connect();
     }
 
     /// <summary>Forgets a failed attempt, so installing the driver needs no restart.</summary>
@@ -113,11 +131,7 @@ internal static class Gamepad
 
         try
         {
-            Set(button, true);
-            _pad.SubmitReport();
-            Thread.Sleep(Math.Clamp(holdMs, 20, 400));
-            Set(button, false);
-            _pad.SubmitReport();
+            Tap(button, holdMs);
             return true;
         }
         catch (Exception ex)
@@ -130,6 +144,17 @@ internal static class Gamepad
         }
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void Tap(string button, int holdMs)
+    {
+        Set(button, true);
+        _pad!.SubmitReport();
+        Thread.Sleep(Math.Clamp(holdMs, 20, 400));
+        Set(button, false);
+        _pad.SubmitReport();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static void Set(string button, bool down)
     {
         if (_pad is null) return;

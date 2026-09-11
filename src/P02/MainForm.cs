@@ -51,6 +51,13 @@ public sealed class MainForm : Form
         _cfg = cfg;
         _engine = new MonitorEngine(cfg);
 
+        // Before anything is built. The pool panels ask this when they decide
+        // whether to show a key box or a controller button, and they are built
+        // in the first hundred lines of this constructor - so setting it near
+        // the end meant they asked, got nothing, and drew a key box whatever
+        // the setting said.
+        GlobePanel.UsingController = () => _cfg.UseController;
+
         Text = $"P02  v{Version}";
         // Resizable, and it scrolls. It was a fixed 900x856 that had grown with
         // every feature until it was taller than a 1080p screen, which meant the
@@ -437,6 +444,11 @@ public sealed class MainForm : Form
             if (!_cfg.UseController)
                 _cfg.InputMethod = method.SelectedIndex == 1 ? "postmessage" : "sendinput";
 
+            // Always, and before anything that might fail. A setting that
+            // changes nothing and says nothing cannot be told apart from a
+            // setting that was never changed.
+            Log.Write($"presses now go by {(_cfg.UseController ? "controller" : _cfg.InputMethod)}");
+
             if (_cfg.UseController)
             {
                 Gamepad.TryAgain();
@@ -618,7 +630,6 @@ public sealed class MainForm : Form
 
         BackColor = Theme.Bg;
         Icon = AppIcon.Load();
-        GlobePanel.UsingController = () => _cfg.UseController;
 
         // The backdrop is one bitmap redrawn on resize, so it has to be told
         // to repaint - and double buffering, or a window this busy tears.
