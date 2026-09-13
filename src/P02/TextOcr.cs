@@ -549,7 +549,67 @@ internal sealed partial class TextOcr : IDisposable
             }
         }
 
+        // The slash itself went missing.
+        //
+        // The life box has spent the evening returning "5771577" and "677677":
+        // 577/577 with the slash read as a 1, or dropped outright. There is no
+        // pair in that for the pattern to find, so every frame was refused and
+        // the panel sat on "no exact reading" for as long as anyone watched.
+        //
+        // Guessing where a slash was is only safe when the answer can be
+        // checked, so this needs the maximum already known: the digits must
+        // END in exactly that number, with at most one stray character where
+        // the slash was, and what is left in front must be a current no larger
+        // than twice it. A bare run of digits with no maximum to anchor it is
+        // still refused.
+        if (expectedMax > 0 && LostSlash(text, expectedMax, out cur))
+        {
+            max = expectedMax;
+            return true;
+        }
+
         cur = max = 0;
+        return false;
+    }
+
+    private static bool LostSlash(string text, int expected, out int cur)
+    {
+        cur = 0;
+        string tail = expected.ToString();
+
+        foreach (string raw in text.Split([' ', (char)10, (char)13, (char)9],
+                                          StringSplitOptions.RemoveEmptyEntries))
+        {
+            // Only where the slash is genuinely gone. A line that still has
+            // one was already judged by the proper pattern above, and refused
+            // for a reason - "1,465/11,465" is a phantom digit, not a lost
+            // slash, and rescuing it here would read it as full life.
+            if (raw.Contains('/')) continue;
+
+            var d = new System.Text.StringBuilder();
+            foreach (char c in raw) if (char.IsAsciiDigit(c)) d.Append(c);
+            string digits = d.ToString();
+
+            if (digits.Length <= tail.Length || !digits.EndsWith(tail, StringComparison.Ordinal))
+                continue;
+
+            string front = digits[..^tail.Length];
+
+            // Where the slash was: nothing, or one character OCR invents for it.
+            foreach (string head in new[] { front, front.Length > 1 ? front[..^1] : "" })
+            {
+                if (head.Length == 0 || head.Length > tail.Length) continue;
+                if (!int.TryParse(head, out int c2)) continue;
+                if (c2 > expected * 2) continue;
+                if (head.Length > 1 && head[0] == '0') continue;
+
+                // Prefer the reading that keeps every digit; only drop one
+                // when keeping it gives an impossible current.
+                cur = c2;
+                return true;
+            }
+        }
+
         return false;
     }
 

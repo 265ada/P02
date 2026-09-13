@@ -99,6 +99,7 @@ internal sealed class GameMemory : IDisposable
     /// </summary>
     private List<(long owner, int health, int mana, int shield)> _pending = [];
     private int[] _pendingFirst = [];
+    private long _pendingSinceMs;
 
     /// <summary>Waiting for one of several equal matches to give itself away.</summary>
     public bool Pending => _pending.Count > 1;
@@ -435,6 +436,19 @@ internal sealed class GameMemory : IDisposable
     /// </summary>
     private long SettlePending()
     {
+        // A tie nobody breaks is not worth holding forever. Waiting for
+        // movement is right for a minute; after that the candidates are more
+        // likely all wrong - a changed maximum, a new zone - and only a fresh
+        // search can say so.
+        if (Environment.TickCount64 - _pendingSinceMs > 60000)
+        {
+            Log.Write($"memory: {_pending.Count} tied components have not moved in a minute "
+                      + "- dropping them and searching again");
+            _pending = [];
+            _pendingFirst = [];
+            return 0;
+        }
+
         var moved = new List<int>();
         for (int k = 0; k < _pending.Count; k++)
         {
@@ -651,10 +665,20 @@ internal sealed class GameMemory : IDisposable
             // produced a straight tie between the component that matched a
             // year-old mana number and the one that was actually the player -
             // and a tie means no lock, which is the same as being broken.
+            // Not a character at all. Sixteen components holding "mana
+            // 0/32762" - a number that is a sentinel, not a pool - were being
+            // held as candidates and watched for movement that would never
+            // come, which is how the search sat "holding them" indefinitely.
+            if (HintMaxMp > 0 && manaTotal > HintMaxMp * 3) continue;
+
             int agree = 0;
             if (HintCurHp > 0 && Math.Abs(hpCur - HintCurHp) <= HintMaxHp / 20) agree += 5;
-            if (HintCurMp > 0 && manaTotal > 0
-                && Math.Abs(manaCur - HintCurMp) <= manaTotal / 20) agree += 4;
+
+            // Measured against YOUR maximum, not the candidate's. Tolerance
+            // taken from the candidate's own total let a pool of 32,762 agree
+            // with anything within 1,600 of your mana - which is all of it.
+            if (HintCurMp > 0 && HintMaxMp > 0
+                && Math.Abs(manaCur - HintCurMp) <= HintMaxMp / 20) agree += 4;
             if (HintMaxEs > 0 && shieldTotal == HintMaxEs) agree += 3;
             if (HintMaxMp > 0 && manaTotal == HintMaxMp) agree += 2;
 
@@ -724,6 +748,7 @@ internal sealed class GameMemory : IDisposable
                 // make something happen.
                 _pending = finalists;
                 _pendingFirst = first;
+                _pendingSinceMs = Environment.TickCount64;
                 Log.Write($"memory: {finalists.Count} components still match equally - "
                           + "holding them and watching for the first one to change");
                 Status = "more than one thing in the game matches your numbers - watching "

@@ -1,0 +1,16 @@
+Recover a lost slash, and stop holding impossible memory candidates
+
+The life box returned "5771577" and "677677" - 577/577 with the slash read
+as a 1 or dropped - so no pair was found and every frame was refused. With
+the maximum known, digits ending in exactly that maximum, with at most one
+stray character where the slash was, now parse. Tokens that still contain a
+slash are left to the normal pattern, so a phantom-digit maximum stays
+refused.
+
+Memory held sixteen components reading mana 0/32762, a sentinel rather than
+a pool, because current-mana agreement was measured against the candidate's
+own total. It is measured against the known maximum now, pools over three
+times the known maximum are discarded, and a tie unbroken for a minute is
+dropped and searched again.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

@@ -482,6 +482,20 @@ static class T
                               + "  the mana line is not mistaken for Life");
         }
 
+        // The slash went missing: "5771577" is 577/577, and "677677" with no
+        // separator at all. Only recoverable with the maximum already known.
+        {
+            bool a = TextOcr.TryParse("5771577", out int ac, out int am, "Life", 577);
+            bool b = TextOcr.TryParse("4321577", out int bc, out int bm, "Life", 577);
+            bool c = TextOcr.TryParse("5771577", out _, out _, "Life", 0);
+            Console.WriteLine((a && ac == 577 && am == 577 ? "PASS" : "FAIL")
+                              + $"  a slash read as 1 is recovered -> {ac}/{am}");
+            Console.WriteLine((b && bc == 432 && bm == 577 ? "PASS" : "FAIL")
+                              + $"  and at part life -> {bc}/{bm}");
+            Console.WriteLine((!c ? "PASS" : "FAIL")
+                              + "  with no known maximum a run of digits is still refused");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();
