@@ -31,6 +31,9 @@ internal static class Gamepad
     private static IDualShock4Controller? _sony;
     private static bool _tried;
 
+    /// <summary>Back buttons already explained in the log, so it says it once.</summary>
+    private static readonly HashSet<string> _told = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Which kind of pad to pretend to be.
     ///
@@ -88,6 +91,13 @@ internal static class Gamepad
         ("Right", "D-pad right"),
         ("LS", "Left stick click  /  L3"),
         ("RS", "Right stick click  /  R3"),
+
+        // The Steam Controller's back buttons. No virtual pad has these, so
+        // they are pressed as whatever Steam has them bound to for the game.
+        ("L4", "L4  -  back, lower left (as Steam binds it)"),
+        ("L5", "L5  -  back, upper left (as Steam binds it)"),
+        ("R4", "R4  -  back, lower right (as Steam binds it)"),
+        ("R5", "R5  -  back, upper right (as Steam binds it)"),
     ];
 
     public static bool IsButton(string name) =>
@@ -169,6 +179,28 @@ internal static class Gamepad
     /// </summary>
     public static bool Press(string button, int holdMs)
     {
+        // A back button is pressed as whatever Steam turns it into. There is no
+        // L4 on any pad Windows can be given, so "press L4" can only mean
+        // "press what L4 does" - and that is written in Steam's layout.
+        if (SteamLayout.IsBack(button))
+        {
+            string? real = SteamLayout.Resolve(button, out string said);
+            if (real is null)
+            {
+                Log.Write($"controller: {button} is not bound to a pad button in Steam's "
+                          + $"layout for the game ({(said.Length > 0 ? said : "nothing found")}) "
+                          + "- nothing pressed");
+                return false;
+            }
+            if (!_told.Contains(button))
+            {
+                _told.Add(button);
+                Log.Write($"controller: {button} is bound to {real} in Steam ({said}) - "
+                          + $"pressing {real}");
+            }
+            button = real;
+        }
+
         Connect();
         if (_xbox is null && _sony is null) return false;
 

@@ -565,6 +565,30 @@ static class T
                               + $"  mode: a menu showing neither changes nothing -> {c}");
         }
 
+        // The back buttons, from the exact block in the player's Steam layout
+        // for Path of Exile 2: L4 sends D-pad left, R4 D-pad right, and the
+        // upper pair is not bound - which must stay unbound, not borrow the
+        // binding of the button after it. Written with ' for " so the layout
+        // text needs no escaping.
+        {
+            string vdf = (
+                "'button_back_left' { 'activators' { 'Full_Press' { 'bindings' { "
+                + "'binding' 'xinput_button DPAD_LEFT, , ' } } } 'disabled_activators' { } } "
+                + "'button_back_left_upper' { 'activators' { } 'disabled_activators' { } } "
+                + "'button_back_right' { 'activators' { 'Full_Press' { 'bindings' { "
+                + "'binding' 'xinput_button DPAD_RIGHT, , ' } } } 'disabled_activators' { } }"
+            ).Replace('\'', '"');
+            var map = SteamLayout.Parse(vdf);
+            string? l4 = map.TryGetValue("button_back_left", out var a) ? SteamLayout.ToPad(a) : null;
+            string? r4 = map.TryGetValue("button_back_right", out var b) ? SteamLayout.ToPad(b) : null;
+            bool l5Unbound = !map.ContainsKey("button_back_left_upper");
+            Console.WriteLine((l4 == "Left" ? "PASS" : "FAIL") + $"  steam: L4 is bound to D-pad left -> {l4}");
+            Console.WriteLine((r4 == "Right" ? "PASS" : "FAIL") + $"  steam: R4 is bound to D-pad right -> {r4}");
+            Console.WriteLine((l5Unbound ? "PASS" : "FAIL") + "  steam: an unbound L5 does not borrow R4's binding");
+            Console.WriteLine((SteamLayout.ToPad("key_press KEY_1, , ") is null ? "PASS" : "FAIL")
+                              + "  steam: a keyboard binding is not a pad button");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();
