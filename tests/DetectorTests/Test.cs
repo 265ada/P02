@@ -496,6 +496,17 @@ static class T
                               + "  with no known maximum a run of digits is still refused");
         }
 
+        // Mana flip-flopping 269 <-> 469: the 2 read as a 4, inside the 2x
+        // allowed for levelling, reading a full pool as 57% and firing.
+        {
+            bool misread = TextOcr.TryParse("Mana 269/469", out _, out _, "Mana", 269);
+            bool level = TextOcr.TryParse("Mana 278/278", out int lc, out _, "Mana", 269);
+            Console.WriteLine((!misread ? "PASS" : "FAIL")
+                              + "  one digit off by hundreds is a misread, not a level");
+            Console.WriteLine((level && lc == 278 ? "PASS" : "FAIL")
+                              + "  a real level-up is still accepted");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();

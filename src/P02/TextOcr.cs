@@ -701,7 +701,31 @@ internal sealed partial class TextOcr : IDisposable
     /// known to be the same pool, levelled, rather than a misread.
     /// </summary>
     private static bool Believable(int max, int expected)
-        => expected <= 0 || (max * 2 >= expected && max <= expected * 2);
+    {
+        if (expected <= 0) return true;
+        if (max * 2 < expected || max > expected * 2) return false;
+
+        // One digit changed, a long way.
+        //
+        // Mana spent an evening swapping between 269 and 469 every few
+        // seconds: the box read the 2 as a 4 often enough to be "stable", and
+        // 469 is inside the factor of two allowed for levelling. At 469 a full
+        // pool of 269 is 57%, under the trigger, and it fired every time.
+        //
+        // Levelling never looks like that. A level adds a few percent and moves
+        // the last digits; a misread swaps one digit and moves the number by
+        // hundreds. Same length, exactly one digit different, and more than a
+        // quarter away is the second thing.
+        string a = max.ToString(), b = expected.ToString();
+        if (a.Length == b.Length && Math.Abs(max - expected) * 4 > expected)
+        {
+            int differ = 0;
+            for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) differ++;
+            if (differ == 1) return false;
+        }
+
+        return true;
+    }
 
     private static bool Sane(int cur, int max) =>
         max >= 10 && max <= 1_000_000 && cur >= 0 && cur <= max * 2;

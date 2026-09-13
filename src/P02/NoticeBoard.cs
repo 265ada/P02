@@ -44,6 +44,20 @@ public sealed class NoticeBoard : Panel
 
     private readonly List<Notice> _notices = [];
     private const int Keep = 200;
+
+    /// <summary>Lines that arrived before there was a window to show them in.</summary>
+    private readonly Queue<(Level, string, string)> _early = new();
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        BeginInvoke(() =>
+        {
+            (Level, string, string)[] held;
+            lock (_early) { held = _early.ToArray(); _early.Clear(); }
+            foreach (var (l, w, d) in held) Say(l, w, d);
+        });
+    }
     private bool _sizing;
 
     public NoticeBoard()
@@ -132,6 +146,19 @@ public sealed class NoticeBoard : Panel
 
     public void Say(Level level, string what, string detail = "")
     {
+        // Only on the window's own thread, and not before it has one.
+        //
+        // Before the handle exists, InvokeRequired answers "no" from any
+        // thread at all - so the first log lines of a session, written by the
+        // memory search and the reader in the background, went straight into
+        // the list while the panel was drawing it. The panel then met an entry
+        // half-added and fell over with a red cross. Anything that arrives too
+        // early now waits for the handle.
+        if (!IsHandleCreated)
+        {
+            lock (_early) _early.Enqueue((level, what, detail));
+            return;
+        }
         if (InvokeRequired) { BeginInvoke(() => Say(level, what, detail)); return; }
 
         // The same thing twice running is one thing. A repair that runs every
