@@ -281,6 +281,8 @@ internal sealed class GameMemory : IDisposable
                     Log.Write($"memory: found player stats at 0x{found:X}");
                 }
 
+                if (_address != 0 && _pending.Count > 1) WatchAlternates();
+
                 bool read = ReadStats(_address, out var s);
                 bool sane = read && Plausible(s);
                 bool ours = sane && Matches(s);
@@ -305,6 +307,8 @@ internal sealed class GameMemory : IDisposable
                                : $"maximum moved away (life max {s.MaxHp} vs {HintMaxHp}, mana max {s.MaxMp} vs {HintMaxMp})";
                     Log.Write($"memory: address went bad - {why} - searching again");
                     _lastGood = _address;
+                    _pending = [];
+                    _pendingFirst = [];
                     lock (_gate) { _address = 0; _hasLatest = false; }
                     _badReads = 0;
                 }
@@ -484,6 +488,79 @@ internal sealed class GameMemory : IDisposable
     /// moving at once they are not telling us apart from each other and the
     /// whole set is dropped rather than guessed between.
     /// </summary>
+    private long _watchedAtMs;
+
+    /// <summary>
+    /// Whether a component looks like your character: a mana pool at all, and
+    /// the life maximum that is yours.
+    /// </summary>
+    private bool LooksLikeYou((long owner, int health, int mana, int shield) c)
+    {
+        if (!ReadVital(c.owner + c.health, out _, out int maxHp)) return false;
+        if (!ReadVital(c.owner + c.mana, out _, out int maxMp)) return false;
+        if (maxMp <= 0) return false;
+        return HintMaxHp <= 0 || maxHp == HintMaxHp;
+    }
+
+    /// <summary>
+    /// Watches the copies not in use, and moves to the live one if the one in
+    /// use turns out to be a copy that nothing writes to.
+    /// </summary>
+    private void WatchAlternates()
+    {
+        long now = Environment.TickCount64;
+        if (now - _watchedAtMs < 50) return;
+        _watchedAtMs = now;
+
+        // Five minutes with nothing to tell them apart: they are the same
+        // thing, and watching longer tells nobody anything.
+        if (now - _pendingSinceMs > 300000)
+        {
+            _pending = [];
+            _pendingFirst = [];
+            return;
+        }
+
+        int mine = -1;
+        var moved = new List<int>();
+        for (int k = 0; k < _pending.Count; k++)
+        {
+            if (_pending[k].owner == _address) mine = k;
+            if (!ReadVital(_pending[k].owner + _pending[k].health, out int v, out _)) continue;
+            if (v != _pendingFirst[k]) moved.Add(k);
+        }
+
+        if (mine < 0 || moved.Count == 0) return;
+
+        if (moved.Contains(mine))
+        {
+            Log.Write("memory: the one in use moved with you - confirmed, no longer "
+                      + "watching the others");
+            _pending = [];
+            _pendingFirst = [];
+            return;
+        }
+
+        foreach (int k in moved)
+        {
+            var c = _pending[k];
+            if (!LooksLikeYou(c)) continue;
+
+            _healthOff = c.health;
+            _manaOff = c.mana;
+            _shieldOff = c.shield;
+            _manaDelta = c.mana - c.health;
+            _address = c.owner;
+            Generation++;
+            ReadVital(c.owner + c.health, out int hp, out int maxHp);
+            Log.Write($"memory: {c.owner:X} moved while the one in use sat still - "
+                      + $"switching to it. life {hp}/{maxHp}");
+            _pending = [];
+            _pendingFirst = [];
+            return;
+        }
+    }
+
     private long SettlePending()
     {
         // A tie nobody breaks is not worth holding forever. Waiting for
@@ -526,6 +603,27 @@ internal sealed class GameMemory : IDisposable
         }
 
         var win = _pending[moved[0]];
+
+        // Moving is not the same as being you. "life 100/100, mana 0/0" moved
+        // and was taken as the character - a totem or a minion, dropped a
+        // second later. It has to look like you before it is believed.
+        if (!LooksLikeYou(win))
+        {
+            Log.Write($"memory: {win.owner:X} moved but is not a character like yours - "
+                      + "ignoring it");
+            var keep = new List<(long owner, int health, int mana, int shield)>();
+            var keepFirst = new List<int>();
+            for (int k = 0; k < _pending.Count; k++)
+            {
+                if (k == moved[0]) continue;
+                keep.Add(_pending[k]);
+                keepFirst.Add(_pendingFirst[k]);
+            }
+            _pending = keep;
+            _pendingFirst = keepFirst.ToArray();
+            return 0;
+        }
+
         _pending = [];
         _pendingFirst = [];
 
@@ -804,15 +902,31 @@ internal sealed class GameMemory : IDisposable
                 // you - a hit, a flask, a regen tick - it settles itself,
                 // without another sweep and without you being told to go and
                 // make something happen.
+                // Used now, not held.
+                //
+                // Holding them meant no reading at all until one moved - and
+                // standing still, none does. Four minutes in town went by at
+                // 0.0%, with nothing able to fire, while two copies both read
+                // a perfectly good 602/602. Copies that agree ARE a reading. So
+                // one is used straight away and the rest are watched in the
+                // background: if the one in use freezes while another moves,
+                // the live one takes over.
                 _pending = finalists;
                 _pendingFirst = first;
                 _pendingSinceMs = Environment.TickCount64;
-                Log.Write($"memory: {finalists.Count} components still match equally - "
-                          + "holding them and watching for the first one to change");
-                Status = "more than one thing in the game matches your numbers - watching "
-                         + "for the one that moves";
-                _structured = false;
-                return 0;
+
+                var pick = finalists[0];
+                _healthOff = pick.health;
+                _manaOff = pick.mana;
+                _shieldOff = pick.shield;
+                _structured = true;
+                _manaDelta = pick.mana - pick.health;
+                _curOffset = VitalCurrent - VitalTotal;
+                ReadVital(pick.owner + pick.health, out int pickHp, out int pickMaxHp);
+                Log.Write($"memory: {finalists.Count} components read the same (life "
+                          + $"{pickHp}/{pickMaxHp}) - using one now and watching the others "
+                          + "for the one that moves");
+                return pick.owner;
             }
 
             finalists = [finalists[moved[0]]];
