@@ -818,6 +818,7 @@ public sealed class MonitorEngine : IDisposable
         // session.
         public int MemGeneration = -1;
         public bool MemConfirmed;
+        public long LastBoxDoubtMs = long.MinValue / 2;
         public bool GlobeCovering;
         public long MemDisagreeSinceMs;
         public int LastMemCur = -1;
@@ -1650,7 +1651,35 @@ public sealed class MonitorEngine : IDisposable
                 // is an address that has stopped following the game, and every
                 // moment it keeps its lock is a moment the wrong number could
                 // be the one acted on.
-                if (now - st.MemDisagreeSinceMs > 600)
+                // Not when memory has your character.
+                //
+                // This rule is from when memory was the liar: a loosely matched
+                // address froze at 100% on a zone change while the numbers
+                // watched life fall to 41%. A structured lock is not that - it
+                // is a component whose vitals point back at it, re-checked on
+                // every read, and it gives up on its own when the component
+                // goes away.
+                //
+                // Tonight the rule ran the other way. Memory read a full 578 of
+                // 578; the box was returning "5781578" and "981578" - the same
+                // numbers mangled - and settled on 98/578. After half a second
+                // the rule threw memory out, trusted the 17%, and fired the
+                // emergency and last-ditch nets again and again at a full pool.
+                //
+                // So with a structured lock the numbers are the suspect: they
+                // are looked for again, and memory keeps deciding.
+                bool structured = _mem.Structured;
+                if (structured && now - st.MemDisagreeSinceMs > 600
+                    && now - st.LastBoxDoubtMs > 20000)
+                {
+                    st.LastBoxDoubtMs = now;
+                    Log.Write($"{name}: the numbers read {ocrFrac:P0} while memory, which has "
+                              + $"your character, reads {memFrac:P0} - believing memory and "
+                              + "finding the numbers again");
+                    RefindNow();
+                }
+
+                if (!structured && now - st.MemDisagreeSinceMs > 600)
                 {
                     st.MemConfirmed = false;
                     st.MemDisagreeSinceMs = 0;

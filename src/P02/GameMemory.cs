@@ -354,6 +354,18 @@ internal sealed class GameMemory : IDisposable
         // a known offset from it. Nothing is learned, so nothing can drift.
         if (_structured)
         {
+            // Still yours, checked every read.
+            //
+            // The engine now believes a structured lock over the numbers on
+            // screen, because the numbers are the source that mangles digits.
+            // That is only safe if a lock that has gone stale says so. A zone
+            // change frees the component; the memory that held it is reused
+            // for something else, and its vitals no longer point back here.
+            // One pointer read tells them apart, and a failed read here is what
+            // sends the search looking again.
+            if (!ReadPtr(addr + _healthOff + VitalOwner, out long home) || home != addr)
+                return false;
+
             if (!ReadVital(addr + _healthOff, out int curHp, out int maxHp)) return false;
             if (!ReadVital(addr + _manaOff, out int curMp, out int maxMp)) return false;
             ReadVital(addr + _shieldOff, out int curEs, out int maxEs);
