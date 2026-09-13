@@ -656,6 +656,14 @@ internal sealed class GameMemory : IDisposable
                 && manaCur == hpCur && shieldCur == hpCur)
                 continue;
 
+            // Or the same current in all three, whatever the totals say.
+            // "life 651/1496, mana 651/748, shield 651/748" was locked 184 times
+            // in one night and lost every time. Three pools at exactly the same
+            // number is a template being filled in, not a character, and
+            // holding it kept the real one from ever being found.
+            if (hpCur > 0 && manaCur == hpCur && shieldCur == hpCur)
+                continue;
+
             // Which one is YOU.
             //
             // Shape alone was never going to answer this, and the log shows why

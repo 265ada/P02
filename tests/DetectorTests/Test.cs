@@ -517,6 +517,19 @@ static class T
                               + "  a small change is never a clip");
         }
 
+        // The gate every numbers reading has to pass before it may fire,
+        // tested against the night's actual misreads.
+        {
+            bool clean = MonitorEngine.TrustNumbers("Life 578/578", "Life", 578, 578, 1);
+            bool mangled = MonitorEngine.TrustNumbers("981578", "Life", 578, 578, 3);
+            bool digit = MonitorEngine.TrustNumbers("Mana 269/469", "Mana", 469, 269, 5);
+            bool once = MonitorEngine.TrustNumbers("Life 98/578", "Life", 578, 578, 0);
+            Console.WriteLine((clean ? "PASS" : "FAIL") + "  gate: a clean labelled line seen twice may fire");
+            Console.WriteLine((!mangled ? "PASS" : "FAIL") + "  gate: 981578 has no label and may not");
+            Console.WriteLine((!digit ? "PASS" : "FAIL") + "  gate: 269/469 names the wrong maximum and may not");
+            Console.WriteLine((!once ? "PASS" : "FAIL") + "  gate: a reading seen once may not");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();

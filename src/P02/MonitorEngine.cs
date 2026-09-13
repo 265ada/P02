@@ -818,6 +818,10 @@ public sealed class MonitorEngine : IDisposable
         // session.
         public int MemGeneration = -1;
         public bool MemConfirmed;
+        public long LastOcrAtMs;
+        public int LastOcrCur;
+        public int LastOcrMax;
+        public int OcrRepeats;
         public long LastBoxDoubtMs = long.MinValue / 2;
         public bool GlobeCovering;
         public long MemDisagreeSinceMs;
@@ -1126,6 +1130,18 @@ public sealed class MonitorEngine : IDisposable
     private long _started;
 
     /// <summary>Whether memory has an address it is willing to read from.</summary>
+    /// <summary>
+    /// Whether a reading from the numbers box may press a key on its own:
+    /// its own label on the line, the maximum exactly the one already known,
+    /// and the same reading twice. A mangled read almost always fails the
+    /// first, a misread digit the second, and a one-frame glitch the third.
+    /// </summary>
+    internal static bool TrustNumbers(string raw, string label, int max, int knownMax,
+                                      int repeats)
+        => repeats >= 1
+           && (knownMax <= 0 || max == knownMax)
+           && (label.Length == 0 || TextOcr.HasLabel(raw, label));
+
     /// <summary>What to do when memory and the numbers name different maxima.</summary>
     internal enum Verdict
     {
@@ -1322,6 +1338,7 @@ public sealed class MonitorEngine : IDisposable
         // one printed on your screen is the one that is.
         bool haveOcr = false;
         bool holdOnDisagreement = false;
+        bool numbersTrusted = false;
         double ocrFrac = 0;
         int ocrMax = 0;
         bool textLostOverride = true;
@@ -1358,6 +1375,19 @@ public sealed class MonitorEngine : IDisposable
             bool agrees = !pixelsMayObject || Math.Abs(tr.Fraction - frac) <= 0.40;
 
             if (textAge < 1200) ocrMax = tr.Max;
+
+            // Counted per fresh read of the box, not per poll: the same frame
+            // looked at sixty times is still one frame.
+            if (textAge < 1200 && tr.AtMs != st.LastOcrAtMs)
+            {
+                st.OcrRepeats = tr.Current == st.LastOcrCur && tr.Max == st.LastOcrMax
+                    ? st.OcrRepeats + 1 : 0;
+                st.LastOcrAtMs = tr.AtMs;
+                st.LastOcrCur = tr.Current;
+                st.LastOcrMax = tr.Max;
+            }
+            numbersTrusted = TrustNumbers(tr.Raw, c.TextLabel, tr.Max, c.KnownMax,
+                                          st.OcrRepeats);
 
             if (textAge < 1200 && agrees)
             {
@@ -1865,6 +1895,29 @@ public sealed class MonitorEngine : IDisposable
         // read. Holding fire for it meant refusing to act while memory sat
         // there reporting your life correctly, which is the worst failure this
         // can have.
+        // The numbers fire only when they have earned it.
+        //
+        // One night's log: 180 presses, 99 of them from the numbers, and very
+        // nearly all of those were misreads - 269/469 nineteen times, 98/578
+        // thirteen, then 69/269, 65/265, 20/269, 8/518, 3/542. Clipped or
+        // mangled, and at least a third fired while memory had the right
+        // answer. Each was patched as it appeared and there was always
+        // another, because the box can be wrong in more ways than can be
+        // listed.
+        //
+        // So the question stopped being "is this a misread we know?" and
+        // became "has this reading earned the right to press a key?" Memory
+        // with a real lock has. A line from the box has only if it carries its
+        // own label, its maximum is exactly the one already known, and it has
+        // been read the same twice running. Anything else is shown, not acted
+        // on.
+        if (fromText && textRaw.StartsWith("numbers,", StringComparison.Ordinal)
+            && !numbersTrusted)
+        {
+            holdOnDisagreement = true;
+            textRaw += " - not trusted to fire";
+        }
+
         bool exactGone = textConfigured && textAge > c.RequireTextMs && textLostOverride
                          && !st.MemConfirmed;
 
@@ -2072,7 +2125,7 @@ public sealed class MonitorEngine : IDisposable
         if (sourceLost || textLost || blind || zero)
         {
             st.Below = 0;
-            string why = textLost ? "numbers not on screen"
+            string why = textLost ? (holdOnDisagreement ? "numbers not trusted" : "numbers not on screen")
                        : sourceLost ? "no exact reading yet"
                        : zero ? "reads zero - dead, or the reading has broken"
                        : "cannot read the globe";
