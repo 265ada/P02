@@ -1230,9 +1230,16 @@ public sealed class MainForm : Form
                 };
                 _overlay.OptionsChanged += (locked, through) =>
                 {
+                    if (locked != _cfg.OverlayLocked || through != _cfg.OverlayClickThrough)
+                        Log.Write($"overlay: {(locked ? "locked" : "unlocked")}, click through "
+                                  + $"{(through ? "on" : "off")}");
                     _cfg.OverlayLocked = locked;
                     _cfg.OverlayClickThrough = through;
-                    Save();
+
+                    // Now, not on the next timer tick. An update can arrive in
+                    // between, and a setting changed a moment before a restart is
+                    // exactly the one that has to survive it.
+                    _cfg.SaveNow();
                 };
                 _overlay.ManaShownChanged += show =>
                 {
@@ -1298,6 +1305,16 @@ public sealed class MainForm : Form
         // is a fixed part of the HUD and already tracked, so it follows the
         // readout it is describing rather than a remembered screen position
         // that is wrong the moment a window moves or a monitor changes.
+        // Locked, it goes back exactly where it was locked - not to whichever
+        // of the three remembered spots happens to be selected.
+        if (!forceDefault && !_cfg.OverlaySnap && _cfg.OverlayLocked
+            && _cfg.OverlayX >= 0 && _cfg.OverlayY >= 0
+            && OnAScreen(new Point(_cfg.OverlayX, _cfg.OverlayY)))
+        {
+            _overlay.Location = new Point(_cfg.OverlayX, _cfg.OverlayY);
+            return;
+        }
+
         if (!forceDefault && !_cfg.OverlaySnap)
         {
             int slot = Math.Clamp(_cfg.Slot, 0, 2);
@@ -1471,7 +1488,10 @@ public sealed class MainForm : Form
     /// </summary>
     private void FollowPanels()
     {
-        if (!_cfg.SlotAuto || _cfg.OverlaySnap) return;
+        // Locked means nothing moves it - not you by accident, and not this
+        // either. A lock that only stopped the mouse left the readout free to
+        // be carried off to a spot remembered from some other evening.
+        if (!_cfg.SlotAuto || _cfg.OverlaySnap || _cfg.OverlayLocked) return;
 
         // Three or four times a second. This is a screen capture, and the
         // panels are not opened faster than that.
@@ -1516,8 +1536,12 @@ public sealed class MainForm : Form
 
     private void ResetOverlay()
     {
+        // Click-through goes, because a readout you cannot click is one you
+        // cannot get back into. The lock stays: resetting is "bring it where I
+        // can see it", and it is one stray right-click on the P away - which is
+        // no reason to throw away a setting somebody chose on purpose.
+        Log.Write("overlay: reset - brought back into view, lock kept");
         _cfg.OverlayClickThrough = false;
-        _cfg.OverlayLocked = false;
         _cfg.FollowOffsetX = int.MinValue;
         _cfg.FollowOffsetY = int.MinValue;
 
