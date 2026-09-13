@@ -547,9 +547,20 @@ public sealed class MainForm : Form
             Bounds = new Rectangle(0, 0, 150, 24),
             DropDownStyle = ComboBoxStyle.DropDownList,
         };
-        padKind.Items.AddRange(["An Xbox pad", "A PlayStation pad"]);
+        // Three entries, and the third is honest about what it is.
+        //
+        // No program can present itself as a Steam Controller: the virtual pad
+        // driver offers an Xbox pad and a PlayStation pad and nothing else, and
+        // Steam knows its own controller by Valve's hardware and protocol. What
+        // CAN reach a game played through Steam Input is a pad Steam takes in
+        // as one more controller of its own - so "through Steam" presses the
+        // Xbox pad, and says plainly, when chosen, what Steam must be set to
+        // for that to work.
+        padKind.Items.AddRange(["An Xbox pad", "A PlayStation pad",
+                                "A Steam Controller (through Steam)"]);
         padKind.SelectedIndex =
-            cfg.PadKind.Equals("sony", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+            cfg.PadKind.Equals("sony", StringComparison.OrdinalIgnoreCase) ? 1
+            : cfg.PadKind.Equals("steam", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
         Gamepad.Kind = cfg.PadKind;
         Controls.Add(padKind);
         Tips.On(padKind, Tips.PadKind);
@@ -570,10 +581,27 @@ public sealed class MainForm : Form
         {
             if (IsDisposed || padKind.IsDisposed) return;
 
-            string kind = padKind.SelectedIndex == 1 ? "sony" : "xbox";
+            string kind = padKind.SelectedIndex switch { 1 => "sony", 2 => "steam", _ => "xbox" };
             if (kind != _cfg.PadKind)
             {
-                Log.Write($"controller: pretending to be {(kind == "sony" ? "a PlayStation" : "an Xbox")} pad");
+                Log.Write($"controller: pretending to be " + kind switch
+                {
+                    "sony" => "a PlayStation pad",
+                    "steam" => "a controller Steam takes in (an Xbox pad underneath)",
+                    _ => "an Xbox pad",
+                });
+
+                if (kind == "steam")
+                    Told(NoticeBoard.Level.Warn, "Steam Controller mode - what it really does",
+                         "Nothing can pretend to be a Steam Controller: the only virtual "
+                         + "pads Windows supports are Xbox and PlayStation. This presses a "
+                         + "virtual Xbox pad for Steam to take in as one more controller. "
+                         + "For the game to act on it, Steam > Settings > Controller must "
+                         + "have Xbox support on (it shows up there as \"Xbox 360 "
+                         + "Controller\"), and Path of Exile 2 must accept a second "
+                         + "controller. If presses still do nothing, the route that works "
+                         + "is Steam's gamepad template or SISR with Steam Input off for "
+                         + "the game only - your controller keeps working that way.");
                 _cfg.PadKind = kind;
                 Gamepad.Kind = kind;
                 Gamepad.Rebuild();
