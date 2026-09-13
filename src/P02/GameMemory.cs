@@ -101,6 +101,9 @@ internal sealed class GameMemory : IDisposable
     private int[] _pendingFirst = [];
     private long _pendingSinceMs;
 
+    /// <summary>The address that was working when the lock dropped, tried first.</summary>
+    private long _lastGood;
+
     /// <summary>Waiting for one of several equal matches to give itself away.</summary>
     public bool Pending => _pending.Count > 1;
 
@@ -210,6 +213,7 @@ internal sealed class GameMemory : IDisposable
         // rescan: the reason for asking is usually that something changed.
         _pending = [];
         _pendingFirst = [];
+        _lastGood = 0;
         lock (_gate) { _address = 0; _hasLatest = false; }
     }
 
@@ -240,6 +244,27 @@ internal sealed class GameMemory : IDisposable
                     continue;
                 }
 
+                // The address that was just working, before anything else.
+                //
+                // Tonight the same component was dropped and found again at
+                // the same address two hundred times. A full sweep to rediscover
+                // it takes seconds; asking the old address whether it is still
+                // good takes a few reads. If it is, the lock is back before a
+                // single poll has missed it.
+                if (_address == 0 && _lastGood != 0 && _structured)
+                {
+                    long retry = _lastGood;
+                    _lastGood = 0;
+                    if (ReadStats(retry, out var back) && Plausible(back) && Matches(back))
+                    {
+                        _address = retry;
+                        Generation++;
+                        Log.Write($"memory: the last address is still good - back on it "
+                                  + $"at once (life {back.CurHp}/{back.MaxHp})");
+                        continue;
+                    }
+                }
+
                 if (_address == 0)
                 {
                     Status = "searching memory for the player stats";
@@ -256,17 +281,30 @@ internal sealed class GameMemory : IDisposable
                     Log.Write($"memory: found player stats at 0x{found:X}");
                 }
 
-                if (ReadStats(_address, out var s) && Plausible(s) && Matches(s))
+                bool read = ReadStats(_address, out var s);
+                bool sane = read && Plausible(s);
+                bool ours = sane && Matches(s);
+
+                if (ours)
                 {
                     lock (_gate) { _latest = s; _hasLatest = true; }
                     _badReads = 0;
                     Status = $"reading: HP {s.CurHp}/{s.MaxHp}  MP {s.CurMp}/{s.MaxMp}";
                 }
-                else if (++_badReads > 20)
+                // About a second of trouble, not a third of one. Twenty reads
+                // at this rate is 300 ms, and a hiccup that short was costing
+                // the lock - after which a full search takes seconds, and a
+                // failed one waits five more. Nothing may fire from the
+                // numbers in that gap, so every dropped lock was a stretch of
+                // no protection at all: eleven seconds, then thirteen, with
+                // the correct address sitting there the whole time.
+                else if (++_badReads > 65)
                 {
-                    // The structure moved: a new zone, a new character, a
-                    // restart. Search again rather than reading rubbish.
-                    Log.Write("memory: address went bad, searching again");
+                    string why = !read ? "could not read it"
+                               : !sane ? $"implausible values (life {s.CurHp}/{s.MaxHp}, mana {s.CurMp}/{s.MaxMp})"
+                               : $"maximum moved away (life max {s.MaxHp} vs {HintMaxHp}, mana max {s.MaxMp} vs {HintMaxMp})";
+                    Log.Write($"memory: address went bad - {why} - searching again");
+                    _lastGood = _address;
                     lock (_gate) { _address = 0; _hasLatest = false; }
                     _badReads = 0;
                 }
