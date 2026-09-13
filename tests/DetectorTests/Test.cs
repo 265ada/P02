@@ -507,6 +507,16 @@ static class T
                               + "  a real level-up is still accepted");
         }
 
+        // 269 then 69: the leading digit clipped off, reading a full pool as 25%.
+        {
+            Console.WriteLine((TextOcr.LooksClipped(269, 69) ? "PASS" : "FAIL")
+                              + "  69 after 269 is a clipped number");
+            Console.WriteLine((!TextOcr.LooksClipped(269, 120) ? "PASS" : "FAIL")
+                              + "  120 after 269 is real damage");
+            Console.WriteLine((!TextOcr.LooksClipped(269, 260) ? "PASS" : "FAIL")
+                              + "  a small change is never a clip");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();

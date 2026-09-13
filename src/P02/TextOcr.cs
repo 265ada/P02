@@ -48,6 +48,9 @@ internal sealed partial class TextOcr : IDisposable
         public int DisagreeCount;
         public int Suggested;
 
+        /// <summary>Frames in a row that looked like a number with its front cut off.</summary>
+        public int Clipped;
+
         /// <summary>Which preparation last produced a pair; tried first next time.</summary>
         public int Cut;
 
@@ -385,6 +388,25 @@ internal sealed partial class TextOcr : IDisposable
             slot.StableMax = max;
         }
 
+        // The front of the number cut off.
+        //
+        // 269/269 on one frame, 69/269 on the next: the crop clipped the
+        // leading 2. What is left is a perfectly well-formed pair reading a
+        // quarter of a pool, and it held for two frames - long enough to pass
+        // the confirmation meant for exactly this - and fired.
+        //
+        // A current that is just the previous current with digits missing from
+        // the front, and far below it, is held back rather than believed. If it
+        // keeps coming back it is taken, because real damage stays and a
+        // clipped frame does not.
+        if (slot.HasLast && LooksClipped(slot.Last.Current, cur))
+        {
+            if (++slot.Clipped < 5) return;
+            Log.Write($"{name}: {cur} after {slot.Last.Current} looked like a clipped "
+                      + "number, but it has held - taking it");
+        }
+        slot.Clipped = 0;
+
         lock (_gate)
         {
             // Clamped for the decision, raw numbers kept for display.
@@ -667,6 +689,18 @@ internal sealed partial class TextOcr : IDisposable
         int at = from;
         while (at >= 0 && at < line.Length && line[at] == ' ') at += step;
         return at == from ? (step > 0 ? line.Length : -1) : at;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="now"/> is <paramref name="was"/> with digits
+    /// missing from the front - 69 after 269 - and far enough below it to
+    /// matter.
+    /// </summary>
+    internal static bool LooksClipped(int was, int now)
+    {
+        if (was < 10 || now <= 0 || now * 2 > was) return false;
+        string a = was.ToString(), b = now.ToString();
+        return b.Length < a.Length && a.EndsWith(b, StringComparison.Ordinal);
     }
 
     private static int LineMax(string line)
