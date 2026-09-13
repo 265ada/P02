@@ -1,5 +1,0 @@
-**Both sources were stuck at once, which is why it sat on "no exact reading".**
-
-**The numbers lost their slash.** The life box was returning `5771577` and `677677` - that is `577/577` with the slash read as a 1, or dropped entirely. No slash, no pair, so every frame was refused. Where your maximum is known, the digits are now checked against it: they must end in exactly your maximum, with at most one stray character where the slash was. A line that still has a slash is judged the normal way, so a phantom digit like `1,465/11,465` is still refused.
-
-**Memory was holding sixteen fakes.** Components reading `mana 0/32762` - a sentinel, not a pool - were held as candidates and watched for movement that would never come. Agreement is now measured against your maximum rather than the candidate's own, pools three times larger than yours are discarded, and a tie nothing breaks within a minute is dropped and searched again.

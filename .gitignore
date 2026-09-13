@@ -10,3 +10,4 @@ tests/DetectorTests/obj/
 .agents/
 .claude/skills/
 skills-lock.json
+*.tmp
