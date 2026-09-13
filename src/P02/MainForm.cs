@@ -574,6 +574,93 @@ public sealed class MainForm : Form
         Controls.Add(alsoKey);
         Tips.On(alsoKey, Tips.AlsoKey);
 
+        // Which HUD the game is showing, and so which output to use.
+        //
+        // The two layouts are nothing alike - the pad bar with its coloured
+        // face buttons along the bottom centre, or the flasks in their own box
+        // beside the life globe - and the game switches between them the
+        // moment you touch the other device. Keeping "Send keys by" in step by
+        // hand meant presses going to a device the game had stopped listening
+        // to.
+        var matchMode = new CheckBox
+        {
+            Text = "Match the game's mode",
+            Checked = cfg.FollowGameMode,
+            AutoSize = true,
+        };
+        Controls.Add(matchMode);
+        Tips.On(matchMode, Tips.FollowMode);
+
+        var lastSeen = ModeDetector.Mode.Unknown;
+        int agreeing = 0;
+        long lookedAt = 0;
+        bool looking = false;
+
+        _poll.Tick += (_, _) =>
+        {
+            if (IsDisposed || matchMode.IsDisposed) return;
+
+            if (matchMode.Checked != _cfg.FollowGameMode)
+            {
+                _cfg.FollowGameMode = matchMode.Checked;
+                Log.Write($"input: following the game's mode is "
+                          + (matchMode.Checked ? "on" : "off"));
+                Save();
+            }
+
+            if (!_cfg.FollowGameMode || looking) return;
+
+            long now = Environment.TickCount64;
+            if (now - lookedAt < 3000) return;
+            lookedAt = now;
+
+            if (Native.FindWindowRect(_cfg.WindowMatch) is not { } game) return;
+
+            // A screen capture, so off the window's own thread.
+            looking = true;
+            Task.Run(() => ModeDetector.DetectNow(game)).ContinueWith(done =>
+            {
+                looking = false;
+                if (done.IsFaulted || IsDisposed || !IsHandleCreated) return;
+                var seen = done.Result;
+
+                try
+                {
+                    BeginInvoke(() =>
+                    {
+                        // A loading screen or a menu shows neither HUD, and
+                        // says nothing about which device is in your hands.
+                        if (seen == ModeDetector.Mode.Unknown) { agreeing = 0; return; }
+
+                        agreeing = seen == lastSeen ? agreeing + 1 : 1;
+                        lastSeen = seen;
+
+                        // Two looks, three seconds apart, before anything
+                        // changes - one odd frame is not a change of device.
+                        if (agreeing < 2) return;
+
+                        bool pad = seen == ModeDetector.Mode.Controller;
+                        if (pad == (method.SelectedIndex == 2)) return;
+
+                        method.SelectedIndex = pad ? 2
+                            : _cfg.InputMethod.Equals("sendinput", StringComparison.OrdinalIgnoreCase)
+                                ? 0 : 1;
+
+                        Log.Write($"input: the game is showing its "
+                                  + (pad ? "controller" : "keyboard") + " HUD - presses now go by "
+                                  + (pad ? "controller" : "keyboard"));
+                        Told(NoticeBoard.Level.Info,
+                             pad ? "The game switched to your controller"
+                                 : "The game switched to your keyboard",
+                             pad ? "Presses now go to the controller."
+                                 : "Presses now go to the keyboard.");
+                    });
+                }
+                catch (ObjectDisposedException) { /* closing */ }
+                catch (InvalidOperationException) { /* closing */ }
+            });
+        };
+
         // Read rather than awaited, the same as the send method above, because
         // on this machine a box can be changed without its handler ever
         // hearing about it.
@@ -797,7 +884,7 @@ public sealed class MainForm : Form
             [[findAll, checkBtn], [howBtn], [updBtn, histBtn, upd], [diagBtn, logBtn]],
             [[numbersOnly], [mem], [rescan], [pollLbl, _pollHz]],
             [[winLbl], [_window, clearBtn], [armKeyLbl, _hotkey],
-             [sendLbl, method], [padKindLbl, padKind], [alsoKey],
+             [sendLbl, method], [matchMode], [padKindLbl, padKind], [alsoKey],
              [postedNote], [testBtn]],
             [[sound, disarmedDing], [oftenLbl, gap, msLbl], [volLbl, vol, dbLbl]],
             [[shareBtn, applyBtn], [hide]]);

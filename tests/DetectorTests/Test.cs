@@ -530,6 +530,41 @@ static class T
             Console.WriteLine((!once ? "PASS" : "FAIL") + "  gate: a reading seen once may not");
         }
 
+        // Which HUD the game is showing, from painted pixels at the places the
+        // real screenshots put them: coloured face buttons for a pad, a red
+        // and a blue flask by the globe for a keyboard, and neither for a menu.
+        {
+            const int W = 3440, H = 1440;
+
+            ModeDetector.Pixel Paint(params (double x, double y, int r, int g, int b)[] spots)
+                => (x, y) =>
+                {
+                    foreach (var s in spots)
+                        if (Math.Abs(x - s.x) <= 10 && Math.Abs(y - s.y) <= 10)
+                            return (s.r, s.g, s.b);
+                    return (8, 8, 8);
+                };
+
+            double faceY = H - 0.031 * H, flaskY = H - 0.060 * H;
+            var pad = Paint((W / 2.0 + 0.0285 * H, faceY, 20, 160, 40),
+                            (W / 2.0 + 0.0715 * H, faceY, 30, 60, 200),
+                            (W / 2.0 + 0.1146 * H, faceY, 200, 180, 30),
+                            (W / 2.0 + 0.1590 * H, faceY, 200, 30, 30));
+            var keys = Paint((0.241 * H, flaskY, 102, 24, 20),
+                             (0.287 * H, flaskY, 5, 20, 56));
+            var menu = Paint();
+
+            var a = ModeDetector.Detect(W, H, pad);
+            var b = ModeDetector.Detect(W, H, keys);
+            var c = ModeDetector.Detect(W, H, menu);
+            Console.WriteLine((a == ModeDetector.Mode.Controller ? "PASS" : "FAIL")
+                              + $"  mode: coloured face buttons are the controller HUD -> {a}");
+            Console.WriteLine((b == ModeDetector.Mode.Keyboard ? "PASS" : "FAIL")
+                              + $"  mode: dimmed red and blue flasks are the keyboard HUD -> {b}");
+            Console.WriteLine((c == ModeDetector.Mode.Unknown ? "PASS" : "FAIL")
+                              + $"  mode: a menu showing neither changes nothing -> {c}");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();

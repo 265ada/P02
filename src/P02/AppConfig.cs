@@ -363,6 +363,13 @@ public sealed class AppConfig
     public bool AlsoPressKey { get; set; } = true;
 
     /// <summary>
+    /// Switch "Send keys by" to whatever the game is showing: its controller
+    /// HUD means the pad, its keyboard HUD means keys. Read from the screen,
+    /// every few seconds.
+    /// </summary>
+    public bool FollowGameMode { get; set; } = true;
+
+    /// <summary>
     /// Read life and mana from the game's memory instead of from the screen.
     /// Exact and instant, and by far the most intrusive thing here - reading
     /// another process is what anti-cheat looks for, where watching the screen

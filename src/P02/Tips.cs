@@ -309,6 +309,17 @@ internal static class Tips
         "If one of them is being swallowed, try the other.",
     ];
 
+    public static readonly string[] FollowMode =
+    [
+        "Watches which HUD the game is showing and switches Send keys by to",
+        "match: the controller bar with its coloured A X Y B buttons means the",
+        "pad, the keyboard layout with the flasks beside the life globe means",
+        "keys.",
+        "",
+        "Checked every few seconds and only switched when two looks agree.",
+        "Loading screens and menus show neither, and change nothing.",
+    ];
+
     public static readonly string[] AlsoKey =
     [
         "Sends the keyboard key as well as the controller button.",

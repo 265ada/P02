@@ -24,6 +24,7 @@
     <Compile Include="..\..\src\P02\BarFinder.cs" />
     <Compile Include="..\..\src\P02\SettingsShare.cs" />
     <Compile Include="..\..\src\P02\Gamepad.cs" />
+    <Compile Include="..\..\src\P02\ModeDetector.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Nefarius.ViGEm.Client" Version="1.21.256" />
