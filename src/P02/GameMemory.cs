@@ -255,7 +255,7 @@ internal sealed class GameMemory : IDisposable
                 {
                     long retry = _lastGood;
                     _lastGood = 0;
-                    if (ReadStats(retry, out var back) && Plausible(back) && Matches(back))
+                    if (ReadStats(retry, out var back) && Plausible(back))
                     {
                         _address = retry;
                         Generation++;
@@ -285,7 +285,14 @@ internal sealed class GameMemory : IDisposable
 
                 bool read = ReadStats(_address, out var s);
                 bool sane = read && Plausible(s);
-                bool ours = sane && Matches(s);
+                // A verified lock is checked by its own back pointer on every
+                // read, not against the maxima it was given. Those come from
+                // the numbers box, and the numbers box reads the wrong line:
+                // it stored the Spirit maximum, 160, as maximum mana, and this
+                // then threw away a perfectly locked 850/850, 354/354 every
+                // second - 117 times - for not matching it. Your character is
+                // not wrong for disagreeing with a misread.
+                bool ours = sane && (_structured || Matches(s));
 
                 if (ours)
                 {

@@ -332,7 +332,15 @@ internal sealed partial class TextOcr : IDisposable
         //
         // The disagreement is still counted, so the panel can say the stored
         // value has moved on.
-        if (expected > 0 && max != expected)
+        // Only a line that names itself may argue with the stored maximum.
+        //
+        // A bare "38/160" is a perfectly good pair and says nothing about what
+        // it is a pair of - and on this HUD it was the Spirit line, sitting
+        // right under Mana. Counted as a disagreement, it replaced a maximum
+        // mana of 340 with 160, and memory then rejected the real character
+        // for not matching it. Unlabelled lines can still be read; they cannot
+        // change what the maximum is.
+        if (expected > 0 && max != expected && HasLabel(text, label))
         {
             if (max == slot.DisagreeMax) slot.DisagreeCount++;
             else { slot.DisagreeMax = max; slot.DisagreeCount = 1; }
