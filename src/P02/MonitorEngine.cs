@@ -900,15 +900,25 @@ public sealed class MonitorEngine : IDisposable
                     // repair, which re-ran setup - once per level.
                     if (_mem.Structured && _lifeMemConfirmed && _mem.TryGet(out var live))
                     {
-                        if (live.MaxMp > 0 && _cfg.Mana.KnownMax != live.MaxMp)
+                        // Small changes at once - that is levelling. A big one
+                        // only after the same character has held for twenty
+                        // seconds, because a big change a moment after a lock
+                        // is exactly what a reused slot looks like, and one of
+                        // those wrote a monster's 8,178 in as your life.
+                        bool steady = _mem.LockedForMs >= 20000;
+                        bool Small(int was, int now) => was <= 0 || Math.Abs(now - was) * 4 <= was;
+                        if (live.MaxMp > 0 && _cfg.Mana.KnownMax != live.MaxMp
+                            && (steady || Small(_cfg.Mana.KnownMax, live.MaxMp)))
                         {
                             Log.Write($"Mana: maximum {live.MaxMp:N0} refreshed from memory "
                                       + $"(was {_cfg.Mana.KnownMax:N0})");
                             _cfg.Mana.KnownMax = live.MaxMp;
                         }
-                        if (live.MaxEs > 0 && _cfg.Shield.KnownMax != live.MaxEs)
+                        if (live.MaxEs > 0 && _cfg.Shield.KnownMax != live.MaxEs
+                            && (steady || Small(_cfg.Shield.KnownMax, live.MaxEs)))
                             _cfg.Shield.KnownMax = live.MaxEs;
-                        if (live.MaxHp > 0 && _cfg.Life.KnownMax != live.MaxHp)
+                        if (live.MaxHp > 0 && _cfg.Life.KnownMax != live.MaxHp
+                            && (steady || Small(_cfg.Life.KnownMax, live.MaxHp)))
                         {
                             Log.Write($"Life: maximum {live.MaxHp:N0} refreshed from memory "
                                       + $"(was {_cfg.Life.KnownMax:N0})");

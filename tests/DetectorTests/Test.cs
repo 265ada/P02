@@ -589,6 +589,19 @@ static class T
                               + "  steam: a keyboard binding is not a pad button");
         }
 
+        // Whether a memory lock is still the character it locked onto, judged
+        // by its own maxima: levelling passes, a reused slot does not.
+        {
+            bool level = GameMemory.Continuous(850, 354, 862, 358);
+            bool monster = GameMemory.Continuous(850, 354, 4437, 200);
+            bool monster2 = GameMemory.Continuous(862, 358, 8178, 200);
+            bool fresh = GameMemory.Continuous(0, 0, 862, 358);
+            Console.WriteLine((level ? "PASS" : "FAIL") + "  lock: 850 -> 862 is the same character levelling");
+            Console.WriteLine((!monster ? "PASS" : "FAIL") + "  lock: 850 -> 4,437 is a reused slot, not you");
+            Console.WriteLine((!monster2 ? "PASS" : "FAIL") + "  lock: 862 -> 8,178 is a reused slot, not you");
+            Console.WriteLine((fresh ? "PASS" : "FAIL") + "  lock: a fresh lock has nothing to compare and is accepted");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();

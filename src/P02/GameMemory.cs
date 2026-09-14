@@ -104,6 +104,36 @@ internal sealed class GameMemory : IDisposable
     /// <summary>The address that was working when the lock dropped, tried first.</summary>
     private long _lastGood;
 
+    /// <summary>The locked character's own maxima, as last read, and since when.</summary>
+    private int _lockMaxHp, _lockMaxMp;
+    private long _lockSinceMs;
+
+    /// <summary>How long the current lock has held the same character.</summary>
+    public long LockedForMs => _lockMaxHp == 0 ? 0 : Environment.TickCount64 - _lockSinceMs;
+
+    /// <summary>
+    /// Whether a read from the lock is still the character it locked onto.
+    ///
+    /// Not whether it matches the maxima it was given - those come from the
+    /// numbers box, and a wrong one threw the real character away 117 times.
+    /// And not merely whether it is shaped like a character - after a zone
+    /// change the game reuses the slot for something else, a monster with its
+    /// own life of 4,437 or 8,178, which is shaped exactly like one. It had
+    /// its maxima written in as yours.
+    ///
+    /// What does not change is continuity. A character's maxima drift - a
+    /// level adds a few percent - but they do not jump by a quarter between
+    /// two reads a few milliseconds apart. Something that does is not you.
+    /// </summary>
+    private bool StillYou(Stats s) => Continuous(_lockMaxHp, _lockMaxMp, s.MaxHp, s.MaxMp);
+
+    internal static bool Continuous(int wasHp, int wasMp, int nowHp, int nowMp)
+    {
+        if (wasHp <= 0) return true;
+        if (Math.Abs(nowHp - wasHp) * 4 > wasHp) return false;
+        return wasMp <= 0 || Math.Abs(nowMp - wasMp) * 4 <= wasMp;
+    }
+
     /// <summary>Waiting for one of several equal matches to give itself away.</summary>
     public bool Pending => _pending.Count > 1;
 
@@ -214,6 +244,8 @@ internal sealed class GameMemory : IDisposable
         _pending = [];
         _pendingFirst = [];
         _lastGood = 0;
+        _lockMaxHp = 0;
+        _lockMaxMp = 0;
         lock (_gate) { _address = 0; _hasLatest = false; }
     }
 
@@ -239,6 +271,8 @@ internal sealed class GameMemory : IDisposable
                         _stop.Token.WaitHandle.WaitOne(200);
                         continue;
                     }
+                    _lockMaxHp = 0;
+                    _lockMaxMp = 0;
                     _address = settled;
                     Generation++;
                     continue;
@@ -255,7 +289,7 @@ internal sealed class GameMemory : IDisposable
                 {
                     long retry = _lastGood;
                     _lastGood = 0;
-                    if (ReadStats(retry, out var back) && Plausible(back))
+                    if (ReadStats(retry, out var back) && Plausible(back) && StillYou(back))
                     {
                         _address = retry;
                         Generation++;
@@ -273,9 +307,16 @@ internal sealed class GameMemory : IDisposable
                     long found = Search();
                     if (found == 0)
                     {
+                        // Searches that found no character, whatever the
+                        // reason - upstream this is what says the maximum being
+                        // searched for is wrong.
+                        MaxMissing++;
                         _stop.Token.WaitHandle.WaitOne(5000);
                         continue;
                     }
+                    MaxMissing = 0;
+                    _lockMaxHp = 0;
+                    _lockMaxMp = 0;
                     _address = found;
                     Generation++;
                     Log.Write($"memory: found player stats at 0x{found:X}");
@@ -292,10 +333,16 @@ internal sealed class GameMemory : IDisposable
                 // then threw away a perfectly locked 850/850, 354/354 every
                 // second - 117 times - for not matching it. Your character is
                 // not wrong for disagreeing with a misread.
-                bool ours = sane && (_structured || Matches(s));
+                bool ours = sane && (_structured ? StillYou(s) : Matches(s));
 
                 if (ours)
                 {
+                    // The lock's own maxima, followed as they drift - a level,
+                    // a piece of gear - so the next read is judged against
+                    // this character and not against a number from the screen.
+                    if (_lockMaxHp == 0) _lockSinceMs = Environment.TickCount64;
+                    _lockMaxHp = s.MaxHp;
+                    _lockMaxMp = s.MaxMp;
                     lock (_gate) { _latest = s; _hasLatest = true; }
                     _badReads = 0;
                     Status = $"reading: HP {s.CurHp}/{s.MaxHp}  MP {s.CurMp}/{s.MaxMp}";
@@ -557,6 +604,8 @@ internal sealed class GameMemory : IDisposable
             _manaOff = c.mana;
             _shieldOff = c.shield;
             _manaDelta = c.mana - c.health;
+            _lockMaxHp = 0;
+            _lockMaxMp = 0;
             _address = c.owner;
             Generation++;
             ReadVital(c.owner + c.health, out int hp, out int maxHp);
@@ -728,7 +777,7 @@ internal sealed class GameMemory : IDisposable
         // for as long as anyone cared to watch, because life was 362 and 346
         // had been written into the settings by an earlier guess. Counting the
         // misses lets somebody upstream stop believing the number.
-        MaxMissing = hpSeen == 0 ? MaxMissing + 1 : 0;
+        // Counted by the loop, per search that finds no character at all.
 
         // Which of those owners is a Life component.
         //
