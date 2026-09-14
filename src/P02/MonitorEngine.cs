@@ -818,6 +818,7 @@ public sealed class MonitorEngine : IDisposable
         // session.
         public int MemGeneration = -1;
         public bool MemConfirmed;
+        public double DisOcrFirst, DisOcrLast, DisMemFirst, DisMemLast;
         public long LastOcrAtMs;
         public int LastOcrCur;
         public int LastOcrMax;
@@ -1151,6 +1152,14 @@ public sealed class MonitorEngine : IDisposable
         => repeats >= 1
            && (knownMax <= 0 || max == knownMax)
            && (label.Length == 0 || TextOcr.HasLabel(raw, label));
+
+    /// <summary>
+    /// Whether memory is a frozen copy: through a disagreement, the numbers
+    /// moved and memory did not. A misread sits still; a live pool moves.
+    /// </summary>
+    internal static bool MemoryFrozen(double ocrFirst, double ocrNow,
+                                      double memFirst, double memNow)
+        => Math.Abs(ocrNow - ocrFirst) >= 0.02 && Math.Abs(memNow - memFirst) <= 0.005;
 
     /// <summary>What to do when memory and the numbers name different maxima.</summary>
     internal enum Verdict
@@ -1684,7 +1693,19 @@ public sealed class MonitorEngine : IDisposable
             // against the search having found the wrong one.
             if (st.MemConfirmed && haveOcr && !matchesOcr)
             {
-                if (st.MemDisagreeSinceMs == 0) st.MemDisagreeSinceMs = now;
+                if (st.MemDisagreeSinceMs == 0)
+                {
+                    st.MemDisagreeSinceMs = now;
+                    st.DisOcrFirst = ocrFrac;
+                    st.DisMemFirst = memFrac;
+                    st.DisOcrLast = ocrFrac;
+                    st.DisMemLast = memFrac;
+                }
+                else
+                {
+                    st.DisOcrLast = ocrFrac;
+                    st.DisMemLast = memFrac;
+                }
 
                 // Six hundred milliseconds, not two seconds. A misread lasts a
                 // frame or two; anything still disagreeing after half a second
@@ -1719,7 +1740,30 @@ public sealed class MonitorEngine : IDisposable
                     RefindNow();
                 }
 
-                if (!structured && now - st.MemDisagreeSinceMs > 600)
+                // Unless memory is the one that has stopped.
+                //
+                // "Memory wins" was right against a misreading box - the box
+                // sits on a wrong number and memory moves with you. It was
+                // lethal against a frozen copy: memory held 100% while the
+                // numbers fell to 43% and then 0%, and every one of those was
+                // overruled. The difference is movement. A frozen copy never
+                // changes; a misread does not follow the fight. So when the
+                // numbers are moving and memory is not, memory is the one
+                // that is wrong, and it goes - and that copy is avoided, so
+                // the next search does not simply pick it again.
+                bool frozen = structured
+                              && MemoryFrozen(st.DisOcrFirst, st.DisOcrLast,
+                                              st.DisMemFirst, st.DisMemLast);
+                if (frozen && now - st.MemDisagreeSinceMs > 600)
+                {
+                    st.MemConfirmed = false;
+                    st.MemDisagreeSinceMs = 0;
+                    if (name == "Life") _lifeMemConfirmed = false;
+                    Log.Write($"{name}: memory stayed at {memFrac:P0} while the numbers moved "
+                              + $"to {ocrFrac:P0} - memory is a frozen copy, dropping it");
+                    _mem.Distrust();
+                }
+                else if (!structured && now - st.MemDisagreeSinceMs > 600)
                 {
                     st.MemConfirmed = false;
                     st.MemDisagreeSinceMs = 0;

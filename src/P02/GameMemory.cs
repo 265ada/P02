@@ -104,6 +104,28 @@ internal sealed class GameMemory : IDisposable
     /// <summary>The address that was working when the lock dropped, tried first.</summary>
     private long _lastGood;
 
+    /// <summary>Copies caught sitting still while the character moved, and when.</summary>
+    private readonly Dictionary<long, long> _frozen = new();
+
+    private bool Frozen(long owner)
+    {
+        lock (_frozen)
+            return _frozen.TryGetValue(owner, out long at)
+                   && Environment.TickCount64 - at < 300000;
+    }
+
+    /// <summary>
+    /// Drops the current lock as a frozen copy and keeps away from it for five
+    /// minutes, so the next search chooses one of the others.
+    /// </summary>
+    public void Distrust()
+    {
+        long bad = _address;
+        if (bad != 0) lock (_frozen) _frozen[bad] = Environment.TickCount64;
+        Log.Write($"memory: {bad:X} is a frozen copy - avoiding it for five minutes");
+        Rescan();
+    }
+
     /// <summary>The locked character's own maxima, as last read, and since when.</summary>
     private int _lockMaxHp, _lockMaxMp;
     private long _lockSinceMs;
@@ -971,7 +993,8 @@ internal sealed class GameMemory : IDisposable
                 _pendingFirst = first;
                 _pendingSinceMs = Environment.TickCount64;
 
-                var pick = finalists[0];
+                var pick = finalists.FirstOrDefault(f => !Frozen(f.owner));
+                if (pick.owner == 0) pick = finalists[0];
                 _healthOff = pick.health;
                 _manaOff = pick.mana;
                 _shieldOff = pick.shield;
@@ -988,7 +1011,7 @@ internal sealed class GameMemory : IDisposable
             finalists = [finalists[moved[0]]];
         }
 
-        if (finalists.Count == 1)
+        if (finalists.Count == 1 && !Frozen(finalists[0].owner))
         {
             (bestOwner, bestHealth, bestMana, bestShield) = finalists[0];
         }

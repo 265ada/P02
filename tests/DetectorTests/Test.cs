@@ -602,6 +602,18 @@ static class T
             Console.WriteLine((fresh ? "PASS" : "FAIL") + "  lock: a fresh lock has nothing to compare and is accepted");
         }
 
+        // A frozen copy against a misreading box, from the night's log: memory
+        // held 100% while the numbers fell to 43%; the box sat on 17% while
+        // memory stayed at a steady full pool.
+        {
+            bool frozen = MonitorEngine.MemoryFrozen(1.00, 0.43, 1.00, 1.00);
+            bool misread = MonitorEngine.MemoryFrozen(0.17, 0.17, 1.00, 1.00);
+            bool bothMove = MonitorEngine.MemoryFrozen(0.80, 0.60, 0.80, 0.61);
+            Console.WriteLine((frozen ? "PASS" : "FAIL") + "  frozen: memory still at 100% while numbers fall is a frozen copy");
+            Console.WriteLine((!misread ? "PASS" : "FAIL") + "  frozen: a box stuck on 17% is a misread, memory kept");
+            Console.WriteLine((!bothMove ? "PASS" : "FAIL") + "  frozen: both moving is not frozen");
+        }
+
         // Short enough to paste into a chat message, and carrying nobody's keys.
         {
             var mine = new AppConfig();
