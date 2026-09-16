@@ -45,6 +45,13 @@ public sealed class GlobePanel : Card
     /// settings rather than reached for through a global.
     /// </summary>
     public static Func<bool>? UsingController;
+
+    /// <summary>
+    /// Whether memory has the character right now, so a silent numbers box can
+    /// be reported as what it is - a spare wheel that is flat while the car is
+    /// still moving - rather than as an emergency.
+    /// </summary>
+    public static Func<bool>? MemoryCovering;
     private readonly LevelBar _bar = new();
     private readonly Label _pct = new();
 
@@ -1499,14 +1506,28 @@ public sealed class GlobePanel : Card
             _numbers.Text = "Numbers not on screen - holding fire until they are back";
             _numbers.ForeColor = Theme.Accent;
         }
+        else if (r.Note == "numbers not trusted")
+        {
+            // Not the same as unreadable, and not worth a red alarm while
+            // memory has you. The box is producing pairs - it is just producing
+            // the wrong ones, off a neighbouring line - and refusing them is
+            // the app working, not failing.
+            bool covered = MemoryCovering?.Invoke() ?? false;
+            _numbers.Text = covered
+                ? "The numbers are misreading - memory is covering. Ctrl+/ re-finds them"
+                : "Holding fire: the numbers are misreading - press Ctrl+/ to re-find them";
+            _numbers.ForeColor = covered ? Theme.Warn : Theme.Bad;
+        }
         else if (_cfg.TextRegion.IsValid)
         {
             // Not "deciding" - it is refusing to decide. The numbers are set up
             // and silent, so nothing is being acted on at all, and saying
             // "globe pixels" read as though they were in charge.
-            _numbers.Text = "Holding fire: your numbers are set but cannot be read - "
-                            + "press Set it up for me";
-            _numbers.ForeColor = Theme.Bad;
+            bool covered = MemoryCovering?.Invoke() ?? false;
+            _numbers.Text = covered
+                ? "The numbers cannot be read - memory is covering. Ctrl+/ re-finds them"
+                : "Holding fire: your numbers are set but cannot be read - press Ctrl+/";
+            _numbers.ForeColor = covered ? Theme.Warn : Theme.Bad;
         }
         else
         {

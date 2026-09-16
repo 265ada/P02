@@ -61,6 +61,7 @@ public sealed class MainForm : Form
         // the end meant they asked, got nothing, and drew a key box whatever
         // the setting said.
         GlobePanel.UsingController = () => _cfg.UseController;
+        GlobePanel.MemoryCovering = () => _engine.MemoryLocked;
 
         Text = $"P02  v{Version}";
         // Resizable, and it scrolls. It was a fixed 900x856 that had grown with
