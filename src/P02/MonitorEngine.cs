@@ -1142,16 +1142,31 @@ public sealed class MonitorEngine : IDisposable
 
     /// <summary>Whether memory has an address it is willing to read from.</summary>
     /// <summary>
-    /// Whether a reading from the numbers box may press a key on its own:
-    /// its own label on the line, the maximum exactly the one already known,
-    /// and the same reading twice. A mangled read almost always fails the
-    /// first, a misread digit the second, and a one-frame glitch the third.
+    /// Whether a reading from the numbers box may press a key on its own.
+    ///
+    /// Its own label on the line and the maximum exactly the one already
+    /// known are required always - a mangled read almost always loses the
+    /// label, and a misread digit gets the maximum wrong. The third test used
+    /// to be the same reading twice, and that is what nearly killed somebody:
+    /// "Life 41/874" arrived once, labelled, maximum exact, and then sat there
+    /// UNTRUSTED for over a second because OCR - one engine, shared between
+    /// two boxes, sometimes busy for whole seconds during a fight - did not
+    /// look at the life box again in time to confirm it. The rule was waiting
+    /// on a machine that had nothing left to give, at 4.7% life.
+    ///
+    /// A second look is worth having when nothing is at stake. It is not
+    /// worth a life. So a reading below the panic floor - already labelled,
+    /// already the right maximum - is trusted the first time it is seen, and
+    /// only a normal-range reading still has to repeat. The fast check at the
+    /// point of firing (the impossible-fall look, and panic's own double
+    /// check) is what actually catches a misread in this range, and it needs
+    /// only the next poll, not a second trip through OCR.
     /// </summary>
     internal static bool TrustNumbers(string raw, string label, int max, int knownMax,
-                                      int repeats)
-        => repeats >= 1
+                                      int repeats, double frac, double dangerBelow)
+        => (label.Length == 0 || TextOcr.HasLabel(raw, label))
            && (knownMax <= 0 || max == knownMax)
-           && (label.Length == 0 || TextOcr.HasLabel(raw, label));
+           && (repeats >= 1 || (dangerBelow > 0 && frac < dangerBelow));
 
     /// <summary>
     /// Whether memory is a frozen copy: through a disagreement, the numbers
@@ -1405,8 +1420,11 @@ public sealed class MonitorEngine : IDisposable
                 st.LastOcrCur = tr.Current;
                 st.LastOcrMax = tr.Max;
             }
+            // The widest of the floors this pool actually uses - whichever net
+            // would have fired on this reading anyway had it been trusted.
+            double dangerBelow = Math.Max(c.PanicBelow, Math.Max(c.UberBelow, c.LastDitchBelow));
             numbersTrusted = TrustNumbers(tr.Raw, c.TextLabel, tr.Max, c.KnownMax,
-                                          st.OcrRepeats);
+                                          st.OcrRepeats, tr.Fraction, dangerBelow);
 
             if (textAge < 1200 && agrees)
             {

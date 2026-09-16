@@ -518,16 +518,24 @@ static class T
         }
 
         // The gate every numbers reading has to pass before it may fire,
-        // tested against the night's actual misreads.
+        // tested against the night's actual misreads - and against the night
+        // it went too far the other way. "Life 41/874" arrived once,
+        // labelled, the right maximum, at 4.7% - and sat untrusted for over a
+        // second because OCR did not look again in time. A dangerously low
+        // reading now clears on the first look; an ordinary one still has to
+        // repeat.
         {
-            bool clean = MonitorEngine.TrustNumbers("Life 578/578", "Life", 578, 578, 1);
-            bool mangled = MonitorEngine.TrustNumbers("981578", "Life", 578, 578, 3);
-            bool digit = MonitorEngine.TrustNumbers("Mana 269/469", "Mana", 469, 269, 5);
-            bool once = MonitorEngine.TrustNumbers("Life 98/578", "Life", 578, 578, 0);
+            bool clean = MonitorEngine.TrustNumbers("Life 578/578", "Life", 578, 578, 1, 1.0, 0.35);
+            bool mangled = MonitorEngine.TrustNumbers("981578", "Life", 578, 578, 3, 0.17, 0.35);
+            bool digit = MonitorEngine.TrustNumbers("Mana 269/469", "Mana", 469, 269, 5, 0.573, 0.30);
+            bool onceSafe = MonitorEngine.TrustNumbers("Life 500/578", "Life", 578, 578, 0, 0.865, 0.35);
+            bool onceDanger = MonitorEngine.TrustNumbers("Life 41/874", "Life", 874, 874, 0, 41.0 / 874, 0.35);
             Console.WriteLine((clean ? "PASS" : "FAIL") + "  gate: a clean labelled line seen twice may fire");
-            Console.WriteLine((!mangled ? "PASS" : "FAIL") + "  gate: 981578 has no label and may not");
+            Console.WriteLine((!mangled ? "PASS" : "FAIL") + "  gate: 981578 has no label and may not, however low");
             Console.WriteLine((!digit ? "PASS" : "FAIL") + "  gate: 269/469 names the wrong maximum and may not");
-            Console.WriteLine((!once ? "PASS" : "FAIL") + "  gate: a reading seen once may not");
+            Console.WriteLine((!onceSafe ? "PASS" : "FAIL") + "  gate: an ordinary reading seen once still waits");
+            Console.WriteLine((onceDanger ? "PASS" : "FAIL")
+                              + "  gate: Life 41/874 at 4.7%, seen once, fires - the near-death case");
         }
 
         // Which HUD the game is showing, from painted pixels at the places the
