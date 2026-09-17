@@ -31,8 +31,31 @@ static class T
         { _buf[i] = 40; _buf[i + 1] = 38; _buf[i + 2] = 36; _buf[i + 3] = 255; }
     }
 
+    /// <summary>
+    /// Everything past the globe/OCR tests near the top of this file reports
+    /// PASS/FAIL by printing a line, not by touching a counter - so a test
+    /// could fail right there in the console and "ALL PASS" still printed
+    /// underneath it, because nothing read the line back. Found while adding
+    /// the hud-hiding tests below: they printed two FAILs and the run still
+    /// claimed a clean pass. Mirroring stdout here and counting FAIL lines in
+    /// it at the end is the actual source of truth now; the scattered `fails`
+    /// counter below is left alone rather than torn out of forty call sites,
+    /// but no longer decides anything.
+    /// </summary>
+    sealed class TeeWriter(TextWriter real, StringWriter mirror) : TextWriter
+    {
+        public override System.Text.Encoding Encoding => real.Encoding;
+        public override void Write(char value) { real.Write(value); mirror.Write(value); }
+        public override void Write(string? value) { real.Write(value); mirror.Write(value); }
+        public override void WriteLine(string? value) { real.WriteLine(value); mirror.WriteLine(value); }
+    }
+
     static void Main()
     {
+        var realOut = Console.Out;
+        var mirror = new StringWriter();
+        Console.SetOut(new TeeWriter(realOut, mirror));
+
         int fails = 0;
 
         // The real bottom-right corner: mana globe, plus blue skill gems and a
@@ -554,6 +577,34 @@ static class T
                               + "  net: rising fast at 40%/s (past the 30%/s floor) -> holds");
         }
 
+        // Whether the overlay should still treat a quiet numbers box as a menu
+        // covering the HUD rather than give up and show anyway. A box that has
+        // never read at all never counts as covered (nothing to be patient
+        // about); one that read recently stays covered for fifteen minutes,
+        // not the old one minute that popped the overlay back up over a
+        // crafting bench or the passive tree.
+        {
+            bool neverRead = MonitorEngine.StillCoveredByMenu(0, 5_000, MonitorEngine.HudGiveUpMs);
+            bool justWentQuiet = MonitorEngine.StillCoveredByMenu(1_000, 2_000, MonitorEngine.HudGiveUpMs);
+            bool fiveMinutesInAMenu = MonitorEngine.StillCoveredByMenu(
+                1, 1 + 5 * 60_000, MonitorEngine.HudGiveUpMs);
+            bool justUnderTheLimit = MonitorEngine.StillCoveredByMenu(
+                1, 1 + MonitorEngine.HudGiveUpMs, MonitorEngine.HudGiveUpMs);
+            bool pastTheLimit = MonitorEngine.StillCoveredByMenu(
+                1, 1 + MonitorEngine.HudGiveUpMs + 1, MonitorEngine.HudGiveUpMs);
+
+            Console.WriteLine((!neverRead ? "PASS" : "FAIL")
+                              + "  hud: a box that has never read is never 'covered'");
+            Console.WriteLine((justWentQuiet ? "PASS" : "FAIL")
+                              + "  hud: quiet for a second still reads as covered");
+            Console.WriteLine((fiveMinutesInAMenu ? "PASS" : "FAIL")
+                              + "  hud: five minutes in a menu still reads as covered");
+            Console.WriteLine((justUnderTheLimit ? "PASS" : "FAIL")
+                              + "  hud: right at the give-up point still reads as covered");
+            Console.WriteLine((!pastTheLimit ? "PASS" : "FAIL")
+                              + "  hud: one past the give-up point gives up");
+        }
+
         // The gate every numbers reading has to pass before it may fire,
         // tested against the night's actual misreads - and against the night
         // it went too far the other way. "Life 41/874" arrived once,
@@ -746,8 +797,12 @@ static class T
                                        + "without matching another stat");
         }
 
-        Console.WriteLine(fails == 0 ? "\nALL PASS" : $"\n{fails} FAILED");
-        Environment.Exit(fails == 0 ? 0 : 1);
+        Console.SetOut(realOut);
+        int printedFails = mirror.ToString()
+            .Split('\n').Count(line => line.TrimStart().StartsWith("FAIL"));
+
+        Console.WriteLine(printedFails == 0 ? "\nALL PASS" : $"\n{printedFails} FAILED");
+        Environment.Exit(printedFails == 0 ? 0 : 1);
     }
 
     static int Check(string name, Rectangle? got, int cx, int cy, int rad)

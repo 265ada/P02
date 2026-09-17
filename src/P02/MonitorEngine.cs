@@ -362,7 +362,17 @@ public sealed class MonitorEngine : IDisposable
                 // clothes, and both of them used to wait for somebody to think
                 // of pressing a button.
                 FindGlobes();
-                if (_cfg.UseMemory) _mem.Rescan();
+
+                // Every caller here is chasing a bad NUMBERS box - a garbled
+                // read, a stale line, one that disagrees with a memory lock
+                // that has already proven itself. A structured lock is not a
+                // guess sharing the blame; tearing it up on the same trip cost
+                // the only working reading for the several seconds memory took
+                // to re-tie two candidates and pick one again, and every one of
+                // those seconds fell back to the very numbers just declared
+                // unreliable - "numbers not trusted" once every twenty seconds,
+                // forever, while nothing was actually wrong with memory at all.
+                if (_cfg.UseMemory && !_mem.Structured) _mem.Rescan();
                 Log.Write($"numbers: {what.Replace(Environment.NewLine, " / ")}");
             }
             catch (Exception ex)
@@ -1316,9 +1326,36 @@ public sealed class MonitorEngine : IDisposable
 
             // And only if the numbers were ever working, so a box that has
             // never read does not pass for a shop that never closes.
-            return _hudSeenMs == 0 || _ocr.NowMs - _hudSeenMs > 60000;
+            //
+            // Sixty seconds was too short: a crafting bench, the stash, or
+            // planning a respec on the passive tree routinely runs past a
+            // minute, and every time it did the overlay popped back up over
+            // the menu it was supposed to be hiding from - the very "broke it
+            // and never fixed it" complaint this guard exists to prevent, just
+            // arriving from the other direction. A structured memory lock
+            // (checked above) already rules out the original failure this
+            // timeout was for - a broken setup masquerading as a shop - so the
+            // remaining case is only "genuinely still in a menu," which
+            // deserves minutes, not one.
+            return !StillCoveredByMenu(_hudSeenMs, _ocr.NowMs, HudGiveUpMs);
         }
     }
+
+    /// <summary>
+    /// How long a covered HUD is trusted to still be a menu rather than a
+    /// broken setup. Fifteen minutes comfortably outlasts a crafting or
+    /// trading session; the old one minute did not.
+    /// </summary>
+    internal const long HudGiveUpMs = 900_000;
+
+    /// <summary>
+    /// Whether the numbers going quiet still reads as "a panel is covering
+    /// the HUD" rather than "give up and show the overlay anyway." True only
+    /// for a box that has read before (<paramref name="hudSeenMs"/> nonzero)
+    /// and not so long ago that a menu stops being the likely explanation.
+    /// </summary>
+    internal static bool StillCoveredByMenu(long hudSeenMs, long nowMs, long giveUpMs)
+        => hudSeenMs != 0 && nowMs - hudSeenMs <= giveUpMs;
 
     private long _hudSeenMs;
     private long _forgotMaxAtMs = long.MinValue / 2;
