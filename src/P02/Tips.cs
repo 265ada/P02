@@ -577,14 +577,17 @@ internal static class Tips
 
     public static readonly string[] OverlayAutoHide =
     [
-        "Hides the readout whenever the game's numbers are not on screen.",
+        "Hides the readout whenever the game's numbers are not on screen, or",
+        "the game itself is not the focused window.",
         "",
         "A shop, the passive tree or an inventory covers the HUD, and while one",
         "is up the readout has nothing true to say - it is only in the way of",
-        "the thing you opened.",
+        "the thing you opened. Alt-tabbing away is the same idea: nothing here",
+        "is watching your game while something else has focus.",
         "",
-        "It is also exactly when nothing can fire, so the readout disappearing",
-        "is information rather than a gap: gone means not watching.",
+        "Both are also exactly when nothing can fire, so the readout",
+        "disappearing is information rather than a gap: gone means not",
+        "watching.",
     ];
 
     public static readonly string[] LastDitch =

@@ -1700,7 +1700,20 @@ public sealed class MainForm : Form
 
                     if (_cfg.OverlayOn && wanted != _overlay.Visible)
                     {
-                        if (wanted) _overlay.Show(); else _overlay.Hide();
+                        if (wanted) _overlay.Show();
+                        else
+                        {
+                            _overlay.Hide();
+                            // Which of the two reasons actually did it - "auto
+                            // hide" covers both a menu over the HUD and the
+                            // game losing focus, and only the first of those is
+                            // in the checkbox's own tooltip. Logged so the next
+                            // "why didn't it hide" has an answer instead of a
+                            // guess.
+                            string why = !focused ? "the game is not the focused window"
+                                       : "the HUD is covered";
+                            Log.Write($"overlay: hiding - {why}");
+                        }
                     }
 
                     _engine.OverlayBounds = _overlay.Visible
