@@ -1069,6 +1069,16 @@ public sealed class MainForm : Form
                          room - _arm.Right - S(26), _focus.Height);
 
         Regroup(_groups[0], _groups[1], _groups[2], _groups[3], _groups[4]);
+
+        // The board used to reach all the way down to the bottom of the
+        // window regardless of how tall everything beside it actually was -
+        // which is what made a five-line log look like it was sitting in a
+        // column built for fifty. Ending it level with the last row instead
+        // means both columns share a bottom edge, which reads as the layout
+        // rather than as the board having nothing left to say.
+        if (boardW > 0)
+            _notices.Height = Math.Max(S(120),
+                Math.Min(ClientSize.Height - S(56), _live.Bottom - _notices.Top));
         }
         finally { _laying = false; }
     }
