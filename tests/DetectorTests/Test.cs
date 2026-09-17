@@ -517,6 +517,43 @@ static class T
                               + "  a small change is never a clip");
         }
 
+        // Whether the emergency and last-ditch nets may press again while
+        // still below their floor: unbounded for emergency, capped at three
+        // for last-ditch, and neither repeats once life is climbing fast.
+        {
+            bool firstEver = MonitorEngine.NetMayFire(0, int.MaxValue, canRepeat: false);
+            bool emergencyAgain = MonitorEngine.NetMayFire(1, int.MaxValue, canRepeat: true);
+            bool emergencyRecovering = MonitorEngine.NetMayFire(1, int.MaxValue, canRepeat: false);
+            bool lastDitchSecond = MonitorEngine.NetMayFire(1, 3, canRepeat: true);
+            bool lastDitchExhausted = MonitorEngine.NetMayFire(3, 3, canRepeat: true);
+
+            Console.WriteLine((firstEver ? "PASS" : "FAIL")
+                              + "  net: the first press below a floor is always allowed");
+            Console.WriteLine((emergencyAgain ? "PASS" : "FAIL")
+                              + "  net: emergency presses again while still falling, no cap");
+            Console.WriteLine((!emergencyRecovering ? "PASS" : "FAIL")
+                              + "  net: emergency stops once life is climbing fast");
+            Console.WriteLine((lastDitchSecond ? "PASS" : "FAIL")
+                              + "  net: last-ditch may press a second time");
+            Console.WriteLine((!lastDitchExhausted ? "PASS" : "FAIL")
+                              + "  net: last-ditch stops after three, even if still falling");
+
+            // "Rising rapidly" reuses the pool's own fast-drop number, negated:
+            // falling, or rising slower than that, still allows a repeat.
+            bool stillFalling = MonitorEngine.NetMayFire(1, int.MaxValue,
+                canRepeat: 20.0 > -30.0);
+            bool risingSlowly = MonitorEngine.NetMayFire(1, int.MaxValue,
+                canRepeat: -10.0 > -30.0);
+            bool risingFast = MonitorEngine.NetMayFire(1, int.MaxValue,
+                canRepeat: -40.0 > -30.0);
+            Console.WriteLine((stillFalling ? "PASS" : "FAIL")
+                              + "  net: still falling at 20%/s -> may repeat");
+            Console.WriteLine((risingSlowly ? "PASS" : "FAIL")
+                              + "  net: rising slowly at 10%/s (below the 30%/s floor) -> may repeat");
+            Console.WriteLine((!risingFast ? "PASS" : "FAIL")
+                              + "  net: rising fast at 40%/s (past the 30%/s floor) -> holds");
+        }
+
         // The gate every numbers reading has to pass before it may fire,
         // tested against the night's actual misreads - and against the night
         // it went too far the other way. "Life 41/874" arrived once,

@@ -803,10 +803,18 @@ public sealed class MonitorEngine : IDisposable
         public long NoGoodSourceSinceMs;
         public bool HadGoodSource;
         public double LastGoodFrac;
-        public bool UberUsed;
+        /// <summary>
+        /// Presses sent by the emergency net since it was last above its
+        /// floor. Was a bool - one press, never again until recovered.
+        /// Below the floor, still falling, that one press is not always
+        /// enough; it can now fire again as long as life has not turned
+        /// around, so this counts rather than flags.
+        /// </summary>
+        public int UberUsed;
         public double NetHeldAt = -1;
         public long ZeroSinceMs;
-        public bool LastDitchUsed;
+        /// <summary>Presses sent by the last-ditch net, capped at three.</summary>
+        public int LastDitchUsed;
         public long BackoffUntilMs;
         public bool Blind;
 
@@ -1176,6 +1184,14 @@ public sealed class MonitorEngine : IDisposable
                                       double memFirst, double memNow)
         => Math.Abs(ocrNow - ocrFirst) >= 0.02 && Math.Abs(memNow - memFirst) <= 0.005;
 
+    /// <summary>
+    /// Whether an emergency or last-ditch net may press again: the first
+    /// press below the floor is always allowed; after that, only while there
+    /// is room left in the count and life has not turned the corner.
+    /// </summary>
+    internal static bool NetMayFire(int used, int maxUses, bool canRepeat)
+        => used == 0 || (used < maxUses && canRepeat);
+
     /// <summary>What to do when memory and the numbers name different maxima.</summary>
     internal enum Verdict
     {
@@ -1506,8 +1522,8 @@ public sealed class MonitorEngine : IDisposable
                     if (name == "Life") _lifeMemConfirmed = false;
                     Log.Write($"{name}: memory has read {cur:N0} unchanged for eight "
                               + "seconds while the numbers moved - the address is frozen, "
-                              + "searching again");
-                    _mem.Rescan();
+                              + "avoiding it and searching again");
+                    _mem.Distrust();
                 }
             }
             else
@@ -1517,9 +1533,18 @@ public sealed class MonitorEngine : IDisposable
             }
                     st.MemConfirmed = false;
                     if (name == "Life") _lifeMemConfirmed = false;
+                    // Distrust, not a plain Rescan. Tonight the same corpse -
+                    // "life 0/886, mana 325/366, shield 0/1136" - outscored the
+                    // real character on a stale OCR hint and was picked again
+                    // every time this fired: found, read as zero for a second,
+                    // rescanned, found again, on a nine-second loop that never
+                    // once protected anything. Distrust blacklists the address
+                    // for five minutes, so the next search is forced onto a
+                    // different candidate - hopefully the one that is not dead.
                     Log.Write($"{name}: memory has read 0 of {max:N0} for over a second - "
-                              + "the address has gone stale, searching again");
-                    _mem.Rescan();
+                              + "the address has gone stale, avoiding it and searching "
+                              + "again");
+                    _mem.Distrust();
                 }
 
                 textRaw = $"memory reads 0/{max:N0} - stale address, ignored";
@@ -2243,16 +2268,31 @@ public sealed class MonitorEngine : IDisposable
 
         st.NetHeldAt = -1;
 
+        // Whether pressing again is worth it: only while life is not already
+        // turning around. One press below a floor was a hard rule - "will not
+        // repeat until recovered" - and that is safe when the pool is a
+        // single flask's worth of healing, wrong when it is not: standing
+        // below emergency and still dropping, waiting out a fresh cooldown to
+        // press again is how "it has a lock on my hp" and "it is not potting"
+        // turned out to be the same complaint. Once life visibly climbs at the
+        // same rate a fast drop would be flagged, another press would very
+        // likely overheal, and it stops.
+        bool canRepeat = c.FastDropPctPerSec <= 0 || dropRate > -c.FastDropPctPerSec;
+
         if (frac > 0)
         {
-            if (Net(c.UberBelow, ref st.UberUsed, "EMERGENCY")) 
+            // Emergency: no cap. Below this floor and not recovering, keep
+            // pressing - bounded only by having flasks left and by turning
+            // the corner, never by an artificial gap.
+            if (Net(c.UberBelow, ref st.UberUsed, int.MaxValue, canRepeat, "EMERGENCY"))
                 return new GlobeReading(name, frac, true, "", fromText, textRaw);
 
-            // A second line further down. Each net is a single press, so the
-            // first one having gone does not help if it landed in a cooldown or
-            // on a flask with nothing left - and by then there is no other
-            // chance coming.
-            if (Net(c.LastDitchBelow, ref st.LastDitchUsed, "LAST DITCH"))
+            // Last ditch: up to three. The floor below emergency is the one
+            // place a single miss is likeliest to be fatal, so it gets more
+            // than one attempt too - but a number, not "as many as it takes",
+            // because by the third failed press something other than a
+            // missing charge is almost certainly wrong.
+            if (Net(c.LastDitchBelow, ref st.LastDitchUsed, 3, canRepeat, "LAST DITCH"))
                 return new GlobeReading(name, frac, true, "", fromText, textRaw);
         }
 
@@ -2262,23 +2302,31 @@ public sealed class MonitorEngine : IDisposable
             return new GlobeReading(name, frac, true, "", fromText, textRaw);
         }
 
-        bool Net(double floor, ref bool used, string what)
+        bool Net(double floor, ref int used, int maxUses, bool canRepeat, string what)
         {
             if (floor <= 0) return false;
-            if (frac > floor + 0.05) used = false;
-            if (frac > floor || used || _keys.Busy) return false;
+
+            // Recovered past the floor by a margin: the episode is over,
+            // whether it took one press or several.
+            if (frac > floor + 0.05) used = 0;
+            if (frac > floor || _keys.Busy) return false;
+            if (!NetMayFire(used, maxUses, canRepeat)) return false;
+
             if (!_keys.Send(c.Key, c.HoldMs, 1, 40, PostingKeys, GameWindow, PadFor(c),
                         _cfg.UseController && _cfg.AlsoPressKey)) return false;
 
-            used = true;
+            used++;
             st.LastFireMs = now;
             st.Below = 0;
             FiresThisFight++;
         lock (_firesByPool) _firesByPool[name] = FiresThisFightFor(name) + 1;
             if (_cfg.SoundOnFire) _chime.Play(_cfg.SoundGapMs);
-            Log.Write($"{name}: '{c.Key}' x1 at {frac:P1} {what} - one press, "
-                      + "will not repeat until recovered");
-            _trail.Dump($"{name} {what.ToLowerInvariant()} press at {frac:P1}, under the "
+            string tail = used > 1
+                ? $"repeat press #{used}, still under the {floor:P0} floor"
+                : "one press, as a last resort";
+            Log.Write($"{name}: '{c.Key}' x1 at {frac:P1} {what} - {tail}");
+            _trail.Dump($"{name} {what.ToLowerInvariant()} press"
+                        + (used > 1 ? $" #{used}" : "") + $" at {frac:P1}, under the "
                         + $"{floor:P0} floor, reading from "
                         + $"{(fromText ? textRaw : "globe pixels")}");
             Fired?.Invoke(name, frac);
