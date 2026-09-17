@@ -176,10 +176,22 @@ internal static class Native
     /// of the *game*, and on a multi-monitor desktop the corners of the whole
     /// virtual screen are somewhere else entirely.
     /// </summary>
-    public static Rectangle? FindWindowRect(string match)
+    public static Rectangle? FindWindowRect(string match) => FindWindow(match, out var rect) != 0 ? rect : null;
+
+    /// <summary>
+    /// One EnumWindows pass doing what <see cref="FindWindowRect"/> and
+    /// <see cref="FindWindowHandle"/> each did on their own - the main poll
+    /// loop wanted both every tick and was paying for the desktop-wide window
+    /// enumeration twice (three times counting the repair check), sixty times
+    /// a second, whether or not the game was even open.
+    /// </summary>
+    public static nint FindWindow(string match, out Rectangle rect)
     {
-        if (string.IsNullOrWhiteSpace(match)) return null;
-        Rectangle? best = null;
+        rect = default;
+        if (string.IsNullOrWhiteSpace(match)) return 0;
+
+        nint best = 0;
+        Rectangle bestRect = default;
 
         EnumWindows((h, _) =>
         {
@@ -187,16 +199,20 @@ internal static class Native
             if (!TitleOf(h).Contains(match, StringComparison.OrdinalIgnoreCase)) return true;
             if (!GetWindowRect(h, out RECT r)) return true;
 
-            var rect = r.ToRectangle();
+            var candidate = r.ToRectangle();
             // Skip tool windows and our own dialogs; the game is full screen.
-            if (rect.Width < 400 || rect.Height < 300) return true;
+            if (candidate.Width < 400 || candidate.Height < 300) return true;
 
-            if (best is null || rect.Width * (long)rect.Height >
-                                best.Value.Width * (long)best.Value.Height)
-                best = rect;
+            if (best == 0 || candidate.Width * (long)candidate.Height >
+                             bestRect.Width * (long)bestRect.Height)
+            {
+                best = h;
+                bestRect = candidate;
+            }
             return true;
         }, 0);
 
+        rect = bestRect;
         return best;
     }
 
@@ -205,26 +221,7 @@ internal static class Native
 
     /// <summary>Handle of the first visible window whose title contains
     /// <paramref name="match"/>, or 0.</summary>
-    public static nint FindWindowHandle(string match)
-    {
-        if (string.IsNullOrWhiteSpace(match)) return 0;
-        nint best = 0;
-        long bestArea = 0;
-
-        EnumWindows((h, _) =>
-        {
-            if (!IsWindowVisible(h)) return true;
-            if (!TitleOf(h).Contains(match, StringComparison.OrdinalIgnoreCase)) return true;
-            if (!GetWindowRect(h, out RECT r)) return true;
-            var rect = r.ToRectangle();
-            if (rect.Width < 400 || rect.Height < 300) return true;
-            long area = (long)rect.Width * rect.Height;
-            if (area > bestArea) { bestArea = area; best = h; }
-            return true;
-        }, 0);
-
-        return best;
-    }
+    public static nint FindWindowHandle(string match) => FindWindow(match, out _);
 
     // ---- keeping our own windows out of the capture -----------------------
 

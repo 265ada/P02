@@ -264,7 +264,7 @@ public sealed class MonitorEngine : IDisposable
     /// first place is run again, and it either finds the words or changes
     /// nothing.
     /// </summary>
-    private void RefindLostNumbers(long now, bool focused)
+    private void RefindLostNumbers(long now, bool focused, nint gameWnd, Rectangle game)
     {
         if (!_ocr.Available) return;
 
@@ -273,7 +273,7 @@ public sealed class MonitorEngine : IDisposable
         // which means the one thing that would repair it never ran. Reading the
         // screen does not need focus - it needs the game to be drawn and not
         // covered by us.
-        if (Native.FindWindowRect(_cfg.WindowMatch) is not { } game) return;
+        if (gameWnd == 0) return;
         // Only the corners matter, not the whole game window.
         //
         // This used to refuse to repair anything while our own window overlapped
@@ -877,6 +877,14 @@ public sealed class MonitorEngine : IDisposable
                 long t0 = clock.ElapsedMilliseconds;
                 bool focused = WindowFocused();
 
+                // One desktop-wide window enumeration per tick, not up to
+                // three: memory wanted the handle, the bar-follow and the
+                // numbers-repair check each wanted the rect, and each used to
+                // ask EnumWindows for it separately - at up to 250 times a
+                // second whether or not the game was even running.
+                nint gameWnd = Native.FindWindow(_cfg.WindowMatch, out Rectangle gameRect);
+                bool gameRunning = gameWnd != 0;
+
                 // Both maxima go to the search every pass, whether or not that
                 // globe is switched on. Life alone does not identify the
                 // structure - the heap is full of pairs - and mana being off is
@@ -886,7 +894,6 @@ public sealed class MonitorEngine : IDisposable
                     // The process behind the window we already found, so a
                     // standalone or Epic install is attached to as readily as
                     // the Steam one.
-                    nint gameWnd = Native.FindWindowHandle(_cfg.WindowMatch);
                     if (gameWnd != 0)
                     {
                         Native.GetWindowThreadProcessId(gameWnd, out uint gamePid);
@@ -995,7 +1002,7 @@ public sealed class MonitorEngine : IDisposable
                         _mem.HintCurMp = mh.Current;
                 }
 
-                RefindLostNumbers(t0, focused);
+                RefindLostNumbers(t0, focused, gameWnd, gameRect);
 
                 // Decoration, and rate limited inside, so it can never compete
                 // with the reading that decides whether to press a key.
@@ -1009,20 +1016,19 @@ public sealed class MonitorEngine : IDisposable
                 // is, and saving a spot is what switches the following on - so
                 // requiring it first meant the very first attempt could never
                 // work.
-                if (_cfg.OverlayOn
-                    && Native.FindWindowRect(_cfg.WindowMatch) is { } client)
+                if (_cfg.OverlayOn && gameRunning)
                 {
                     _bar.Ignore = OverlayBounds;
-                    _bar.Look(client);
+                    _bar.Look(gameRect);
                 }
 
                 AdoptChangedMax("Life", _cfg.Life);
                 AdoptChangedMax("Mana", _cfg.Mana);
                 AdoptChangedMax("Shield", _cfg.Shield);
 
-                var lr = Sample(life, _cfg.Life, "Life", focused, clock);
-                var mr = Sample(mana, _cfg.Mana, "Mana", focused, clock);
-                var sr = Sample(shield, _cfg.Shield, "Shield", focused, clock);
+                var lr = Sample(life, _cfg.Life, "Life", focused, clock, gameRunning);
+                var mr = Sample(mana, _cfg.Mana, "Mana", focused, clock, gameRunning);
+                var sr = Sample(shield, _cfg.Shield, "Shield", focused, clock, gameRunning);
 
                 // A fight is life going down. Regeneration and leech send it up
                 // constantly, so a rise says nothing was hitting you - only a
@@ -1110,7 +1116,13 @@ public sealed class MonitorEngine : IDisposable
                     Sampled?.Invoke(lr, mr, sr, focused);
                 }
 
-                int period = 1000 / Math.Clamp(_cfg.PollHz, 5, 250);
+                // Noticing the game has appeared a quarter-second late costs
+                // nothing; noticing a hit a quarter-second late is the whole
+                // job. Polling for a window that is not there at the
+                // configured rate - up to 250 times a second - was most of
+                // what "P02 idles at 30% of a core with the game closed"
+                // turned out to be.
+                int period = gameRunning ? 1000 / Math.Clamp(_cfg.PollHz, 5, 250) : 250;
                 int sleep = period - (int)(clock.ElapsedMilliseconds - t0);
                 if (sleep > 0) Thread.Sleep(sleep);
             }
@@ -1367,7 +1379,7 @@ public sealed class MonitorEngine : IDisposable
     private bool _lifeMemConfirmed;
 
     private GlobeReading Sample(State st, WatcherConfig c, string name,
-                                bool focused, Stopwatch clock)
+                                bool focused, Stopwatch clock, bool gameRunning)
     {
         // Switched off means not looked at. Capturing costs about 9 ms whatever
         // the region size, so reading a globe nobody asked about was spending
@@ -1378,6 +1390,16 @@ public sealed class MonitorEngine : IDisposable
             st.Reset();
             return new GlobeReading(name, 0, false, "off");
         }
+
+        // Not "off", and nothing reset - a loading screen or the moment
+        // between alt-tabbing back can drop the window match for a frame or
+        // two, and the grace-period state that bridges a real gap (see
+        // HadGoodSource below) must survive that exactly like it survives a
+        // missed OCR frame. This only skips the expensive part: with no game
+        // window, the configured region is capturing whatever happens to be
+        // on screen instead - the desktop, a browser, nothing worth an OrbDetector
+        // pass or an OCR lookup over.
+        if (!gameRunning) return new GlobeReading(name, 0, false, "game not running");
 
         long now = clock.ElapsedMilliseconds;
 
