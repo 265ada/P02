@@ -949,12 +949,31 @@ internal sealed partial class TextOcr : IDisposable
         }
     }
 
+    /// <summary>
+    /// Below roughly this tall, PaddleOCR's recognizer does not return a
+    /// reading at all - it throws "Running predictor failed with Paddle
+    /// status code 2" rather than answering with low confidence the way
+    /// Tesseract and Windows OCR both do. 96px cleared it in testing; the
+    /// caller upscales by 3x already for the other two engines, which lands
+    /// a typical box in exactly the range that used to fail here.
+    /// </summary>
+    private const int PaddleMinHeight = 96;
+
     private string RecognisePaddle(Bitmap bmp)
     {
+        Bitmap? scaled = null;
         try
         {
+            var toRead = bmp;
+            if (bmp.Height < PaddleMinHeight)
+            {
+                int scale = (int)Math.Ceiling((double)PaddleMinHeight / bmp.Height);
+                scaled = Upscale(bmp, Math.Max(2, scale));
+                toRead = scaled;
+            }
+
             using var ms = new MemoryStream();
-            bmp.Save(ms, ImageFormat.Png);
+            toRead.Save(ms, ImageFormat.Png);
             using var mat = OpenCvSharp.Cv2.ImDecode(ms.ToArray(), OpenCvSharp.ImreadModes.Color);
             return _paddle!.Run(mat).Text ?? "";
         }
@@ -963,6 +982,7 @@ internal sealed partial class TextOcr : IDisposable
             Log.Write($"ocr: PaddleOCR read failed - {ex.Message}");
             return "";
         }
+        finally { scaled?.Dispose(); }
     }
 
     /// <summary>Windows OCR ignores text this small until it is scaled up.</summary>
@@ -1332,5 +1352,7 @@ internal sealed partial class TextOcr : IDisposable
             _slots.Clear();
         }
         _stop.Dispose();
+        _tesseract?.Dispose();
+        _paddle?.Dispose();
     }
 }

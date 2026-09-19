@@ -742,8 +742,11 @@ public sealed class MainForm : Form
             Bounds = new Rectangle(608, y + 2, 150, 22),
             Checked = cfg.UseMemory,
         };
+        Log.Write($"startup: Read game memory checkbox built as "
+                  + $"{(cfg.UseMemory ? "checked" : "unchecked")} (config said UseMemory={cfg.UseMemory})");
         mem.CheckedChanged += (_, _) =>
         {
+            Log.Write($"Read game memory: checkbox changed to {mem.Checked}");
             if (mem.Checked && MessageBox.Show(this,
                     "This reads life and mana straight out of the game's memory. It is exact "
                     + "and instant, and it is the most intrusive thing here by a distance: "
@@ -757,11 +760,13 @@ public sealed class MainForm : Form
                     "Read game memory", MessageBoxButtons.YesNo,
                     MessageBoxIcon.Warning) != DialogResult.Yes)
             {
+                Log.Write("Read game memory: declined the warning dialog - turning back off");
                 mem.Checked = false;
                 return;
             }
             _engine.SetMemory(mem.Checked);
             Save();
+            Log.Write($"Read game memory: saved UseMemory={_cfg.UseMemory}");
         };
         Controls.Add(mem);
         Tips.On(mem, Tips.Memory);
@@ -770,7 +775,7 @@ public sealed class MainForm : Form
                                Tips.OcrEngine);
         Controls.Add(ocrEngineLbl);
         _ocrEngine.SetBounds(766, y + 32, 150, 24);
-        _ocrEngine.Items.AddRange(["Windows (built in)", "Tesseract (light)", "PaddleOCR (experimental)"]);
+        _ocrEngine.Items.AddRange(["Windows (built in)", "Tesseract (light)", "PaddleOCR (accurate)"]);
         _ocrEngine.SelectedIndex = cfg.OcrEngine switch
         {
             "tesseract" => 1,

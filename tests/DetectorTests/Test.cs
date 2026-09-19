@@ -797,6 +797,44 @@ static class T
                                        + "without matching another stat");
         }
 
+        // Proves Tesseract and PaddleOCR both actually read something, through
+        // the real TextOcr.Recognise path, on a box the size the real
+        // pipeline actually produces - a small crop, not a generously-sized
+        // synthetic image. "It compiles" and "the object constructs without
+        // throwing" were both true of PaddleOCR the night this was written,
+        // and it still returned nothing: only running it caught that a
+        // missing native runtime package meant every real reading was
+        // silently failing and falling back to Windows OCR the whole time.
+        {
+            using var small = new System.Drawing.Bitmap(240, 48);
+            using (var g = System.Drawing.Graphics.FromImage(small))
+            {
+                g.Clear(System.Drawing.Color.White);
+                g.DrawString("Life 874/874", new System.Drawing.Font("Arial", 24,
+                    System.Drawing.FontStyle.Bold), System.Drawing.Brushes.Black, 4, 6);
+            }
+
+            var ocr = new TextOcr();
+            var recognise = typeof(TextOcr).GetMethod("Recognise",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
+            foreach (string engine in new[] { "tesseract", "paddle" })
+            {
+                ocr.EngineChoice = engine;
+                string text = "";
+                Exception? threw = null;
+                try { text = (string)recognise.Invoke(ocr, [small])!; }
+                catch (Exception ex) { threw = ex.InnerException ?? ex; }
+
+                bool ok = threw is null && text.Contains("874") && ocr.EngineWhy.Length == 0;
+                Console.WriteLine((ok ? "PASS" : "FAIL")
+                    + $"  {engine} reads a real 240x48 crop -> \"{text.Trim()}\""
+                    + (threw is null ? "" : $" THREW: {threw.Message}")
+                    + (ocr.EngineWhy.Length > 0 ? $" ({ocr.EngineWhy})" : ""));
+            }
+            ocr.Dispose();
+        }
+
         Console.SetOut(realOut);
         int printedFails = mirror.ToString()
             .Split('\n').Count(line => line.TrimStart().StartsWith("FAIL"));
