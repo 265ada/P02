@@ -83,7 +83,15 @@ public sealed class MonitorEngine : IDisposable
         SyncTextRegions();
         _mem.ProcessName = cfg.GameProcess;
         if (cfg.UseMemory) _mem.Start();
+        _ocr.EngineChoice = cfg.OcrEngine;
     }
+
+    /// <summary>Switches which engine reads the live numbers, at once - no
+    /// restart, since the next reading just asks the new one instead.</summary>
+    public void SetOcrEngine(string choice) => _ocr.EngineChoice = choice;
+
+    /// <summary>Why the chosen OCR engine fell back to Windows, if it did.</summary>
+    public string OcrEngineWhy => _ocr.EngineWhy;
 
     /// <summary>What the memory reader is doing, for the UI.</summary>
     public string MemoryStatus =>

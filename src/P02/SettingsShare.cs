@@ -26,7 +26,7 @@ namespace P02;
 /// </summary>
 internal static class SettingsShare
 {
-    private const string Marker = "P02";
+    private const string Marker = "QytOCR";
 
     /// <summary>
     /// What actually travels.
@@ -95,7 +95,7 @@ internal static class SettingsShare
         var parts = text.Trim().Split((char[])[' ', '\n', '\r', '\t'],
                                       StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 3 || parts[0] != Marker)
-            return "That does not look like exported P02 settings - it should start with "
+            return "That does not look like exported QytOCR settings - it should start with "
                    + $"\"{Marker}\" and be one line long.";
 
         string from = parts[1].TrimStart('v', 'V');

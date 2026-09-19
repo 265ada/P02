@@ -128,7 +128,7 @@ internal sealed class HowToForm : Form
 
     public HowToForm()
     {
-        Text = "How to use P02";
+        Text = "How to use QytOCR";
         Icon = AppIcon.Load();
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(680, 620);

@@ -14,8 +14,8 @@ namespace P02;
 internal static class Updater
 {
     public const string Owner = "265ada";
-    public const string Repo = "P02";
-    private const string AssetName = "P02.exe";
+    public const string Repo = "QytOCR";
+    private const string AssetName = "QytOCR.exe";
 
     private static string TokenPath => Path.Combine(AppConfig.Dir, "token.txt");
 
@@ -27,7 +27,7 @@ internal static class Updater
     {
         get
         {
-            if (Environment.GetEnvironmentVariable("P02_GITHUB_TOKEN") is { Length: > 0 } env)
+            if (Environment.GetEnvironmentVariable("QYTOCR_GITHUB_TOKEN") is { Length: > 0 } env)
                 return env;
             if (!File.Exists(TokenPath)) return null;
             string t = File.ReadAllText(TokenPath).Trim();
@@ -42,8 +42,8 @@ internal static class Updater
     /// </summary>
     private static string TokenState()
     {
-        if (Environment.GetEnvironmentVariable("P02_GITHUB_TOKEN") is { Length: > 0 })
-            return "using the P02_GITHUB_TOKEN environment variable";
+        if (Environment.GetEnvironmentVariable("QYTOCR_GITHUB_TOKEN") is { Length: > 0 })
+            return "using the QYTOCR_GITHUB_TOKEN environment variable";
         if (!File.Exists(TokenPath))
             return $"no token file at {TokenPath}";
         return File.ReadAllText(TokenPath).Trim().Length == 0
@@ -65,7 +65,7 @@ internal static class Updater
     private static HttpClient MakeClient()
     {
         var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
-        http.DefaultRequestHeaders.UserAgent.ParseAdd($"P02/{Current}");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd($"QytOCR/{Current}");
         http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         if (Token is { Length: > 0 } t)
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", t);
@@ -315,7 +315,7 @@ internal static class Updater
             // A new name each time cannot collide with anything.
             string tmp = Path.Combine(
                 Path.GetTempPath(),
-                $"P02-{latest}-{DateTime.Now:HHmmss}-{Environment.ProcessId}.exe");
+                $"QytOCR-{latest}-{DateTime.Now:HHmmss}-{Environment.ProcessId}.exe");
 
             TidyOldDownloads();
 
@@ -417,7 +417,7 @@ internal static class Updater
     {
         try
         {
-            foreach (string old in Directory.EnumerateFiles(Path.GetTempPath(), "P02-*.exe"))
+            foreach (string old in Directory.EnumerateFiles(Path.GetTempPath(), "QytOCR-*.exe"))
             {
                 try
                 {
@@ -433,7 +433,7 @@ internal static class Updater
     private static void SwapAndRestart(string newExe, Action? beforeExit)
     {
         string current = Environment.ProcessPath
-                         ?? Path.Combine(AppContext.BaseDirectory, "P02.exe");
+                         ?? Path.Combine(AppContext.BaseDirectory, "QytOCR.exe");
         string bat = Path.Combine(Path.GetTempPath(), "p02-update.cmd");
         string swapLog = Path.Combine(AppConfig.Dir, "update.log");
         int pid = Environment.ProcessId;
@@ -493,9 +493,9 @@ internal static class Updater
     {
         why = "";
         string current = Environment.ProcessPath
-                         ?? Path.Combine(AppContext.BaseDirectory, "P02.exe");
+                         ?? Path.Combine(AppContext.BaseDirectory, "QytOCR.exe");
         string? dir = Path.GetDirectoryName(current);
-        if (string.IsNullOrEmpty(dir)) { why = "cannot tell where P02.exe is"; return false; }
+        if (string.IsNullOrEmpty(dir)) { why = "cannot tell where QytOCR.exe is"; return false; }
 
         try
         {
@@ -506,8 +506,8 @@ internal static class Updater
         }
         catch (Exception ex)
         {
-            why = $"P02.exe lives in {dir}, which cannot be written to ({ex.GetType().Name}). "
-                + "Move P02.exe somewhere like your Downloads folder and try again.";
+            why = $"QytOCR.exe lives in {dir}, which cannot be written to ({ex.GetType().Name}). "
+                + "Move QytOCR.exe somewhere like your Downloads folder and try again.";
             return false;
         }
     }

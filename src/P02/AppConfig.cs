@@ -59,7 +59,7 @@ public sealed class WatcherConfig
 
     /// <summary>
     /// Once a text region is set, how long its numbers may be unreadable before
-    /// P02 stops acting at all.
+    /// QytOCR stops acting at all.
     ///
     /// The numbers vanish on every screen that is not gameplay - inventory, the
     /// passive tree, a vendor, the atlas - and those screens also cover the
@@ -83,7 +83,7 @@ public sealed class WatcherConfig
     /// Stop pressing for this long after several presses in a row change
     /// nothing.
     ///
-    /// P02 cannot see your charges, so without this it keeps pressing into an
+    /// QytOCR cannot see your charges, so without this it keeps pressing into an
     /// empty flask - which is where "it ate everything instantly and then did
     /// nothing" comes from. If a press does not move the pool, more presses
     /// will not either, so it waits and lets charges come back.
@@ -182,7 +182,7 @@ public sealed class WatcherConfig
     // Flasks recover over a duration and the recovery stops the moment the
     // resource is full, so a press that works shows up as the globe rising
     // within a second. A press that changes nothing means no charges, the
-    // wrong key, or input not reaching the game - and nothing else in P02 can
+    // wrong key, or input not reaching the game - and nothing else in QytOCR can
     // tell those apart from a press that simply had no room to heal.
 
     /// <summary>
@@ -552,6 +552,26 @@ public sealed class AppConfig
     public bool NumbersOnly { get; set; } = true;
 
     /// <summary>
+    /// Which engine reads the numbers off the screen. "windows" is what has
+    /// always been used here - built in, no extra download, never tuned for a
+    /// small stylized game font, and with no way to tell it "only digits live
+    /// here." "tesseract" is restricted to exactly the digits and the label
+    /// words, so it cannot output a stray letter where a digit belonged -
+    /// most of its gain over "windows" is that restriction alone. "paddle" is
+    /// a modern deep-learning engine with no such whitelist, but is generally
+    /// the more accurate of the two on small or stylized text to begin with.
+    /// Both are a bigger step up from "windows" than they are from each
+    /// other - expect the difference between "tesseract" and "paddle" to be
+    /// modest on this narrow a job.
+    ///
+    /// The one-time "find my numbers" search still always uses "windows"
+    /// regardless of this setting - it needs word-by-word positions on the
+    /// screen to place a box, which only that engine gives back here, and it
+    /// is not the setting that decides whether a fight is read correctly.
+    /// </summary>
+    public string OcrEngine { get; set; } = "tesseract";
+
+    /// <summary>
     /// Install an update without being asked, when only a few releases behind.
     ///
     /// Being behind is what killed this twice: fixes sat on a server while the
@@ -572,7 +592,7 @@ public sealed class AppConfig
     public bool ResumeArmed { get; set; }
 
     /// <summary>
-    /// Hide P02's windows from screen capture so they cannot be read as a
+    /// Hide QytOCR's windows from screen capture so they cannot be read as a
     /// globe. Off, and staying off: it also hides them from screenshots, the
     /// Snipping Tool, Discord and OBS.
     /// </summary>
@@ -699,8 +719,41 @@ public sealed class AppConfig
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    public static string Dir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "P02");
+    private static readonly string _dir = ResolveDir();
+
+    public static string Dir => _dir;
+
+    /// <summary>
+    /// Renamed from P02 to QytOCR. An install from before the rename has
+    /// everything sitting in the old folder, and "why did my settings and
+    /// history disappear" is not how anyone should find out a rename
+    /// happened - so the first run under the new name copies it over rather
+    /// than starting empty. Nothing here is allowed to stop startup: a copy
+    /// that half-fails still leaves the old folder untouched to fall back on.
+    /// </summary>
+    private static string ResolveDir()
+    {
+        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string newDir = Path.Combine(appData, "QytOCR");
+        string oldDir = Path.Combine(appData, "P02");
+
+        if (!Directory.Exists(newDir) && Directory.Exists(oldDir))
+        {
+            try
+            {
+                Directory.CreateDirectory(newDir);
+                foreach (string file in Directory.EnumerateFiles(oldDir))
+                    File.Copy(file, Path.Combine(newDir, Path.GetFileName(file)), overwrite: false);
+
+                string oldLog = Path.Combine(newDir, "p02.log");
+                string newLog = Path.Combine(newDir, "qytocr.log");
+                if (File.Exists(oldLog) && !File.Exists(newLog)) File.Move(oldLog, newLog);
+            }
+            catch { /* the old folder is untouched; worst case, a fresh start */ }
+        }
+
+        return newDir;
+    }
 
     public static string Path_ => System.IO.Path.Combine(Dir, "config.json");
 
@@ -791,11 +844,11 @@ internal static class Log
     private static readonly System.Collections.Concurrent.BlockingCollection<string> Queue
         = new(new System.Collections.Concurrent.ConcurrentQueue<string>(), 8192);
 
-    public static string Path_ => System.IO.Path.Combine(AppConfig.Dir, "p02.log");
+    public static string Path_ => System.IO.Path.Combine(AppConfig.Dir, "qytocr.log");
 
     static Log()
     {
-        var t = new Thread(Pump) { IsBackground = true, Name = "P02 log" };
+        var t = new Thread(Pump) { IsBackground = true, Name = "QytOCR log" };
         t.Start();
     }
 

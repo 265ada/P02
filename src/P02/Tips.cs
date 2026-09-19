@@ -297,9 +297,39 @@ internal static class Tips
         "sense, and when your maximum changes. Use it after switching character.",
     ];
 
+    public static readonly string[] OcrEngine =
+    [
+        "Which engine reads the digits beside a globe. Only this - not the",
+        "one-time 'find my numbers for me' search, which still uses Windows",
+        "either way, since it needs word positions on the screen that only it",
+        "gives back here.",
+        "",
+        "Windows (built in): no download, no setup - and no way to tell it",
+        "'only digits live in this box,' which is most of why the numbers here",
+        "have ever come back as a letter or a symbol instead.",
+        "",
+        "Tesseract (light): a real OCR engine, restricted here to exactly the",
+        "digits and the label words, so it is not physically able to answer",
+        "with anything else. Small download, modest CPU cost.",
+        "",
+        "PaddleOCR (experimental): a modern engine built for exactly this kind",
+        "of small or stylized text, and generally the most accurate of the",
+        "three on paper. Marked experimental here because it has not yet been",
+        "confirmed reading real game numbers correctly on every setup - if it",
+        "seems to read nothing, switch to Tesseract or Windows rather than",
+        "assume the box is misplaced. Also the largest download of the three,",
+        "and a little more CPU per reading.",
+        "",
+        "Both are a bigger step up over Windows than they are over each other -",
+        "on a handful of digits in a fixed box, do not expect a dramatic gap",
+        "between Tesseract and PaddleOCR specifically. If one does not start on",
+        "your machine, reading quietly falls back to Windows and says why in",
+        "the log.",
+    ];
+
     public static readonly string[] PadKind =
     [
-        "Which sort of controller P02 pretends to be.",
+        "Which sort of controller QytOCR pretends to be.",
         "",
         "Steam Input does not pass your controller through to the game - it",
         "reads yours and hands the game one of its own. What it does with a",
@@ -339,19 +369,19 @@ internal static class Tips
         "",
         "This is not a key being sent a different way. A game in controller",
         "mode ignores the keyboard outright, which is why keys went nowhere.",
-        "P02 presents a virtual pad through the ViGEmBus driver and presses",
+        "QytOCR presents a virtual pad through the ViGEmBus driver and presses",
         "that instead - so the driver has to be installed for any of it to",
-        "work, and P02 will say so if it is not.",
+        "work, and QytOCR will say so if it is not.",
     ];
 
     public static readonly string[] Badge =
     [
-        "P02, and nothing else. It is drawn rather than loaded - the orb is",
+        "QytOCR, and nothing else. It is drawn rather than loaded - the orb is",
         "built out of geometry every time the app starts, at whatever size it",
         "is asked for, which is why it can turn.",
         "",
         "It does no work and reports nothing. If you would rather have your own",
-        "picture behind the window, put one in the P02 folder beside the log,",
+        "picture behind the window, put one in the QytOCR folder beside the log,",
         "named backdrop.png.",
     ];
 

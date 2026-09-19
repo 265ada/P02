@@ -38,7 +38,7 @@ internal sealed class KeyPresser : IDisposable
         _thread = new Thread(Run)
         {
             IsBackground = true,
-            Name = "P02 keys",
+            Name = "QytOCR keys",
             Priority = ThreadPriority.AboveNormal,
         };
         _thread.Start();

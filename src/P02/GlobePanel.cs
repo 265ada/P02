@@ -748,7 +748,7 @@ public sealed class GlobePanel : Card
         if (r is null) { owner?.Show(); return; }
 
         // Read it while this window is still hidden. Capture takes whatever is
-        // on the screen, so showing the window first risks reading P02 instead
+        // on the screen, so showing the window first risks reading QytOCR instead
         // of the game.
         string got = _probe.Probe(r.Value, out var shot);
         owner?.Show();

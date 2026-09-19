@@ -149,7 +149,7 @@ public sealed class OverlayForm : Form
 
     public OverlayForm()
     {
-        Text = "P02";
+        Text = "QytOCR";
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         TopMost = true;

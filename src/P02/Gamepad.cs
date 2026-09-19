@@ -140,7 +140,7 @@ internal static class Gamepad
             _client = null;
             Why = "The ViGEmBus driver is not installed, so there is no controller to "
                   + "press. Get it from github.com/nefarius/ViGEmBus/releases, install "
-                  + "it, and restart P02. "
+                  + "it, and restart QytOCR. "
                   + $"({ex.GetType().Name})";
             Log.Write($"controller: no virtual pad - {ex.Message}");
         }

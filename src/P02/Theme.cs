@@ -175,6 +175,22 @@ public static class Theme
                     if (l.Font == Control.DefaultFont) l.Font = Ui;
                     break;
 
+                case TabControl tc:
+                    // BackColor does nothing on a TabControl under the default
+                    // visual style - Windows draws the strip itself - so the
+                    // only way to keep it off the system light grey is to draw
+                    // it here.
+                    tc.DrawMode = TabDrawMode.OwnerDrawFixed;
+                    tc.DrawItem -= DrawTab;
+                    tc.DrawItem += DrawTab;
+                    break;
+
+                // TabPage is itself a Panel, and a more specific match has to
+                // come before that case or it is never reached.
+                case TabPage tp:
+                    tp.BackColor = Bg;
+                    break;
+
                 case Panel p:
                     if (p.BackColor == SystemColors.Control) p.BackColor = Card;
                     break;
@@ -182,6 +198,17 @@ public static class Theme
 
             if (c.HasChildren) Apply(c);
         }
+    }
+
+    private static void DrawTab(object? sender, DrawItemEventArgs e)
+    {
+        var tc = (TabControl)sender!;
+        var page = tc.TabPages[e.Index];
+        bool selected = e.Index == tc.SelectedIndex;
+        using var bg = new SolidBrush(selected ? Card : Bg);
+        e.Graphics.FillRectangle(bg, e.Bounds);
+        TextRenderer.DrawText(e.Graphics, page.Text, Ui, e.Bounds,
+            selected ? Text : Dim, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
     }
 
     /// <summary>

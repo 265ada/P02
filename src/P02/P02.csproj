@@ -9,11 +9,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <AssemblyName>P02</AssemblyName>
+    <AssemblyName>QytOCR</AssemblyName>
     <RootNamespace>P02</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Product>QytOCR</Product>
+    <AssemblyTitle>QytOCR</AssemblyTitle>
 
-    <Version>2.94.9</Version>
+    <Version>3.0.0</Version>
 
     <!-- One file, no runtime prerequisite: the whole app is the exe you share. -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -30,8 +32,25 @@
     <EmbeddedResource Include="app.ico" />
   </ItemGroup>
 
+  <!-- Tesseract's trained data cannot live inside the single-file bundle - it is
+       read from a plain folder path at runtime, not loaded as an assembly - so
+       it ships as a loose file beside the exe instead. The "fast" variant, not
+       "best": at ~4 MB against ~15, and character-whitelisted digit reading
+       does not need the accuracy the larger model spends on general prose. -->
+  <ItemGroup>
+    <None Include="tessdata\eng.traineddata">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Nefarius.ViGEm.Client" Version="1.21.256" />
+    <PackageReference Include="Sdcb.PaddleInference.runtime.win64.openblas" Version="3.3.1.70" />
+    <PackageReference Include="Sdcb.PaddleOCR" Version="3.3.1" />
+    <PackageReference Include="Sdcb.PaddleOCR.Models.Local" Version="2.7.0" />
+    <PackageReference Include="Sdcb.PaddleOCR.Models.LocalV4" Version="2.7.0.1" />
+    <PackageReference Include="Tesseract" Version="5.2.0" />
   </ItemGroup>
 
 </Project>

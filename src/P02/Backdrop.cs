@@ -16,7 +16,7 @@ namespace P02;
 /// mid-fight. Anything busier would be competing with the numbers.
 ///
 /// If you would rather have your own picture behind it, drop a PNG or JPG at
-/// %APPDATA%\P02\backdrop.png and it is used instead, dimmed enough to keep
+/// %APPDATA%\QytOCR\backdrop.png and it is used instead, dimmed enough to keep
 /// the text on top of it readable.
 /// </summary>
 internal static class Backdrop

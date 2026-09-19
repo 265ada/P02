@@ -75,6 +75,29 @@ internal sealed partial class TextOcr : IDisposable
     private readonly System.Diagnostics.Stopwatch _clock =
         System.Diagnostics.Stopwatch.StartNew();
 
+    // Which engine actually reads the digits. Windows OCR above is kept
+    // running regardless of this choice - the one-time "find my numbers"
+    // search depends on its word-by-word positions, which only it gives - but
+    // the repeated live reading that decides whether a flask fires goes
+    // through whichever of these is picked instead. Built lazily, once, the
+    // first time each is actually asked for, and kept afterward even if the
+    // choice is switched away and back.
+    private Tesseract.TesseractEngine? _tesseract;
+    private bool _triedTesseract;
+    private string _tesseractWhy = "";
+
+    private Sdcb.PaddleOCR.PaddleOcrRecognizer? _paddle;
+    private bool _triedPaddle;
+    private string _paddleWhy = "";
+
+    /// <summary>"windows", "tesseract" or "paddle" - read fresh on every call, so
+    /// flipping the setting takes effect on the next reading, not the next
+    /// restart.</summary>
+    public string EngineChoice { get; set; } = "paddle";
+
+    /// <summary>Why the chosen alternate engine fell back to Windows, if it did.</summary>
+    public string EngineWhy { get; private set; } = "";
+
     public bool Available => _engine is not null;
 
     /// <summary>Why OCR is unavailable, when it is.</summary>
@@ -101,7 +124,7 @@ internal sealed partial class TextOcr : IDisposable
             return;
         }
 
-        _thread = new Thread(Run) { IsBackground = true, Name = "P02 ocr" };
+        _thread = new Thread(Run) { IsBackground = true, Name = "QytOCR ocr" };
         _thread.Start();
     }
 
@@ -812,6 +835,22 @@ internal sealed partial class TextOcr : IDisposable
     private string Recognise(Bitmap bmp)
     {
         lock (Recogniser)
+        {
+            switch (EngineChoice)
+            {
+                case "tesseract":
+                    if (EnsureTesseract()) return RecogniseTesseract(bmp);
+                    break;
+                case "paddle":
+                    if (EnsurePaddle()) return RecognisePaddle(bmp);
+                    break;
+            }
+            return RecogniseWindows(bmp);
+        }
+    }
+
+    private string RecogniseWindows(Bitmap bmp)
+    {
         try
         {
             using var ms = new MemoryStream();
@@ -827,6 +866,101 @@ internal sealed partial class TextOcr : IDisposable
         catch (Exception ex)
         {
             Log.Write($"ocr read failed: {ex.Message}");
+            return "";
+        }
+    }
+
+    /// <summary>
+    /// Restricted to digits, the slash and thousands separators, plus the
+    /// letters the label words need - "Life", "Mana", "Shield", "Ward",
+    /// "Spirit". Windows OCR has no equivalent setting; this is most of why
+    /// the other two engines are worth having at all. A page segmentation
+    /// mode of "single line" matches what every box here actually is.
+    /// </summary>
+    private const string Whitelist = "0123456789/,.LifeManaShieldWardSpirit";
+
+    private bool EnsureTesseract()
+    {
+        if (_tesseract is not null) return true;
+        if (_triedTesseract) return false;
+        _triedTesseract = true;
+
+        try
+        {
+            string dataDir = Path.Combine(AppContext.BaseDirectory, "tessdata");
+            _tesseract = new Tesseract.TesseractEngine(dataDir, "eng", Tesseract.EngineMode.LstmOnly);
+            _tesseract.SetVariable("tessedit_char_whitelist", Whitelist);
+            _tesseract.DefaultPageSegMode = Tesseract.PageSegMode.SingleLine;
+            Log.Write("ocr: Tesseract ready");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _tesseractWhy = ex.Message;
+            EngineWhy = $"Tesseract did not start ({ex.Message}) - reading with Windows OCR instead.";
+            Log.Write($"ocr: Tesseract unavailable - {ex.Message}");
+            return false;
+        }
+    }
+
+    private string RecogniseTesseract(Bitmap bmp)
+    {
+        try
+        {
+            using var ms = new MemoryStream();
+            bmp.Save(ms, ImageFormat.Bmp);
+            using var pix = Tesseract.Pix.LoadFromMemory(ms.ToArray());
+            using var page = _tesseract!.Process(pix);
+            return page.GetText() ?? "";
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"ocr: Tesseract read failed - {ex.Message}");
+            return "";
+        }
+    }
+
+    private bool EnsurePaddle()
+    {
+        if (_paddle is not null) return true;
+        if (_triedPaddle) return false;
+        _triedPaddle = true;
+
+        try
+        {
+            // The recognizer alone, not PaddleOcrAll. P02 already knows exactly
+            // where the text is - that is what the box you drew is - so the
+            // detection stage PaddleOcrAll runs first (find text anywhere in
+            // the image) is not just unneeded here, it actively failed on a
+            // tightly cropped label: no wider scene for it to localize text
+            // within, so it decided there was no text there at all.
+            var model = Sdcb.PaddleOCR.Models.Local.LocalFullModels.EnglishV4;
+            _paddle = new Sdcb.PaddleOCR.PaddleOcrRecognizer(model.RecognizationModel,
+                Sdcb.PaddleInference.PaddleDevice.Blas());
+            Log.Write("ocr: PaddleOCR ready");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _paddleWhy = ex.Message;
+            EngineWhy = $"PaddleOCR did not start ({ex.Message}) - reading with Windows OCR instead.";
+            Log.Write($"ocr: PaddleOCR unavailable - {ex.Message}");
+            return false;
+        }
+    }
+
+    private string RecognisePaddle(Bitmap bmp)
+    {
+        try
+        {
+            using var ms = new MemoryStream();
+            bmp.Save(ms, ImageFormat.Png);
+            using var mat = OpenCvSharp.Cv2.ImDecode(ms.ToArray(), OpenCvSharp.ImreadModes.Color);
+            return _paddle!.Run(mat).Text ?? "";
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"ocr: PaddleOCR read failed - {ex.Message}");
             return "";
         }
     }

@@ -10,6 +10,12 @@
     <NoWarn>WFO1000</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="..\..\src\P02\tessdata\eng.traineddata">
+      <Link>tessdata\eng.traineddata</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="..\..\src\P02\OrbDetector.cs" />
     <Compile Include="..\..\src\P02\ScreenCapture.cs" />
     <Compile Include="..\..\src\P02\AppConfig.cs" />
@@ -29,6 +35,11 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Nefarius.ViGEm.Client" Version="1.21.256" />
+    <PackageReference Include="Sdcb.PaddleInference.runtime.win64.openblas" Version="3.3.1.70" />
+    <PackageReference Include="Sdcb.PaddleOCR" Version="3.3.1" />
+    <PackageReference Include="Sdcb.PaddleOCR.Models.Local" Version="2.7.0" />
+    <PackageReference Include="Sdcb.PaddleOCR.Models.LocalV4" Version="2.7.0.1" />
+    <PackageReference Include="Tesseract" Version="5.2.0" />
   </ItemGroup>
 </Project>
 

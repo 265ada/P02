@@ -29,7 +29,7 @@ internal static partial class Diagnostics
     public static string Export(AppConfig cfg, MonitorEngine engine, Form owner)
     {
         string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        string work = Path.Combine(Path.GetTempPath(), $"P02-diag-{stamp}");
+        string work = Path.Combine(Path.GetTempPath(), $"QytOCR-diag-{stamp}");
         Directory.CreateDirectory(work);
 
         string report = BuildReport(cfg, engine, owner);
@@ -38,7 +38,7 @@ internal static partial class Diagnostics
         CaptureGlobe(cfg.Life, "life", work);
         CaptureGlobe(cfg.Mana, "mana", work);
 
-        CopyTail(Log.Path_, Path.Combine(work, "p02-log-tail.txt"), 400);
+        CopyTail(Log.Path_, Path.Combine(work, "qytocr-log-tail.txt"), 400);
         CopyTail(Path.Combine(AppConfig.Dir, "update.log"),
                  Path.Combine(work, "update-log.txt"), 200);
 
@@ -52,14 +52,14 @@ internal static partial class Diagnostics
         }
         catch (Exception ex) { Log.Write($"diag: config copy failed: {ex.Message}"); }
 
-        string zip = Path.Combine(AppConfig.Dir, $"P02-diagnostics-{stamp}.zip");
+        string zip = Path.Combine(AppConfig.Dir, $"QytOCR-diagnostics-{stamp}.zip");
         Directory.CreateDirectory(AppConfig.Dir);
         if (File.Exists(zip)) File.Delete(zip);
         ZipFile.CreateFromDirectory(work, zip, CompressionLevel.Optimal, false);
 
         // Leave the readable report beside the zip so it can be pasted without
         // unzipping anything.
-        File.WriteAllText(Path.Combine(AppConfig.Dir, $"P02-diagnostics-{stamp}.txt"), report);
+        File.WriteAllText(Path.Combine(AppConfig.Dir, $"QytOCR-diagnostics-{stamp}.txt"), report);
 
         try { Directory.Delete(work, true); } catch { /* best effort */ }
         return zip;
@@ -70,7 +70,7 @@ internal static partial class Diagnostics
         var b = new StringBuilder();
         void H(string title) => b.AppendLine().AppendLine($"== {title} ==");
 
-        b.AppendLine($"P02 diagnostics  {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        b.AppendLine($"QytOCR diagnostics  {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
 
         H("app");
         b.AppendLine($"version      : {Assembly.GetExecutingAssembly()
@@ -209,7 +209,7 @@ internal static partial class Diagnostics
                       + "is the ceiling. Asking for more only spins a core.");
 
         if (IsElevated())
-            notes.Add("- P02 is running elevated. That is fine, but unusual; it only matters if "
+            notes.Add("- QytOCR is running elevated. That is fine, but unusual; it only matters if "
                       + "the game is elevated too.");
 
         if (notes.Count == 0) notes.Add("- Nothing obviously wrong in the configuration.");
@@ -235,7 +235,7 @@ internal static partial class Diagnostics
         catch (Exception ex)
         {
             return $"could not read process details ({ex.GetType().Name}). This often means the "
-                 + "game runs elevated - if so, Windows discards our key presses unless P02 is "
+                 + "game runs elevated - if so, Windows discards our key presses unless QytOCR is "
                  + "elevated too.";
         }
     }

@@ -59,7 +59,7 @@ internal sealed class Chime : IDisposable
         _gainDb = Math.Clamp(gainDb, -24, MaxGainDb);
         (_wav, _player) = Build(_gainDb);
 
-        _thread = new Thread(Run) { IsBackground = true, Name = "P02 chime" };
+        _thread = new Thread(Run) { IsBackground = true, Name = "QytOCR chime" };
         _thread.Start();
     }
 

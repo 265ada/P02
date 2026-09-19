@@ -46,6 +46,18 @@ public sealed class MainForm : Form
     private bool _reallyQuitting;
     private readonly Label _live = new();
     private readonly NumericUpDown _pollHz = new();
+    private readonly ComboBox _ocrEngine = new() { DropDownStyle = ComboBoxStyle.DropDownList };
+
+    /// <summary>
+    /// Where every control built by this constructor actually ends up living.
+    /// Everything here was written against a bare "Controls.Add" meaning the
+    /// form itself, long before tabs existed - rewriting every one of those
+    /// call sites was a much larger, much riskier change than moving the
+    /// finished result once the form is otherwise built. The one place that
+    /// runs again on every resize (Group, below) targets this directly
+    /// instead, since re-parenting on every resize is not "once".
+    /// </summary>
+    private readonly TabPage _gamePage = new("Path of Exile 2");
     private readonly Button _pin = new();
     private OverlayForm? _overlay;
     private bool _hotkeyRegistered;
@@ -63,7 +75,7 @@ public sealed class MainForm : Form
         GlobePanel.UsingController = () => _cfg.UseController;
         GlobePanel.MemoryCovering = () => _engine.MemoryLocked;
 
-        Text = $"P02  v{Version}";
+        Text = $"QytOCR  v{Version}";
         // Resizable, and it scrolls. It was a fixed 900x856 that had grown with
         // every feature until it was taller than a 1080p screen, which meant the
         // bottom of it - the arm button, among other things - simply could not
@@ -304,7 +316,7 @@ public sealed class MainForm : Form
                     "This window is now invisible to screen capture of any kind - "
                     + "screenshots, the Snipping Tool, Discord and OBS included."
                     + Environment.NewLine + Environment.NewLine
-                    + "It stops P02 being read as a globe if it covers one. Untick it "
+                    + "It stops QytOCR being read as a globe if it covers one. Untick it "
                     + "before trying to screenshot or share the window.",
                     "Hide from screen capture", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         };
@@ -754,6 +766,31 @@ public sealed class MainForm : Form
         Controls.Add(mem);
         Tips.On(mem, Tips.Memory);
 
+        var ocrEngineLbl = Cap(new Label { Text = "Read the numbers with", AutoSize = true },
+                               Tips.OcrEngine);
+        Controls.Add(ocrEngineLbl);
+        _ocrEngine.SetBounds(766, y + 32, 150, 24);
+        _ocrEngine.Items.AddRange(["Windows (built in)", "Tesseract (light)", "PaddleOCR (experimental)"]);
+        _ocrEngine.SelectedIndex = cfg.OcrEngine switch
+        {
+            "tesseract" => 1,
+            "paddle" => 2,
+            _ => 0,
+        };
+        _ocrEngine.SelectedIndexChanged += (_, _) =>
+        {
+            _cfg.OcrEngine = _ocrEngine.SelectedIndex switch
+            {
+                1 => "tesseract",
+                2 => "paddle",
+                _ => "windows",
+            };
+            Save();
+            _engine.SetOcrEngine(_cfg.OcrEngine);
+            Log.Write($"ocr: reading with {_ocrEngine.Text}");
+        };
+        Controls.Add(_ocrEngine);
+        Tips.On(_ocrEngine, Tips.OcrEngine);
 
         y += 32;
         var shareBtn = new Button
@@ -883,7 +920,7 @@ public sealed class MainForm : Form
         // is the whole of the difference between tidy and ragged.
         Regroup(
             [[findAll, checkBtn], [howBtn], [updBtn, histBtn, upd], [diagBtn, logBtn]],
-            [[numbersOnly], [mem], [rescan], [pollLbl, _pollHz]],
+            [[numbersOnly], [mem], [ocrEngineLbl, _ocrEngine], [rescan], [pollLbl, _pollHz]],
             [[winLbl], [_window, clearBtn], [armKeyLbl, _hotkey],
              [sendLbl, method], [matchMode], [padKindLbl, padKind], [alsoKey],
              [postedNote], [testBtn]],
@@ -985,6 +1022,24 @@ public sealed class MainForm : Form
         };
 
         Relayout();
+
+        // Everything built above landed directly on the form, the only place
+        // "Controls.Add" without a receiver could have meant before tabs
+        // existed. Swept into the first tab now, in one move, rather than
+        // rewriting every call site above to say so itself. The five cards
+        // are not in this list - Group() already puts them straight into
+        // _gamePage, since it runs again on every resize and "reparent once"
+        // does not apply to it.
+        foreach (var c in Controls.Cast<Control>().ToList()) _gamePage.Controls.Add(c);
+        _gamePage.AutoScroll = true;
+        _gamePage.UseVisualStyleBackColor = false;
+
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+        tabs.TabPages.Add(_gamePage);
+        tabs.TabPages.Add(new TabPage("TBD Game #1"));
+        tabs.TabPages.Add(new TabPage("TBD Game #2"));
+        Controls.Add(tabs);
+        Theme.Apply(this);
 
         RefreshArmUi();
         _engine.Start();
@@ -1166,7 +1221,7 @@ public sealed class MainForm : Form
     private Card Group(string title, int x, int y, int width, Control[][] rows)
     {
         var card = new Card { Text = title, Bounds = new Rectangle(x, y, width, S(40)) };
-        Controls.Add(card);
+        _gamePage.Controls.Add(card);
         card.SendToBack();
 
         int pad = S(12), line = S(30);
@@ -1221,7 +1276,7 @@ public sealed class MainForm : Form
     private void ShareSettings()
     {
         string text = SettingsShare.Export(_cfg, Version);
-        string path = Path.Combine(AppConfig.Dir, $"P02-settings-{Version}.txt");
+        string path = Path.Combine(AppConfig.Dir, $"QytOCR-settings-{Version}.txt");
 
         try
         {
@@ -1269,7 +1324,7 @@ public sealed class MainForm : Form
         Log.Write("settings imported from the clipboard");
 
         MessageBox.Show(this,
-            "Settings applied. P02 will restart to pick them up - it comes back "
+            "Settings applied. QytOCR will restart to pick them up - it comes back "
             + "disarmed, so arm it when you are ready.",
             "Apply shared settings", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
@@ -1763,7 +1818,7 @@ public sealed class MainForm : Form
                 string covering = CoveredGlobes();
                 _live.Text = covering.Length > 0
                     ? $"This window is covering the {covering} globe - move it, or the "
-                      + "capture reads P02 instead of the globe."
+                      + "capture reads QytOCR instead of the globe."
                     : $"focused window: \"{_engine.ForegroundTitle}\"   "
                       + $"polls/sec: {_engine.ActualHz}   "
                       + $"work per poll: {_engine.LastPollMs:0.0} ms   "
@@ -1803,7 +1858,7 @@ public sealed class MainForm : Form
             ? "Nothing is being watched."
             : string.Join("      ", watching);
 
-        _tray.Text = on ? "P02 – armed" : "P02 – disarmed";
+        _tray.Text = on ? "QytOCR – armed" : "QytOCR – disarmed";
     }
 
     // ---- tray ------------------------------------------------------------
@@ -1812,7 +1867,7 @@ public sealed class MainForm : Form
     {
         _tray.Icon = SystemIcons.Shield;
         _tray.Visible = true;
-        _tray.Text = "P02";
+        _tray.Text = "QytOCR";
         _tray.DoubleClick += (_, _) => RestoreFromTray();
         _tray.Click += (_, e) =>
         {
@@ -1905,7 +1960,7 @@ public sealed class MainForm : Form
     protected override void WndProc(ref Message m)
     {
         // A second copy of P02 being started, asking this one to show itself.
-        if (m.Msg == Native.WM_P02_SHOW)
+        if (m.Msg == Native.WM_QYTOCR_SHOW)
         {
             Log.Write("another launch asked for the window - bringing it to the front");
             BeginInvoke(RestoreFromTray);
@@ -2135,7 +2190,7 @@ public sealed class MainForm : Form
         // stop. It says what it is doing on the way past instead.
         _tray.BalloonTipTitle = $"Updating to {Updater.Critical}";
         _tray.BalloonTipText = Updater.CriticalWhy + Environment.NewLine
-                               + "Your game is paused; P02 will be back in a moment.";
+                               + "Your game is paused; QytOCR will be back in a moment.";
         _tray.BalloonTipIcon = ToolTipIcon.Warning;
         try { _tray.ShowBalloonTip(6000); } catch { /* notifications may be off */ }
 
@@ -2459,7 +2514,7 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Capture reads the screen, so a P02 window sitting over a globe is read
+    /// Capture reads the screen, so a QytOCR window sitting over a globe is read
     /// as the globe. Saying so beats the old fix of hiding the window from
     /// every capture on the system.
     /// </summary>
@@ -2490,8 +2545,8 @@ public sealed class MainForm : Form
             {
                 var box = new TaskDialogPage
                 {
-                    Caption = "P02",
-                    Heading = "Close P02, or leave it running?",
+                    Caption = "QytOCR",
+                    Heading = "Close QytOCR, or leave it running?",
                     Text = "Left running it keeps watching and can still fire. Closed, it "
                            + "does nothing at all until you start it again.",
                     Icon = TaskDialogIcon.Information,

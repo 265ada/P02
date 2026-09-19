@@ -243,7 +243,7 @@ internal sealed class GameMemory : IDisposable
     public void Start()
     {
         if (_thread is not null) return;
-        _thread = new Thread(Run) { IsBackground = true, Name = "P02 memory" };
+        _thread = new Thread(Run) { IsBackground = true, Name = "QytOCR memory" };
         _thread.Start();
     }
 

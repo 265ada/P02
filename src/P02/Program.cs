@@ -6,13 +6,13 @@ internal static class Program
     private static void Main()
     {
         // One instance, or two copies fight over the same hotkey and both fire.
-        using var single = new Mutex(true, @"Local\P02-singleton", out bool first);
+        using var single = new Mutex(true, @"Local\QytOCR-singleton", out bool first);
         if (!first)
         {
-            // Clicking the icon again means "show me P02", not "tell me where
-            // it is". Being informed that the thing you just asked for is
-            // already somewhere else is a worse answer than simply doing it.
-            Native.PostMessage(Native.HWND_BROADCAST, Native.WM_P02_SHOW, 0, 0);
+            // Clicking the icon again means "show me QytOCR", not "tell me
+            // where it is". Being informed that the thing you just asked for
+            // is already somewhere else is a worse answer than simply doing it.
+            Native.PostMessage(Native.HWND_BROADCAST, Native.WM_QYTOCR_SHOW, 0, 0);
             return;
         }
 
@@ -27,6 +27,6 @@ internal static class Program
     {
         Log.Write($"UNHANDLED: {ex}");
         MessageBox.Show($"{ex?.Message}\n\nDetails in:\n{Log.Path_}",
-                        "P02 crashed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        "QytOCR crashed", MessageBoxButtons.OK, MessageBoxIcon.Error);
     }
 }

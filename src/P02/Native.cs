@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 
 namespace P02;
 
@@ -235,7 +236,7 @@ internal static class Native
     public static extern bool SetWindowDisplayAffinity(nint hWnd, uint dwAffinity);
 
     /// <summary>
-    /// Hides a window from BitBlt, so P02's own windows are not read as a globe
+    /// Hides a window from BitBlt, so QytOCR's own windows are not read as a globe
     /// when they sit over one.
     ///
     /// This is off by default and must stay that way: the flag hides the window
@@ -399,7 +400,7 @@ internal static class Native
     /// process that asks for it - so the copy being started and the copy
     /// already running agree on what it means without sharing anything else.
     /// </summary>
-    public static readonly uint WM_P02_SHOW = RegisterWindowMessage("P02.ShowYourself");
+    public static readonly uint WM_QYTOCR_SHOW = RegisterWindowMessage("QytOCR.ShowYourself");
 
     [DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = CharSet.Unicode)]
     private static extern uint RegisterWindowMessage(string name);
@@ -442,4 +443,86 @@ internal static class Native
     /// window sitting behind a game is not the answer to this question.
     /// </summary>
     public static bool CtrlHeld => (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+
+    // ---- raw HID devices ---------------------------------------------------
+    //
+    // For talking to a Steam Controller 2 directly - the way SteamlessController
+    // and SC2Xbox do - rather than through Steam's own translation. This is the
+    // same handful of calls every generic HID library on Windows is built from:
+    // ask for the HID class GUID, enumerate devices in it, open the one whose
+    // vendor/product match, then read and write reports on the handle like a
+    // file. Nothing here is Steam-Controller-specific; SteamController2.cs is
+    // where the protocol lives.
+
+    public const uint GENERIC_READ = 0x80000000;
+    public const uint GENERIC_WRITE = 0x40000000;
+    public const uint FILE_SHARE_READ = 0x1;
+    public const uint FILE_SHARE_WRITE = 0x2;
+    public const uint OPEN_EXISTING = 3;
+    public const uint FILE_FLAG_OVERLAPPED = 0x40000000;
+    public const int INVALID_HANDLE_VALUE = -1;
+
+    [DllImport("hid.dll")]
+    public static extern void HidD_GetHidGuid(out Guid hidGuid);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct HIDD_ATTRIBUTES
+    {
+        public int Size;
+        public ushort VendorID;
+        public ushort ProductID;
+        public ushort VersionNumber;
+    }
+
+    [DllImport("hid.dll")]
+    public static extern bool HidD_GetAttributes(SafeFileHandle device, ref HIDD_ATTRIBUTES attributes);
+
+    [DllImport("hid.dll")]
+    public static extern bool HidD_SetFeature(SafeFileHandle device, byte[] reportBuffer, int reportBufferLength);
+
+    [DllImport("hid.dll")]
+    public static extern bool HidD_GetFeature(SafeFileHandle device, byte[] reportBuffer, int reportBufferLength);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct SP_DEVICE_INTERFACE_DATA
+    {
+        public int cbSize;
+        public Guid InterfaceClassGuid;
+        public int Flags;
+        public nint Reserved;
+    }
+
+    public const uint DIGCF_PRESENT = 0x2;
+    public const uint DIGCF_DEVICEINTERFACE = 0x10;
+
+    [DllImport("setupapi.dll", SetLastError = true)]
+    public static extern nint SetupDiGetClassDevs(ref Guid classGuid, nint enumerator,
+        nint parent, uint flags);
+
+    [DllImport("setupapi.dll", SetLastError = true)]
+    public static extern bool SetupDiEnumDeviceInterfaces(nint deviceInfoSet, nint deviceInfoData,
+        ref Guid interfaceClassGuid, uint memberIndex, ref SP_DEVICE_INTERFACE_DATA deviceInterfaceData);
+
+    // The path string that follows this header is variable-length, so the real
+    // call is always "how big does this need to be", then "now give it to me" -
+    // the size-probing dance every SetupDi consumer does.
+    [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    public static extern bool SetupDiGetDeviceInterfaceDetail(nint deviceInfoSet,
+        ref SP_DEVICE_INTERFACE_DATA deviceInterfaceData, nint deviceInterfaceDetailData,
+        uint deviceInterfaceDetailDataSize, out uint requiredSize, nint deviceInfoData);
+
+    [DllImport("setupapi.dll")]
+    public static extern bool SetupDiDestroyDeviceInfoList(nint deviceInfoSet);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    public static extern SafeFileHandle CreateFile(string fileName, uint desiredAccess,
+        uint shareMode, nint securityAttributes, uint creationDisposition,
+        uint flagsAndAttributes, nint templateFile);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool ReadFile(SafeFileHandle file, byte[] buffer, uint bytesToRead,
+        out uint bytesRead, nint overlapped);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool CancelIoEx(SafeFileHandle file, nint overlapped);
 }

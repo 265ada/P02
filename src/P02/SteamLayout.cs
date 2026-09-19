@@ -18,7 +18,7 @@ internal static class SteamLayout
     /// <summary>Path of Exile 2 on Steam.</summary>
     private const string Game = "2694490";
 
-    /// <summary>The back buttons: P02's name, Steam's name, and how the list shows it.</summary>
+    /// <summary>The back buttons: QytOCR's name, Steam's name, and how the list shows it.</summary>
     public static readonly (string Name, string Steam, string Says)[] Back =
     [
         ("L4", "button_back_left", "L4  -  back, lower left"),
@@ -130,7 +130,7 @@ internal static class SteamLayout
     }
 
     /// <summary>
-    /// Steam's wording for a pad button, as P02 names it: "xinput_button
+    /// Steam's wording for a pad button, as QytOCR names it: "xinput_button
     /// DPAD_LEFT, , " is "Left". Anything that is not a pad button - a key, a
     /// mouse click - is null, because it is not something a pad can press.
     /// </summary>
