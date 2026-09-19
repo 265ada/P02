@@ -616,7 +616,7 @@ public sealed class AppConfig
         // file already stamped by an earlier release skipped every later fix -
         // which is how the label repair never ran, leaving the numbers picked
         // by position and reading ward as life.
-        const int Current = 7;
+        const int Current = 8;
         int was = SettingsVersion;
         if (was >= Current) return;
 
@@ -706,10 +706,29 @@ public sealed class AppConfig
             }
         }
 
+        if (was < 8 && ShouldMigrateOffPaddle(OcrEngine))
+        {
+            Repairs.Add("Numbers were being read with PaddleOCR, which has repeatedly "
+                        + "crashed on real captures on this machine (\"status code 2\") and "
+                        + "fallen back to Windows OCR mid-session without saying so here. "
+                        + "Switched to Tesseract, which has read every capture in your log "
+                        + "without a single failure.");
+            OcrEngine = "tesseract";
+        }
+
         SettingsVersion = Current;
         foreach (string r in Repairs) Log.Write($"repair: {r}");
         if (Repairs.Count > 0) SaveNow();
     }
+
+    /// <summary>
+    /// Whether a settings file predates the move off PaddleOCR as the active
+    /// reading engine. Kept as a pure check, separate from Repair() itself,
+    /// so it can be tested without going anywhere near the real config file
+    /// Repair()'s SaveNow() writes to.
+    /// </summary>
+    internal static bool ShouldMigrateOffPaddle(string ocrEngine) =>
+        ocrEngine.Equals("paddle", StringComparison.OrdinalIgnoreCase);
 
     // ------------------------------------------------------------------
 

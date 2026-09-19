@@ -1080,6 +1080,7 @@ public sealed class MonitorEngine : IDisposable
                 // loses its address, these are what is left, and a reading two
                 // seconds old is one that has to be waited for.
                 _ocr.SetInterval(_lifeMemConfirmed ? 1500 : nearTrouble ? 60 : 160);
+                _ocr.SetGameRunning(gameRunning);
 
                 bool fighting = t0 - lastDropMs < _cfg.CombatGraceMs;
                 if (fighting != InCombat)

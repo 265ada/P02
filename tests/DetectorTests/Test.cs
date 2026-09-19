@@ -819,6 +819,26 @@ static class T
                                        + "without matching another stat");
         }
 
+        // A settings file saved while PaddleOCR was the active choice, from
+        // before it proved itself unreliable on real captures, must not go on
+        // quietly using it forever - that is exactly the "held" spam and
+        // vanishing bars this was written to catch.
+        {
+            bool migratesPaddle = AppConfig.ShouldMigrateOffPaddle("paddle");
+            bool migratesPaddleAnyCase = AppConfig.ShouldMigrateOffPaddle("Paddle");
+            bool leavesTesseract = !AppConfig.ShouldMigrateOffPaddle("tesseract");
+            bool leavesWindows = !AppConfig.ShouldMigrateOffPaddle("windows");
+
+            Console.WriteLine((migratesPaddle ? "PASS" : "FAIL")
+                              + "  paddle migration: \"paddle\" is migrated off");
+            Console.WriteLine((migratesPaddleAnyCase ? "PASS" : "FAIL")
+                              + "  paddle migration: \"Paddle\" is migrated off regardless of case");
+            Console.WriteLine((leavesTesseract ? "PASS" : "FAIL")
+                              + "  paddle migration: \"tesseract\" is left alone");
+            Console.WriteLine((leavesWindows ? "PASS" : "FAIL")
+                              + "  paddle migration: \"windows\" is left alone");
+        }
+
         // Proves Tesseract and PaddleOCR both actually read something, through
         // the real TextOcr.Recognise path, on a box the size the real
         // pipeline actually produces - a small crop, not a generously-sized

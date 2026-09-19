@@ -232,9 +232,20 @@ internal sealed partial class TextOcr : IDisposable
     }
 
     private int _intervalMs = 160;
+    private volatile bool _gameRunning = true;
 
     /// <summary>How often to read, in milliseconds.</summary>
     public void SetInterval(int ms) => Volatile.Write(ref _intervalMs, Math.Clamp(ms, 40, 1000));
+
+    /// <summary>
+    /// Pauses screen capture and recognition while the game is not open at
+    /// all. Configured regions never stopped being read before this - a
+    /// returning player has Life/Mana boxes left over from last time, so this
+    /// thread was grabbing and OCR'ing those exact screen pixels six times a
+    /// second with the game fully closed, all evening, for no reason. That
+    /// was most of what "idles high" turned out to be.
+    /// </summary>
+    public void SetGameRunning(bool running) => _gameRunning = running;
 
     public long NowMs => _clock.ElapsedMilliseconds;
 
@@ -244,13 +255,16 @@ internal sealed partial class TextOcr : IDisposable
         {
             try
             {
-                KeyValuePair<string, Slot>[] slots;
-                lock (_gate) slots = _slots.ToArray();
-
-                foreach (var (name, slot) in slots)
+                if (_gameRunning)
                 {
-                    if (_stop.IsCancellationRequested) break;
-                    ReadOne(name, slot);
+                    KeyValuePair<string, Slot>[] slots;
+                    lock (_gate) slots = _slots.ToArray();
+
+                    foreach (var (name, slot) in slots)
+                    {
+                        if (_stop.IsCancellationRequested) break;
+                        ReadOne(name, slot);
+                    }
                 }
             }
             catch (Exception ex)
@@ -261,8 +275,9 @@ internal sealed partial class TextOcr : IDisposable
             // Reading rate follows how close to trouble you are. Six times a
             // second is plenty while healthy and far too slow while dropping:
             // at that rate a reading can be a fifth of a second old before it
-            // is even looked at.
-            _stop.Token.WaitHandle.WaitOne(Volatile.Read(ref _intervalMs));
+            // is even looked at. While the game is not even open, once a
+            // second is still enough to notice it appear.
+            _stop.Token.WaitHandle.WaitOne(_gameRunning ? Volatile.Read(ref _intervalMs) : 1000);
         }
     }
 
