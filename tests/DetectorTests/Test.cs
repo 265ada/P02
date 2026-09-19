@@ -577,6 +577,28 @@ static class T
                               + "  net: rising fast at 40%/s (past the 30%/s floor) -> holds");
         }
 
+        // Whether a reading from a moment ago - one that itself passed the
+        // trust gate - may still stand in for the emergency/last-ditch nets
+        // while the current poll is held (numbers untrusted, memory
+        // momentarily gone, and so on). Refusing outright made a one-frame
+        // glitch and "nothing is protecting you" the same event.
+        {
+            const long bridge = MonitorEngine.SafetyNetBridgeMs;
+            bool neverTrusted = MonitorEngine.SafetyNetMayBridge(long.MinValue / 2, 10_000, bridge);
+            bool justWentUntrusted = MonitorEngine.SafetyNetMayBridge(9_900, 10_000, bridge);
+            bool rightAtTheEdge = MonitorEngine.SafetyNetMayBridge(10_000 - bridge, 10_000, bridge);
+            bool pastTheEdge = MonitorEngine.SafetyNetMayBridge(10_000 - bridge - 1, 10_000, bridge);
+
+            Console.WriteLine((!neverTrusted ? "PASS" : "FAIL")
+                              + "  bridge: never trusted (sentinel timestamp) never bridges");
+            Console.WriteLine((justWentUntrusted ? "PASS" : "FAIL")
+                              + "  bridge: trusted 100ms ago still bridges");
+            Console.WriteLine((rightAtTheEdge ? "PASS" : "FAIL")
+                              + $"  bridge: exactly {bridge}ms ago still bridges");
+            Console.WriteLine((!pastTheEdge ? "PASS" : "FAIL")
+                              + $"  bridge: {bridge + 1}ms ago no longer bridges");
+        }
+
         // Whether the overlay should still treat a quiet numbers box as a menu
         // covering the HUD rather than give up and show anyway. A box that has
         // never read at all never counts as covered (nothing to be patient

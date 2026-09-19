@@ -822,6 +822,16 @@ public sealed class MonitorEngine : IDisposable
         public bool HadGoodSource;
         public double LastGoodFrac;
         /// <summary>
+        /// The last reading that made it all the way past the trust gate,
+        /// not merely "came from an exact source" the way LastGoodFrac does -
+        /// "numbers," is an exact source and can still be untrusted, so using
+        /// LastGoodFrac to bridge a safety net through a hold would let an
+        /// untrusted reading vouch for itself. Set only where a reading is
+        /// actually about to be acted on.
+        /// </summary>
+        public double LastTrustedFrac;
+        public long LastTrustedAtMs = long.MinValue / 2;
+        /// <summary>
         /// Presses sent by the emergency net since it was last above its
         /// floor. Was a bool - one press, never again until recovered.
         /// Below the floor, still falling, that one press is not always
@@ -1221,6 +1231,27 @@ public sealed class MonitorEngine : IDisposable
     /// </summary>
     internal static bool NetMayFire(int used, int maxUses, bool canRepeat)
         => used == 0 || (used < maxUses && canRepeat);
+
+    /// <summary>
+    /// How long a reading that passed every trust check is still allowed to
+    /// vouch for the safety nets after the current one stops being trusted.
+    /// Short on purpose: this is a bridge across a glitch, not a licence to
+    /// keep firing on data from a second ago.
+    /// </summary>
+    internal const long SafetyNetBridgeMs = 700;
+
+    /// <summary>
+    /// Whether a reading from a moment ago - one that itself passed the
+    /// trust gate, never the current, untrusted one - may still stand in for
+    /// the emergency/last-ditch nets while the current poll is held. Refusing
+    /// the nets outright the instant a reading is not trusted was the same
+    /// failure from the other direction: "the numbers glitched for one
+    /// frame" and "nothing was protecting you" became the same event, for
+    /// the two paths that exist specifically for near-death. Never trusted
+    /// yet (the sentinel timestamp) never bridges.
+    /// </summary>
+    internal static bool SafetyNetMayBridge(long lastTrustedAtMs, long nowMs, long bridgeMs)
+        => lastTrustedAtMs != long.MinValue / 2 && nowMs - lastTrustedAtMs <= bridgeMs;
 
     /// <summary>What to do when memory and the numbers name different maxima.</summary>
     internal enum Verdict
@@ -2155,6 +2186,13 @@ public sealed class MonitorEngine : IDisposable
         double dropRate = st.DropPctPerSec(now, frac);
         st.Push(now, frac);
 
+        // Whether pressing again is worth it: only while life is not already
+        // turning around. Computed here, ahead of where it is used below, so
+        // the held-and-bridged path can reuse the exact same "is this still
+        // falling" answer as the ordinary nets - one rule, not two copies of
+        // it that could drift apart.
+        bool canRepeat = c.FastDropPctPerSec <= 0 || dropRate > -c.FastDropPctPerSec;
+
         // A press that worked shows up as the globe climbing. Anything else is
         // a press that went nowhere, and that is worth saying out loud.
         if (st.Verifying)
@@ -2293,8 +2331,36 @@ public sealed class MonitorEngine : IDisposable
                        : sourceLost ? "no exact reading yet"
                        : zero ? "reads zero - dead, or the reading has broken"
                        : "cannot read the globe";
+
+            // The nets still get a chance here - from a reading that itself
+            // passed the trust gate a moment ago, never from the current,
+            // untrusted one. A flat refusal made "the numbers glitched for a
+            // frame" and "nothing was protecting you" the same event, which
+            // is backwards for the two paths that exist specifically for
+            // near-death. Zero is excluded: a reading that has gone to zero
+            // is exactly the case a stale bridge must not paper over.
+            if (!zero && frac > 0
+                && SafetyNetMayBridge(st.LastTrustedAtMs, now, SafetyNetBridgeMs))
+            {
+                double heldFrac = frac;
+                frac = st.LastTrustedFrac;
+                if (frac > 0)
+                {
+                    if (Net(c.UberBelow, ref st.UberUsed, int.MaxValue, canRepeat,
+                            "EMERGENCY (bridged through a hold)"))
+                        return new GlobeReading(name, frac, true, "", fromText, textRaw);
+                    if (Net(c.LastDitchBelow, ref st.LastDitchUsed, 3, canRepeat,
+                            "LAST DITCH (bridged through a hold)"))
+                        return new GlobeReading(name, frac, true, "", fromText, textRaw);
+                }
+                frac = heldFrac;
+            }
+
             return new GlobeReading(name, frac, true, why, fromText, textRaw);
         }
+
+        st.LastTrustedFrac = frac;
+        st.LastTrustedAtMs = now;
 
         // The safety net: one press, once, when you fall past the floor.
         //
@@ -2334,17 +2400,6 @@ public sealed class MonitorEngine : IDisposable
         }
 
         st.NetHeldAt = -1;
-
-        // Whether pressing again is worth it: only while life is not already
-        // turning around. One press below a floor was a hard rule - "will not
-        // repeat until recovered" - and that is safe when the pool is a
-        // single flask's worth of healing, wrong when it is not: standing
-        // below emergency and still dropping, waiting out a fresh cooldown to
-        // press again is how "it has a lock on my hp" and "it is not potting"
-        // turned out to be the same complaint. Once life visibly climbs at the
-        // same rate a fast drop would be flagged, another press would very
-        // likely overheal, and it stops.
-        bool canRepeat = c.FastDropPctPerSec <= 0 || dropRate > -c.FastDropPctPerSec;
 
         if (frac > 0)
         {
