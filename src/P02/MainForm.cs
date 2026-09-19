@@ -1046,6 +1046,13 @@ public sealed class MainForm : Form
         Controls.Add(tabs);
         Theme.Apply(this);
 
+        // Re-applied: the walk above just re-themed every button as a plain
+        // one, including these two - the exact "after the general styling,
+        // or it would paint over them" problem the first call already knew
+        // about, reintroduced by adding a second walk for the tab control.
+        Theme.Primary(findAll, Theme.Accent);
+        Theme.Primary(updBtn, Theme.Good);
+
         RefreshArmUi();
         _engine.Start();
     }
@@ -1967,7 +1974,8 @@ public sealed class MainForm : Form
         // A second copy of P02 being started, asking this one to show itself.
         if (m.Msg == Native.WM_QYTOCR_SHOW)
         {
-            Log.Write("another launch asked for the window - bringing it to the front");
+            Log.Write($"another launch asked for the window - bringing it to the front "
+                      + $"(visible={Visible}, state={WindowState}, handle valid={IsHandleCreated})");
             BeginInvoke(RestoreFromTray);
         }
 

@@ -569,7 +569,7 @@ public sealed class AppConfig
     /// screen to place a box, which only that engine gives back here, and it
     /// is not the setting that decides whether a fight is read correctly.
     /// </summary>
-    public string OcrEngine { get; set; } = "paddle";
+    public string OcrEngine { get; set; } = "tesseract";
 
     /// <summary>
     /// Install an update without being asked, when only a few releases behind.

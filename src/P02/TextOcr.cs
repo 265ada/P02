@@ -842,6 +842,7 @@ internal sealed partial class TextOcr : IDisposable
                     if (EnsureTesseract()) return RecogniseTesseract(bmp);
                     break;
                 case "paddle":
+                    if (_paddleConsecutiveFailures >= PaddleGiveUpAfter) break;
                     if (EnsurePaddle()) return RecognisePaddle(bmp);
                     break;
             }
@@ -920,6 +921,18 @@ internal sealed partial class TextOcr : IDisposable
         }
     }
 
+    /// <summary>
+    /// Failed reads in a row, not failed starts. The engine can construct
+    /// fine and still fail every real capture it is given - a model/runtime
+    /// mismatch that only shows up on real image shapes, not the synthetic
+    /// one it was verified against - and retrying that forever just means
+    /// logging the same wall of native traceback text into the notice board
+    /// every poll. Past this many in a row it is switched off for the rest
+    /// of the session rather than kept trying.
+    /// </summary>
+    private int _paddleConsecutiveFailures;
+    private const int PaddleGiveUpAfter = 3;
+
     private bool EnsurePaddle()
     {
         if (_paddle is not null) return true;
@@ -975,11 +988,33 @@ internal sealed partial class TextOcr : IDisposable
             using var ms = new MemoryStream();
             toRead.Save(ms, ImageFormat.Png);
             using var mat = OpenCvSharp.Cv2.ImDecode(ms.ToArray(), OpenCvSharp.ImreadModes.Color);
-            return _paddle!.Run(mat).Text ?? "";
+            string text = _paddle!.Run(mat).Text ?? "";
+            _paddleConsecutiveFailures = 0;
+            return text;
         }
         catch (Exception ex)
         {
-            Log.Write($"ocr: PaddleOCR read failed - {ex.Message}");
+            _paddleConsecutiveFailures++;
+            // The notice board shows every logged line verbatim - some of
+            // these native exceptions carry a full embedded Python traceback
+            // from however the model itself was built, hundreds of lines
+            // that mean nothing to anyone looking at this app. One short
+            // line here; the first line of the real exception, for whoever
+            // is actually debugging it, still goes to the log file itself.
+            string firstLine = ex.Message.Split('\n')[0].Trim();
+            if (_paddleConsecutiveFailures >= PaddleGiveUpAfter)
+            {
+                Log.Write($"ocr: PaddleOCR failed {_paddleConsecutiveFailures} reads in a "
+                          + $"row ({firstLine}) - switching to Windows OCR for the rest of "
+                          + "this session");
+                EngineWhy = "PaddleOCR kept failing on real captures, so this session fell "
+                            + "back to Windows OCR. Try Tesseract instead, or restart once a "
+                            + "fix ships.";
+            }
+            else
+            {
+                Log.Write($"ocr: PaddleOCR read failed ({firstLine})");
+            }
             return "";
         }
         finally { scaled?.Dispose(); }
